@@ -8,11 +8,9 @@ if ($_SESSION['rol'] !== 'vendedor' && $_SESSION['rol'] !== 'administrador') {
     header("Location: login.php");
     exit;
 }
-
 ?>
 
 <style>
-
 /* ================================
    DATA TABLES - ICONOS ORDEN
    Compatible con AdminLTE + scroll
@@ -86,7 +84,6 @@ table.dataTable thead th::before {
 }
 
 </style>
-
 
 <!-- Content Wrapper. Contains page content -->
 <div class="content-wrapper">
@@ -294,22 +291,46 @@ function cargarVentas() {
                 orderable: false,
                 render: function(row) {
                     const folio = row.folio_ticket ? String(row.folio_ticket) : '';
+                    const esPedido = folio.startsWith('PEDIDO-');
+                    const pedidoCompletado = row.estado_pedido === 'completado';
                     const ticketLink = row.ticket_pdf
                         ? `<a href="tickets/${row.ticket_pdf}" target="_blank" class="text-success">Ver PDF</a> | `
                         : `<span class="text-muted">Sin ticket</span> | `;
 
                     return `
                         ${ticketLink}
-                        <a href="#" class="text-primary reenvio-ticket" data-folio="${encodeURIComponent(folio)}" title="Reenviar ticket">
+                        
+                        <a href="#" class="text-primary reenvio-ticket"
+                            data-folio="${encodeURIComponent(folio)}"
+                            title="Reenviar ticket">
                             <i class="fas fa-paper-plane"></i>
                         </a> |
-                        <a href="#" class="text-warning cancelar-articulo" data-folio="${encodeURIComponent(folio)}" title="Cancelar artículo">
-                            <i class="fas fa-times"></i>
-                        </a> |
-                        <a href="#" class="text-info devolucion-parcial" data-folio="${encodeURIComponent(folio)}" title="Devolución parcial">
-                            <i class="fa-solid fa-arrow-rotate-left" style="color: #7a68b1;"></i>
-                        </a> |
-                        <a href="#" class="text-danger cancelar-venta" data-folio="${encodeURIComponent(folio)}" title="Cancelar venta">
+
+                       ${
+                            esPedido && pedidoCompletado
+                            ? `<span class="text-muted" title="Pedido completado">
+                                    <i class="fas fa-times"></i>
+                            </span> |`
+                            : `<a href="#" class="text-warning cancelar-articulo"
+                                    data-folio="${encodeURIComponent(folio)}"
+                                    title="Cancelar artículo">
+                                    <i class="fas fa-times"></i>
+                            </a> |`
+                        }
+                        ${
+                            esPedido && pedidoCompletado
+                            ? `<span class="text-muted" title="Pedido completado">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i>
+                            </span> |`
+                            : `<a href="#" class="text-info devolucion-parcial"
+                                    data-folio="${encodeURIComponent(folio)}"
+                                    title="Devolución parcial">
+                                    <i class="fa-solid fa-arrow-rotate-left" style="color:#7a68b1;"></i>
+                            </a> |`
+                        }
+                        <a href="#" class="text-danger cancelar-venta"
+                            data-folio="${encodeURIComponent(folio)}"
+                            title="Cancelar venta">
                             <i class="fas fa-ban"></i>
                         </a>
                     `;
@@ -562,13 +583,12 @@ function abrirDevolucionModal(folio) {
     });
 }
 
-
-
 /* -----------------------------
    CANCELAR VENTA COMPLETA
    - Envía { folio } a api/cancelar_venta.php (POST)
    ----------------------------- */
 function cancelarVenta(folio) {
+
     Swal.fire({
         title: '¿Cancelar esta venta completa?',
         icon: 'warning',
@@ -577,22 +597,99 @@ function cancelarVenta(folio) {
         cancelButtonText: 'No',
         confirmButtonColor: '#d33'
     }).then(async (r) => {
-        if (r.isConfirmed) {
-            try {
-                Swal.fire({title:'Cancelando venta...', didOpen:()=>Swal.showLoading(), showConfirmButton:false, allowOutsideClick:false});
-                const res = await fetch('api/cancelar_venta.php', {
+
+        if (!r.isConfirmed) return;
+
+        try {
+
+            Swal.fire({
+                title:'Cancelando venta...',
+                didOpen:()=>Swal.showLoading(),
+                showConfirmButton:false,
+                allowOutsideClick:false
+            });
+
+            const res = await fetch('api/cancelar_venta.php', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ folio: folio })
+            });
+
+            const data = await res.json();
+
+            Swal.close();
+
+            //  SI EL PEDIDO YA ESTÁ COMPLETADO
+            if (data.pedido_completado) {
+
+                const confirmacion = await Swal.fire({
+                    title: 'Pedido completado',
+                    text: data.message,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cancelar de todos modos',
+                    cancelButtonText: 'No'
+                });
+
+                if (!confirmacion.isConfirmed) return;
+
+                //  Enviar nuevamente pero forzado
+                Swal.fire({
+                    title:'Cancelando pedido...',
+                    didOpen:()=>Swal.showLoading(),
+                    showConfirmButton:false,
+                    allowOutsideClick:false
+                });
+
+                const resForzado = await fetch('api/cancelar_venta.php', {
                     method: 'POST',
                     headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ folio: folio })
+                    body: JSON.stringify({ 
+                        folio: folio,
+                        forzar: true
+                    })
                 });
-                const data = await res.json().catch(()=>({success:false, message:'Respuesta no válida'}));
+
+                const dataFinal = await resForzado.json();
                 Swal.close();
-                Swal.fire({ icon: data.success ? 'success' : 'error', title: data.message || (data.success?'Venta cancelada':'Error'), timer:2000, showConfirmButton:false });
-                tabla.ajax.reload(null, false);
-            } catch (err) {
-                Swal.close();
-                Swal.fire({ icon:'error', title:'Error', text: err.message || err, timer:2500, showConfirmButton:false });
+
+                Swal.fire({
+                    icon: dataFinal.success ? 'success' : 'error',
+                    title: dataFinal.message,
+                    timer:2500,
+                    showConfirmButton:false
+                });
+
+                if (dataFinal.success) {
+                    tabla.ajax.reload(null, false);
+                }
+
+                return;
             }
+
+            // 🔹 Respuesta normal
+            Swal.fire({
+                icon: data.success ? 'success' : 'error',
+                title: data.message,
+                timer:2000,
+                showConfirmButton:false
+            });
+
+            if (data.success) {
+                tabla.ajax.reload(null, false);
+            }
+
+        } catch (err) {
+
+            Swal.close();
+
+            Swal.fire({
+                icon:'error',
+                title:'Error',
+                text: err.message || err,
+                timer:3000,
+                showConfirmButton:false
+            });
         }
     });
 }

@@ -242,12 +242,15 @@ $rol = $_SESSION['rol'] ?? 'Sin rol';
               <a href="historial_ventas.php">Historial / Cancelación</a>
             </div>
           </details>
+          <a href="inventario_admin.php"><i class="fas fa-boxes fa-anim"></i><span>Inventario</span></a>
           <a href="ver_ventas.php"><i class="fas fa-chart-line fa-anim"></i> Ver Ventas</a>
+          <a href="cambiar_password.php"><i class="nav-icon fas fa-key fa-anim"></i><span>Cambiar contraseña</span></a>
         <?php elseif ($rol === 'vendedor'): ?>
           <a href="dashboard_vendedor.php"><i class="fas fa-home fa-anim"></i> Panel Vendedor</a>
           <a href="ventas.php"><i class="fas fa-cash-register fa-anim"></i> Registrar Venta</a>
           <a href="historial_ventas.php"><i class="fas fa-receipt fa-anim"></i> Historial / Cancelación</a>
           <a href="inventario.php"><i class="fas fa-boxes fa-anim"></i> Inventario</a>
+          <a href="cambiar_password.php"><i class="nav-icon fas fa-key fa-anim"></i><span>Cambiar contraseña</span></a>
         <?php endif; ?>
 
         <a href="logout.php" style="margin-top:8px;"><i class="fas fa-sign-out-alt fa-anim"></i> Cerrar sesión</a>
@@ -287,7 +290,7 @@ $rol = $_SESSION['rol'] ?? 'Sin rol';
               <a href="venta_admin.php"><i class="fas fa-cash-register fa-anim"></i><span>Registrar Ventas</span></a>
             </div>
           </div>
-
+          <a href="inventario_admin.php"><i class="fas fa-boxes fa-anim"></i><span>Inventario</span></a>
           <a href="ver_ventas.php"><i class="fas fa-chart-line fa-anim"></i><span>Reporte de Ventas</span></a>
           <a href="cambiar_password.php"><i class="nav-icon fas fa-key fa-anim"></i><span>Cambiar contraseña</span></a>
       <?php elseif ($rol === 'vendedor'): ?>

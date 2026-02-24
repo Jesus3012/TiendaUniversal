@@ -4,6 +4,9 @@ include 'includes/db.php';
 include 'includes/header.php';
 include('includes/navbar.php');
 
+date_default_timezone_set('America/Mexico_City');
+
+
 $res = $conn->query("SELECT id, nombre, cantidad FROM productos ORDER BY nombre");
 if(!$res){
     die("Error SQL: " . $conn->error);
@@ -68,6 +71,42 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
 .flecha.abierta{
     transform: rotate(90deg);
 }
+
+.timeline {
+    position: relative;
+    padding-left: 20px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+}
+
+.timeline-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.timeline-content {
+    width: 100%;
+}
+
 </style>
 
 <div class="content-wrapper">
@@ -184,7 +223,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                     <th>Producto</th>
                                     <th>Stock Actual</th>
                                     <th>Pedir</th>
-                                    <th>Artículos por hacer</th>
+                                    <th>Articulos por hacer</th>
                                     <th>Estado</th>
                                 </tr>
                             </thead>
@@ -353,11 +392,17 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                         <i class="fas fa-clock"></i> <?= $tiempo ?>
                                     </span>
                                 </div>
-
-                                <button class="btn btn-success btn-sm"
-                                        onclick="event.stopPropagation(); completarPedido(<?= $f['id_orden'] ?>)">
-                                    Completar pedido
-                                </button>
+                                <div>
+                                    <button class="btn btn-info btn-sm"
+                                        onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
+                                        Historial
+                                        <i class="fas fa-history"></i>
+                                    </button>
+                                    <button class="btn btn-success btn-sm"
+                                            onclick="event.stopPropagation(); completarPedido(<?= $f['id_orden'] ?>)">
+                                        Completar pedido
+                                    </button>
+                                </div>
                             </div>
 
                             <!--COLLAPSE -->
@@ -455,6 +500,12 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                         <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?>
                                     </span>
                                 </div>
+                                <button class="btn btn-light btn-sm"
+                                    onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
+                                    Historial
+                                    <i class="fas fa-history"></i>
+                                </button>
+
                             </div>
 
                             <div id="collapse<?= $i ?>" 
@@ -466,24 +517,40 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                         <thead class="bg-light">
                                             <tr> 
                                                 <th class="text-left">Producto</th>
-                                                <th>Pedido</th>
-                                                <th>Artículos por hacer</th>
+                                                <th>Original</th>
+                                                <th>Solventado</th>
+                                                <th>Completado el</th>
+
                                             </tr>
                                         </thead>
-                                        <tbody>
                                         <?php
                                         $productos = $conn->query("
-                                            SELECT nombre_producto, cantidad_pedida, faltante
-                                            FROM pedidos
-                                            WHERE id_orden = {$f['id_orden']}
+                                            SELECT 
+                                                p.nombre_producto,
+                                                ps.cantidad_original,
+                                                ps.cantidad_solventada,
+                                                ps.cantidad_faltante,
+                                                ps.fecha
+                                            FROM pedidos p
+                                            LEFT JOIN pedidos_solventados ps 
+                                                ON ps.id_producto = p.id
+                                                AND ps.id_pedido = p.id_orden
+                                            WHERE p.id_orden = {$f['id_orden']}
                                         ");
 
                                         while($p = $productos->fetch_assoc()):
                                         ?>
                                             <tr>
                                                 <td class="text-left"><?= $p['nombre_producto'] ?></td>
-                                                <td><span class="badge badge-info"><?= $p['cantidad_pedida'] ?></span></td>
-                                                <td><span class="badge badge-success"><?= $p['faltante'] ?></span></td>
+                                                <td>
+                                                    <span class="badge badge-info"> <?= $p['cantidad_original'] ?? 0 ?> </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-success"> <?= $p['cantidad_solventada'] ?? 0 ?> </span>
+                                                </td>
+                                                <td>
+                                                    <?= $p['fecha'] ? date("d/m/Y H:i", strtotime($p['fecha'])) : '-' ?> 
+                                                </td>
                                             </tr>
                                         <?php endwhile; ?>
                                         </tbody>
@@ -512,10 +579,26 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
       </div>
       <div class="modal-body">
         <input type="text" id="nombreSolicitante" class="form-control form-control-lg"
-               placeholder="Ej: Cocina / Juan Pérez">
+               placeholder="Ej: Juan Pérez">
       </div>
       <div class="modal-footer">
         <button class="btn btn-success" onclick="confirmarGuardado()">Confirmar Pedido</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalHistorial">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">
+            <i class="fas fa-history"></i> Historial del pedido
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body" id="contenidoHistorial">
+        <div class="text-center text-muted">Cargando historial...</div>
       </div>
     </div>
   </div>
@@ -527,6 +610,8 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
 
 
 <script>
@@ -831,6 +916,130 @@ $('.filtro-estado').click(function(){
 //  forzamos filtro al cargar la página para evitar que se mezclen pendientes y completados
 $(document).ready(function(){
     $('.filtro-estado.active').click();
+});
+
+function verHistorial(idOrden){
+    $('#modalHistorial').modal('show');
+
+    fetch('ver_historial_pedido.php?id_orden=' + idOrden)
+    .then(res => res.json())
+    .then(data => {
+
+        const cont = document.getElementById('contenidoHistorial');
+
+        if(!data || data.length === 0){
+            cont.innerHTML = `
+                <div class="alert alert-info text-center">
+                    <i class="fas fa-info-circle"></i>
+                    Este pedido no tiene historial registrado.
+                </div>`;
+            return;
+        }
+
+        let html = `
+            <ul class="timeline list-unstyled">
+        `;
+
+        data.forEach(l => {
+
+            let icono = 'fa-file-alt';
+            let color = 'secondary';
+
+            if (l.accion.includes('CREADO')) {
+                icono = 'fa-plus-circle';
+                color = 'primary';
+            } else if (l.accion.includes('AGREGADO')) {
+                icono = 'fa-box';
+                color = 'info';
+            } else if (l.accion.includes('STOCK')) {
+                icono = 'fa-warehouse';
+                color = 'warning';
+            } else if (l.accion.includes('completado')) {
+                icono = 'fa-check-circle';
+                color = 'success';
+            } else if (l.accion.includes('cancelado')) {
+                icono = 'fa-times-circle';
+                color = 'danger';
+            }
+
+            html += `
+                <li class="timeline-item mb-4">
+                    <div class="d-flex align-items-start">
+                        <div class="timeline-icon bg-${color}">
+                            <i class="fas ${icono}"></i>
+                        </div>
+                        <div class="timeline-content ml-3">
+                            <div class="card shadow-sm">
+                                <div class="card-body p-2">
+                                    <strong>${l.accion}</strong>
+                                    <div class="small text-muted mb-1">
+                                        ${l.fecha} · ${l.usuario}
+                                    </div>
+                                    <div>${l.descripcion}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </li>
+            `;
+        });
+
+        html += '</ul>';
+
+        cont.innerHTML = html;
+    });
+}
+
+
+let ultimaCantidadCriticos = -1;
+
+toastr.options = {
+    closeButton: true,
+    progressBar: true,
+    positionClass: "toast-top-right",
+    timeOut: 4000,
+    extendedTimeOut: 2000,
+    showMethod: "fadeIn",
+    hideMethod: "fadeOut"
+};
+
+function verificarStockCritico(){
+
+    fetch('ajax_stock_critico.php')
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.error) return;
+
+        if(data.length > 0){
+
+            if(data.length !== ultimaCantidadCriticos){
+
+                let mensaje = '';
+
+                data.forEach(p => {
+                    mensaje += `<strong>${p.nombre}</strong> — Stock: ${p.cantidad}<br>`;
+                });
+
+                toastr.error(
+                    mensaje,
+                    "⚠ Stock crítico detectado"
+                );
+
+            }
+        }
+
+        ultimaCantidadCriticos = data.length;
+
+    })
+    .catch(err => {
+        console.log("Error stock crítico:", err);
+    });
+}
+
+$(document).ready(function(){
+    verificarStockCritico();
+    setInterval(verificarStockCritico, 30000);
 });
 
 </script>

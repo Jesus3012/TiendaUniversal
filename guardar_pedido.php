@@ -1,5 +1,9 @@
 <?php
 include 'includes/db.php';
+include 'includes/utils.php';
+session_start();
+
+$usuario = $_SESSION['nombre'] ?? 'Sistema';
 
 $data = json_decode(file_get_contents("php://input"), true);
 
@@ -20,10 +24,17 @@ try {
 
     $id_orden = $stmtOrden->insert_id;
 
-    // Generar FOLIO
-    $folio_ticket = 'PEDIDO-' . time();
+    logPedido(
+        $conn,
+        $id_orden,
+        'PEDIDO CREADO',
+        "El usuario creo el pedido para: $solicitado_por",
+        $usuario
+    );
 
-    // Preparar consultas
+    // ✅ FOLIO CORRECTO
+    $folio_ticket = 'PEDIDO-' . $id_orden;
+
     $stmtPedido = $conn->prepare("
         INSERT INTO pedidos 
         (id_orden, id_producto, nombre_producto, stock_actual, cantidad_pedida, faltante, solicitado_por)
@@ -32,8 +43,8 @@ try {
 
     $stmtVenta = $conn->prepare("
         INSERT INTO ventas
-        (folio_ticket, id_producto, cantidad_vendida, metodo_pago)
-        VALUES (?, ?, ?, 'pedido')
+        (folio_ticket, id_orden, id_producto, cantidad_vendida, metodo_pago, correo_cliente)
+        VALUES (?, ?, ?, ?, 'pedido', ?)
     ");
 
     $stmtStock = $conn->prepare("
@@ -44,7 +55,6 @@ try {
 
     foreach ($pedidos as $p) {
 
-        // Registrar PEDIDO (solo informativo)
         $stmtPedido->bind_param(
             "iisiiis",
             $id_orden,
@@ -57,16 +67,25 @@ try {
         );
         $stmtPedido->execute();
 
-        // Registrar VENTA
+        logPedido(
+            $conn,
+            $id_orden,
+            'PRODUCTO AGREGADO AL PEDIDO',
+            "Producto {$p['nombre']} | Stock: {$p['stock']} | Pedido: {$p['pedido']} | Faltante: {$p['faltante']}",
+            $usuario,
+            $p['id']
+        );
+
         $stmtVenta->bind_param(
-            "sii",
+            "siiis",
             $folio_ticket,
+            $id_orden,
             $p['id'],
-            $p['pedido']
+            $p['pedido'],
+            $solicitado_por
         );
         $stmtVenta->execute();
 
-        // Descontar STOCK
         $stmtStock->bind_param(
             "iii",
             $p['pedido'],
@@ -78,6 +97,15 @@ try {
         if ($stmtStock->affected_rows === 0) {
             throw new Exception("Stock insuficiente para {$p['nombre']}");
         }
+
+        logPedido(
+            $conn,
+            $id_orden,
+            'STOCK DESCONTADO',
+            "Se descontaron {$p['pedido']} unidades de {$p['nombre']} del inventario",
+            $usuario,
+            $p['id']
+        );
     }
 
     $conn->commit();

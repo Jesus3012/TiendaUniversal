@@ -1,25 +1,37 @@
 <?php
 // includes/session.php
+
 if (session_status() == PHP_SESSION_NONE) {
-    // estás trabajando localmente, así que no uses HTTPS
     $secure = false; 
     $httponly = true;
-
-    // Configurar cookies de sesión de forma tradicional
+    
     session_set_cookie_params(0, '/', null, $secure, $httponly);
     session_start();
 }
 
-// Timeout por inactividad (30 minutos)
-$timeout_seconds = 1800;
+// Timeout de 30 MINUTOS (1800 segundos)
+$timeout_seconds = 1800; // 30 minutos para producción
 
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_seconds) {
-    // destruir sesión por inactividad
-    session_unset();
+    $_SESSION = array();
+    
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    
     session_destroy();
-    session_start();
-    $_SESSION['timeout_message'] = "Tu sesión expiró por inactividad.";
+    
+    // Redirigir con mensaje de inactividad
+    header("Location: login.php?expired=inactivity");
+    exit;
 }
 
-$_SESSION['last_activity'] = time();
+// Solo actualizar si hay usuario logueado
+if (isset($_SESSION['usuario_id'])) {
+    $_SESSION['last_activity'] = time();
+}
 ?>

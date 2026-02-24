@@ -45,7 +45,7 @@ if(!$hayPedidos){
     header('Content-Type: application/json');
     echo json_encode([
         'sin_pedidos' => true,
-        'mensaje' => 'No hay productos pendientes por pedir.'
+        'mensaje' => 'No hay reportes pendientes por exportar.'
     ]);
     exit;
 }

@@ -7,13 +7,28 @@ require_once('includes/csrf.php');
 $max_attempts = 5;
 $lock_time = 60; // 1 minutos
 
+// Verificar si viene de una sesión expirada
+$expired_message = '';
+if (isset($_GET['expired']) && $_GET['expired'] == 1) {
+    $expired_message = "
+    Swal.fire({
+        icon: 'info',
+        title: 'Sesión expirada',
+        text: 'Tu sesión ha expirado por inactividad. Por favor, inicia sesión nuevamente.',
+        confirmButtonColor: '#ff7b00',
+        timer: 3000,
+        timerProgressBar: true
+    });
+    ";
+}
+
 // Inicializar contador en sesión
 if (!isset($_SESSION['login_attempts'])) {
     $_SESSION['login_attempts'] = 0;
     $_SESSION['login_last_attempt'] = 0;
 }
 
-$swal = "";
+$swal = ""; // Aquí se guardarán los mensajes de error del login
 
 // PROCESAR LOGIN
 if (isset($_POST['login'])) {
@@ -320,11 +335,19 @@ if (isset($_POST['login'])) {
     </div>
 </div>
 
+<!-- Al final del body, donde están los scripts -->
+<?php if (!empty($expired_message)): ?>
+<script>
+    <?= $expired_message ?>
+</script>
+<?php endif; ?>
+
 <?php if (!empty($swal)): ?>
 <script>
     <?= $swal ?>
 </script>
 <?php endif; ?>
+
 <script>
 // 👁️ Mostrar / ocultar contraseña
 function togglePassword() {

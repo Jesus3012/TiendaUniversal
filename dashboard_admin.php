@@ -1,10 +1,12 @@
 <?php
-include 'includes/session.php'; // session_start() seguro
-include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
+require_once 'includes/session.php';
 
-// Verificar que haya login y rol correcto
+// AHORA sí, incluir archivos que puedan generar output
+require_once 'includes/db.php';
+require_once 'includes/header.php';
+require_once 'includes/navbar.php';
+
+// Verificar autenticación (ahora session.php ya redirige si expiró)
 if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['rol'] ?? '') !== 'administrador') {
     header("Location: login.php");
     exit;
@@ -1403,5 +1405,102 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
+// ⏰ 30 MINUTOS DE INACTIVIDAD
+const TIEMPO_EXPIRACION = 30 * 60 * 1000; // 30 minutos en milisegundos
+const TIEMPO_ADVERTENCIA = 29 * 60 * 1000; // 29 minutos (2 minutos antes)
+const TIEMPO_ALERTA = 1 * 60 * 1000; // 1 minutos para la alerta (60000 ms)
+
+let tiempoInactivo = 0;
+let advertenciaMostrada = false;
+
+function reiniciarContador() {
+    tiempoInactivo = 0;
+    advertenciaMostrada = false;
+    console.log(' Contador reiniciado por actividad');
+}
+
+// Verificar inactividad cada segundo
+setInterval(() => {
+    tiempoInactivo += 1000;
+    
+    // Mostrar advertencia a los 28 minutos (faltan 2 minutos)
+    if (tiempoInactivo >= TIEMPO_ADVERTENCIA && !advertenciaMostrada) {
+        advertenciaMostrada = true;
+        console.log(' Mostrando advertencia de expiración');
+        
+        Swal.fire({
+            icon: 'warning',
+            title: ' Sesión por expirar',
+            text: 'Tu sesión expirará en 2 minutos por inactividad',
+            showCancelButton: true,
+            confirmButtonText: 'Seguir aquí',
+            cancelButtonText: 'Salir ahora',
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#d33',
+            timer: TIEMPO_ALERTA, // 2 minutos de temporizador
+            timerProgressBar: true,
+            allowOutsideClick: false
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Mantener sesión activa
+                fetch('mantener_sesion.php')
+                    .then(() => {
+                        reiniciarContador();
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Sesión renovada!',
+                            text: 'Puedes continuar trabajando',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    })
+                    .catch(() => {
+                        // Si hay error en la petición, asumir que la sesión ya expiró
+                        window.location.href = 'login.php?expired=1';
+                    });
+            } else if (result.dismiss === Swal.DismissReason.timer) {
+                // Si se acaba el tiempo de la alerta, cerrar sesión
+                window.location.href = 'logout.php';
+            } else {
+                // Si canceló, cerrar sesión
+                window.location.href = 'logout.php';
+            }
+        });
+    }
+    
+    // EXPIRAR a los 30 minutos
+    if (tiempoInactivo >= TIEMPO_EXPIRACION) {
+        console.log('Sesión expirada por inactividad');
+        Swal.fire({
+            icon: 'info',
+            title: 'Sesión expirada',
+            text: 'Redirigiendo al login...',
+            timer: 2000,
+            showConfirmButton: false,
+            allowOutsideClick: false
+        }).then(() => {
+            window.location.href = 'login.php?expired=inactivity';
+        });
+    }
+}, 1000);
+
+// Eventos que reinician el contador
+['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(event => {
+    document.addEventListener(event, reiniciarContador);
+});
+
+// Mostrar tiempo restante en consola (para depuración - opcional)
+setInterval(() => {
+    if (tiempoInactivo > 0) {
+        const minutosInactivo = Math.floor(tiempoInactivo / 60000);
+        const segundosInactivo = Math.floor((tiempoInactivo % 60000) / 1000);
+        const minutosRestantes = Math.max(0, 30 - minutosInactivo);
+        const segundosRestantes = Math.max(0, 60 - segundosInactivo);
+        
+        if (minutosInactivo >= 25) { // Solo mostrar cuando se acerque el tiempo
+            console.log(`Inactivo: ${minutosInactivo}m ${segundosInactivo}s | Restante: ${minutosRestantes}m ${segundosRestantes}s`);
+        }
+    }
+}, 10000); // Cada 10 segundos
 });
 </script>
