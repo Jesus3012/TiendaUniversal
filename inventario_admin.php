@@ -335,6 +335,244 @@ function obtenerEstadisticas($conn) {
     color: #adb5bd;
     font-weight: 300;
 }
+
+/* Animación para el encabezado de categoría */
+.categoria-header {
+    animation: fadeInDown 0.5s ease;
+    padding: 10px 0;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.categoria-header h4 i {
+    transition: transform 0.3s ease;
+}
+
+.categoria-header:hover h4 i {
+    transform: rotate(10deg);
+}
+
+/* Animación para las tarjetas */
+.producto-card-animado {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeInUp 0.5s ease;
+    height: 100%;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.producto-card-animado:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+/* Animaciones de entrada */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Contenedor de imagen con altura fija */
+.product-image-container {
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.product-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.producto-card-animado:hover .product-img {
+    transform: scale(1.05);
+}
+
+/* Placeholder para imágenes */
+.no-image-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.no-image-placeholder::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, 
+        transparent 30%, 
+        rgba(255,255,255,0.1) 50%, 
+        transparent 70%);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% {
+        transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    }
+    100% {
+        transform: translateX(100%) translateY(100%) rotate(45deg);
+    }
+}
+
+.no-image-placeholder i {
+    font-size: 48px;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+    animation: floatIcon 3s ease-in-out infinite;
+}
+
+.no-image-placeholder span {
+    font-size: 24px;
+    font-weight: bold;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.2);
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+@keyframes floatIcon {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+/* Badge de stock bajo */
+.product-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* Barra de stock */
+.stock-bar {
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+.stock-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease;
+}
+
+.stock-fill.critical {
+    background: linear-gradient(90deg, #dc3545, #bd2130);
+}
+
+.stock-fill.low {
+    background: linear-gradient(90deg, #ffc107, #e0a800);
+}
+
+.stock-fill.normal {
+    background: linear-gradient(90deg, #28a745, #218838);
+}
+
+/* Atributos */
+.attribute-tag {
+    display: inline-block;
+    background: #f8f9fa;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    transition: all 0.2s;
+}
+
+.attribute-tag:hover {
+    background: #e9ecef;
+    transform: translateY(-1px);
+}
+
+/* Estado vacío */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 20px 0;
+    animation: fadeIn 0.5s ease;
+}
+
+.empty-state i {
+    font-size: 48px;
+    color: #adb5bd;
+    margin-bottom: 15px;
+    animation: floatIcon 3s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 </style>
 
 <div class="content-wrapper">
@@ -441,7 +679,8 @@ function obtenerEstadisticas($conn) {
                     $total_productos = $productos->num_rows;
                 ?>
                 <div class="categoria-section" data-categoria="<?= htmlspecialchars($categoria) ?>" style="display: none;">
-                    <div class="section-title d-flex justify-content-between align-items-center mb-3">
+                    <!-- Título de categoría estilo original pero con animación -->
+                    <div class="section-title d-flex justify-content-between align-items-center mb-3 categoria-header">
                         <h4 class="mb-0">
                             <i class="fas fa-tag text-primary mr-2"></i>
                             <?= htmlspecialchars($categoria) ?>
@@ -460,27 +699,80 @@ function obtenerEstadisticas($conn) {
                             if($row['cantidad'] <= 5) {
                                 $stock_class = 'critical';
                                 $stock_badge = 'danger';
+                                $stock_icon = 'fa-exclamation-circle';
                             } elseif($row['cantidad'] <= 15) {
                                 $stock_class = 'low';
                                 $stock_badge = 'warning';
+                                $stock_icon = 'fa-exclamation-triangle';
                             } else {
                                 $stock_class = 'normal';
                                 $stock_badge = 'success';
+                                $stock_icon = 'fa-check-circle';
+                            }
+                            
+                            // Determinar icono según categoría para cuando no hay imagen
+                            $icono_producto = 'fa-box';
+                            $categoria_lower = strtolower($row['categoria']);
+                            
+                            $iconos_categoria = [
+                                'electronica' => 'fa-microchip',
+                                'computo' => 'fa-laptop',
+                                'telefonia' => 'fa-mobile-alt',
+                                'audio' => 'fa-headphones',
+                                'video' => 'fa-tv',
+                                'accesorios' => 'fa-keyboard',
+                                'ropa' => 'fa-tshirt',
+                                'calzado' => 'fa-shoe-prints',
+                                'hogar' => 'fa-couch',
+                                'cocina' => 'fa-utensils',
+                                'herramientas' => 'fa-tools',
+                                'juguetes' => 'fa-gamepad',
+                                'deportes' => 'fa-futbol',
+                                'libros' => 'fa-book',
+                                'papeleria' => 'fa-pencil-alt',
+                                'belleza' => 'fa-spa',
+                                'salud' => 'fa-heartbeat',
+                                'mascotas' => 'fa-paw',
+                                'alimentos' => 'fa-apple-alt',
+                                'bebidas' => 'fa-wine-bottle',
+                                'llaveros' => 'fa-key',
+                                'llavero' => 'fa-key'
+                            ];
+                            
+                            foreach($iconos_categoria as $cat => $icono) {
+                                if(strpos($categoria_lower, $cat) !== false) {
+                                    $icono_producto = $icono;
+                                    break;
+                                }
                             }
                         ?>
                         <div class="col-xl-3 col-lg-4 col-md-6 mb-4 producto-card-wrapper" 
-                             data-nombre="<?= strtolower(htmlspecialchars($row['nombre'])) ?>"
-                             data-categoria="<?= strtolower(htmlspecialchars($categoria)) ?>"
-                             data-proveedor="<?= strtolower(htmlspecialchars($row['proveedor'] ?? '')) ?>">
+                            data-nombre="<?= strtolower(htmlspecialchars($row['nombre'])) ?>"
+                            data-categoria="<?= strtolower(htmlspecialchars($categoria)) ?>"
+                            data-proveedor="<?= strtolower(htmlspecialchars($row['proveedor'] ?? '')) ?>">
                             
-                            <div class="product-card position-relative">
+                            <div class="product-card position-relative producto-card-animado">
                                 <?php if($row['cantidad'] <= 5): ?>
                                 <span class="product-badge badge badge-danger">
-                                    <i class="fas fa-exclamation-circle mr-1"></i>Stock Bajo
+                                    <i class="fas <?= $stock_icon ?> mr-1"></i>Stock Bajo
                                 </span>
                                 <?php endif; ?>
                                 
-                                <img src="<?= $row['imagen'] ?: 'uploads/no-image.png' ?>" class="product-img" alt="<?= htmlspecialchars($row['nombre']) ?>">
+                                <!-- Contenedor de imagen con altura fija -->
+                                <div class="product-image-container">
+                                    <?php if(!empty($row['imagen']) && file_exists($row['imagen'])): ?>
+                                        <img src="<?= htmlspecialchars($row['imagen']) ?>" 
+                                            class="product-img" 
+                                            alt="<?= htmlspecialchars($row['nombre']) ?>"
+                                            loading="lazy"
+                                            onerror="this.parentElement.innerHTML = '<div class=\'no-image-placeholder\'><i class=\'fas <?= $icono_producto ?> fa-3x\'></i><span><?= htmlspecialchars(substr($row['nombre'], 0, 2)) ?></span></div>'">
+                                    <?php else: ?>
+                                        <div class="no-image-placeholder">
+                                            <i class="fas <?= $icono_producto ?> fa-3x"></i>
+                                            <span><?= htmlspecialchars(substr($row['nombre'], 0, 2)) ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                                 
                                 <div class="card-body">
                                     <h5 class="card-title font-weight-bold d-inline-block mr-2"><?= htmlspecialchars($row['nombre']) ?></h5>
@@ -511,7 +803,7 @@ function obtenerEstadisticas($conn) {
                                     <table class="table table-sm table-borderless mt-2">
                                         <tr>
                                             <td class="text-muted p-0"><small>Proveedor:</small></td>
-                                            <td class="p-0 text-right"><small><?= $row['proveedor'] ?: 'N/A' ?></small></td>
+                                            <td class="p-0 text-right"><small><?= htmlspecialchars($row['proveedor'] ?: 'N/A') ?></small></td>
                                         </tr>
                                         <tr>
                                             <td class="text-muted p-0"><small>Compra:</small></td>
@@ -538,11 +830,12 @@ function obtenerEstadisticas($conn) {
                                         <?php endif; ?>
                                     </table>
                                     
-                                    <!-- Stock -->
+                                    <!-- Stock con barra de progreso animada -->
                                     <div class="mt-2">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <small class="text-muted">Stock:</small>
                                             <span class="badge badge-<?= $stock_badge ?> shadow-sm px-3 py-1">
+                                                <i class="fas <?= $stock_icon ?> mr-1"></i>
                                                 <?= $row['cantidad'] ?> unidades
                                             </span>
                                         </div>
@@ -550,19 +843,6 @@ function obtenerEstadisticas($conn) {
                                             <div class="stock-fill <?= $stock_class ?>" style="width: <?= $porcentaje_stock ?>%"></div>
                                         </div>
                                     </div>
-                                    <!-- Acciones -->
-                                     
-                                    <!-- <div class="btn-group btn-group-sm mt-3 w-100">
-                                        <button class="btn btn-outline-primary" onclick="editarProducto(<?= $row['id'] ?>)" title="Editar">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-outline-success" onclick="ajustarStock(<?= $row['id'] ?>)" title="Ajustar stock">
-                                            <i class="fas fa-boxes"></i>
-                                        </button>
-                                        <button class="btn btn-outline-danger" onclick="eliminarProducto(<?= $row['id'] ?>)" title="Eliminar">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div> -->
                                 </div>
                             </div>
                         </div>
