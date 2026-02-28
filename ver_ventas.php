@@ -73,6 +73,20 @@ if ($resultado) {
 
 // Proveedores para filtro
 $listaProveedores = $conn->query("SELECT DISTINCT proveedor FROM productos WHERE proveedor != '' ORDER BY proveedor");
+
+// Obtener todas las fechas con ventas para el calendario
+$sqlFechasVentas = "
+    SELECT DISTINCT DATE(v.fecha_venta) as fecha
+    FROM ventas v
+    ORDER BY fecha DESC
+";
+$resultadoFechas = $conn->query($sqlFechasVentas);
+$fechasVentas = [];
+if ($resultadoFechas) {
+    while ($row = $resultadoFechas->fetch_assoc()) {
+        $fechasVentas[] = $row['fecha'];
+    }
+}
 ?>
 
 <style>
@@ -350,6 +364,44 @@ table {
     display: block;
 }
 
+/* Estilos para el calendario */
+#calendario {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    min-height: 400px;
+}
+
+.fc-toolbar-title {
+    font-size: 1.2rem !important;
+    font-weight: 600 !important;
+    color: #2c3e50;
+}
+
+.fc-button-primary {
+    background-color: #3498db !important;
+    border-color: #3498db !important;
+}
+
+.fc-button-primary:hover {
+    background-color: #2980b9 !important;
+    border-color: #2980b9 !important;
+}
+
+.fc-day-today {
+    background-color: #fff3e0 !important;
+}
+
+.fc-daygrid-day {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fc-daygrid-day:hover {
+    background-color: #f8f9fa !important;
+}
+
 /* Ajuste para móviles */
 @media (max-width: 768px) {
     .pdf-dropdown-menu {
@@ -360,6 +412,104 @@ table {
     .pdf-dropdown-menu::before {
         right: 25px;
     }
+}
+
+#calendario {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    min-height: 450px;
+}
+
+.fc-toolbar-title {
+    font-size: 1.2rem !important;
+    font-weight: 600 !important;
+    color: #2c3e50;
+}
+
+.fc-button-primary {
+    background-color: #3498db !important;
+    border-color: #3498db !important;
+}
+
+.fc-button-primary:hover {
+    background-color: #2980b9 !important;
+    border-color: #2980b9 !important;
+}
+
+.fc-day-today {
+    background-color: #fff3e0 !important;
+}
+
+.fc-daygrid-day {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fc-daygrid-day:hover {
+    background-color: #f8f9fa !important;
+}
+
+/* Estilo para los días marcados */
+.fc-daygrid-day.fc-day-venta .fc-daygrid-day-number {
+    background-color: #28a745;
+    color: white;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+}
+
+.fc-daygrid-day.fc-day-reporte .fc-daygrid-day-number {
+    background-color: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+}
+
+.fc-daygrid-day.fc-day-ambos .fc-daygrid-day-number {
+    background-color: #ffc107;
+    color: #000;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+    font-weight: bold;
+}
+
+/* Tooltip personalizado */
+.fc-daygrid-day[data-tooltip] {
+    position: relative;
+}
+
+.fc-daygrid-day[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2c3e50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 </style>
 
@@ -678,6 +828,87 @@ table {
                 </div>
             </div>
 
+            <!-- CALENDARIO DE ACTIVIDAD -->
+            <div class="card card-outline card-info shadow-sm mt-4">
+                <div class="card-header">
+                    <h3 class="card-title font-weight-bold">
+                        <i class="fas fa-calendar-alt mr-2"></i>
+                        Calendario de Actividad
+                    </h3>
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-tool" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-9">
+                            <div id="calendario"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="info-box bg-light p-3" style="border-left: 4px solid #17a2b8;">
+                                <h5 class="text-dark mb-3"><i class="fas fa-info-circle mr-2 text-info"></i>Leyenda</h5>
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 20px; height: 20px; background: #28a745; border-radius: 4px; margin-right: 10px; border: 1px solid #1e7e34;"></div>
+                                    <span><strong>Ventas</strong> - Días con ventas registradas</span>
+                                </div>
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 20px; height: 20px; background: #dc3545; border-radius: 4px; margin-right: 10px; border: 1px solid #a71d2a;"></div>
+                                    <span><strong>Reportes</strong> - Días donde se generaron reportes</span>
+                                </div>
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 20px; height: 20px; background: #ffc107; border-radius: 4px; margin-right: 10px; border: 1px solid #d39e00;"></div>
+                                    <span><strong>Ambos</strong> - Ventas y reportes el mismo día</span>
+                                </div>
+                                <hr class="my-3">
+                                <div class="mt-2">
+                                    <h6 class="text-dark"><i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas</h6>
+                                    <table class="table table-sm table-borderless">
+                                        <tr>
+                                            <td class="pl-0">Días con ventas:</td>
+                                            <td class="text-success font-weight-bold text-right" id="diasVentas">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="pl-0">Días con reportes:</td>
+                                            <td class="text-danger font-weight-bold text-right" id="diasReportes">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="pl-0">Total días activos:</td>
+                                            <td class="text-primary font-weight-bold text-right" id="diasActivos">0</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                
+                                <!-- Información del filtro actual -->
+                                <div class="mt-3 p-2 bg-white rounded" style="border: 1px solid #dee2e6;">
+                                    <h6 class="text-dark"><i class="fas fa-filter mr-2 text-info"></i>Filtro actual</h6>
+                                    <p class="mb-1 small">
+                                        <strong>Proveedor:</strong> 
+                                        <span id="filtroProveedor"><?= $filtroProveedor ?: 'Todos' ?></span>
+                                    </p>
+                                    <p class="mb-0 small">
+                                        <strong>Período:</strong> 
+                                        <span id="filtroPeriodo">
+                                            <?php 
+                                            if ($filtroInicio && $filtroFin) {
+                                                echo date('d/m/Y', strtotime($filtroInicio)) . ' - ' . date('d/m/Y', strtotime($filtroFin));
+                                            } else {
+                                                echo 'Histórico completo';
+                                            }
+                                            ?>
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- GRAFICA CON MÁS INFORMACIÓN -->
             <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
             <div class="card card-outline card-info shadow-sm mt-4">
@@ -742,6 +973,11 @@ table {
     </section>
 </div>
 
+<!-- FullCalendar CSS y JS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/es.js'></script>
+
 <!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -753,6 +989,10 @@ const btnPDF = document.getElementById('btnPDF');
 const pdfDropdown = document.getElementById('pdfDropdown');
 const dropdownOverlay = document.getElementById('dropdownOverlay');
 const closeDropdownBtn = document.getElementById('closeDropdownBtn');
+
+// Variables para el calendario
+let calendar = null;
+let fechasVentasPHP = <?= json_encode($fechasVentas) ?>;
 
 // Función para abrir el dropdown
 function openDropdown() {
@@ -799,79 +1039,287 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Función para registrar un día de reporte
+function registrarDiaReporte() {
+    const hoy = new Date();
+    const fechaStr = hoy.toISOString().split('T')[0];
+    
+    let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+    if (!reportesGuardados.includes(fechaStr)) {
+        reportesGuardados.push(fechaStr);
+        localStorage.setItem('diasReportes', JSON.stringify(reportesGuardados));
+    }
+    
+    if (calendar) {
+        cargarEventosCalendario();
+    }
+}
+
+// Función para cargar eventos en el calendario
+function cargarEventosCalendario() {
+    if (!calendar) return;
+    
+    calendar.removeAllEvents();
+    
+    const eventosMap = new Map();
+    
+    // Agregar días con ventas (desde PHP)
+    fechasVentasPHP.forEach(fecha => {
+        eventosMap.set(fecha, {
+            venta: true,
+            reporte: eventosMap.get(fecha)?.reporte || false
+        });
+    });
+    
+    // Agregar días con reportes (desde localStorage)
+    const reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+    reportesGuardados.forEach(fecha => {
+        eventosMap.set(fecha, {
+            venta: eventosMap.get(fecha)?.venta || false,
+            reporte: true
+        });
+    });
+    
+    const eventos = [];
+    let contVentas = 0;
+    let contReportes = 0;
+    
+    eventosMap.forEach((valor, fecha) => {
+        const fechaObj = new Date(fecha + 'T12:00:00');
+        
+        if (valor.venta) contVentas++;
+        if (valor.reporte) contReportes++;
+        
+        let className = '';
+        let tooltip = '';
+        
+        if (valor.venta && valor.reporte) {
+            className = 'fc-day-ambos';
+            tooltip = 'Ventas y reportes';
+        } else if (valor.venta) {
+            className = 'fc-day-venta';
+            tooltip = 'Día con ventas';
+        } else if (valor.reporte) {
+            className = 'fc-day-reporte';
+            tooltip = 'Día con reportes';
+        }
+        
+        eventos.push({
+            start: fechaObj,
+            allDay: true,
+            display: 'background',
+            color: valor.venta && valor.reporte ? '#ffc107' : (valor.venta ? '#28a745' : '#dc3545'),
+            classNames: [className],
+            extendedProps: {
+                tooltip: tooltip,
+                tieneVenta: valor.venta,
+                tieneReporte: valor.reporte
+            }
+        });
+    });
+    
+    document.getElementById('diasVentas').textContent = contVentas;
+    document.getElementById('diasReportes').textContent = contReportes;
+    document.getElementById('diasActivos').textContent = eventosMap.size;
+    
+    eventos.forEach(evento => {
+        calendar.addEvent(evento);
+    });
+}
+
+// Función para limpiar historial de reportes
+function limpiarHistorialReportes() {
+    if (confirm('¿Estás seguro de limpiar el historial de reportes?')) {
+        localStorage.removeItem('diasReportes');
+        cargarEventosCalendario();
+    }
+}
+
+// Inicializar calendario
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendario');
+    
+    if (calendarEl) {
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            locale: 'es',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,dayGridWeek'
+            },
+            buttonText: {
+                today: 'Hoy',
+                month: 'Mes',
+                week: 'Semana'
+            },
+            height: 'auto',
+            firstDay: 1,
+            eventDidMount: function(info) {
+                if (info.event.extendedProps.tooltip) {
+                    info.el.setAttribute('data-tooltip', info.event.extendedProps.tooltip);
+                }
+            },
+            eventClick: function(info) {
+                const fecha = info.event.start.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                
+                let mensaje = `Fecha: ${fecha}\n`;
+                if (info.event.extendedProps.tieneVenta) {
+                    mensaje += '✓ Hay ventas registradas\n';
+                }
+                if (info.event.extendedProps.tieneReporte) {
+                    mensaje += '📄 Se generaron reportes\n';
+                }
+                
+                alert(mensaje);
+            }
+        });
+        
+        calendar.render();
+        cargarEventosCalendario();
+    }
+    
+    // Evento para limpiar historial
+    document.getElementById('limpiarHistorialBtn')?.addEventListener('click', limpiarHistorialReportes);
+});
+
 // Gráfica
 <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
 const ctx = document.getElementById('graficaVentas');
-
-new Chart(ctx, {
-    type: 'pie',
-    data: {
-        labels: [
-            'Ganancia neta ($<?= number_format($totalGanancia, 2) ?>)',
-            'Deuda a proveedores ($<?= number_format($totalProveedor, 2) ?>)'
-        ],
-        datasets: [{
-            data: [
-                <?= $totalGanancia ?>,
-                <?= $totalProveedor ?>
+if (ctx) {
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: [
+                'Ganancia neta ($<?= number_format($totalGanancia, 2) ?>)',
+                'Deuda a proveedores ($<?= number_format($totalProveedor, 2) ?>)'
             ],
-            backgroundColor: [
-                '#28a745',
-                '#dc3545'
-            ],
-            borderColor: '#ffffff',
-            borderWidth: 2,
-            hoverOffset: 8
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom',
-                labels: {
-                    padding: 15,
-                    boxWidth: 12,
-                    font: { size: 12 }
-                }
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                        const value = context.raw;
-                        const percent = ((value / total) * 100).toFixed(1);
-                        return `${context.label}: $${value.toLocaleString()} (${percent}%)`;
+            datasets: [{
+                data: [
+                    <?= $totalGanancia ?>,
+                    <?= $totalProveedor ?>
+                ],
+                backgroundColor: [
+                    '#28a745',
+                    '#dc3545'
+                ],
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        boxWidth: 12,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const value = context.raw;
+                            const percent = ((value / total) * 100).toFixed(1);
+                            return `${context.label}: $${value.toLocaleString()} (${percent}%)`;
+                        }
                     }
                 }
             }
         }
-    }
-});
+    });
+}
 <?php endif; ?>
 
-// Función para generar PDFs (la misma de antes)
+// Función para registrar el RANGO de fechas del reporte
+function registrarRangoReporte() {
+    // Obtener las fechas del filtro actual
+    const filtroInicio = '<?= $filtroInicio ?>';
+    const filtroFin = '<?= $filtroFin ?>';
+    
+    // Si hay un rango de fechas seleccionado
+    if (filtroInicio && filtroFin) {
+        let fechaActual = new Date(filtroInicio);
+        const fechaFin = new Date(filtroFin);
+        
+        let fechasReporte = [];
+        
+        // Recorrer todas las fechas del rango
+        while (fechaActual <= fechaFin) {
+            const fechaStr = fechaActual.toISOString().split('T')[0];
+            fechasReporte.push(fechaStr);
+            
+            // Avanzar al siguiente día
+            fechaActual.setDate(fechaActual.getDate() + 1);
+        }
+        
+        // Guardar en localStorage
+        let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+        
+        // Agregar las nuevas fechas (sin duplicados)
+        fechasReporte.forEach(fecha => {
+            if (!reportesGuardados.includes(fecha)) {
+                reportesGuardados.push(fecha);
+            }
+        });
+        
+        localStorage.setItem('diasReportes', JSON.stringify(reportesGuardados));
+        
+        // Actualizar el calendario
+        if (calendar) {
+            cargarEventosCalendario();
+        }
+    } else {
+        // Si no hay filtro de fechas, solo registrar el día actual
+        const hoy = new Date();
+        const fechaStr = hoy.toISOString().split('T')[0];
+        
+        let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+        if (!reportesGuardados.includes(fechaStr)) {
+            reportesGuardados.push(fechaStr);
+            localStorage.setItem('diasReportes', JSON.stringify(reportesGuardados));
+            
+            if (calendar) {
+                cargarEventosCalendario();
+            }
+        }
+    }
+}
+
+// Función para generar PDFs
 function generarPDF(tipo) {
+    // Registrar el rango de fechas del reporte (NO solo el día actual)
+    registrarRangoReporte();
+    
     const { jsPDF } = window.jspdf;
     
     // ============================================
     // CONFIGURACIÓN PROFESIONAL
     // ============================================
     const colors = {
-        primary: [26, 115, 232],      // Azul profesional
-        secondary: [66, 133, 244],     // Azul claro
-        success: [52, 168, 83],         // Verde
-        warning: [251, 188, 5],         // Amarillo
-        danger: [234, 67, 53],          // Rojo
-        dark: [32, 33, 36],             // Gris oscuro
-        medium: [95, 99, 104],          // Gris medio
-        light: [248, 249, 250],         // Gris claro
+        primary: [26, 115, 232],
+        secondary: [66, 133, 244],
+        success: [52, 168, 83],
+        warning: [251, 188, 5],
+        danger: [234, 67, 53],
+        dark: [32, 33, 36],
+        medium: [95, 99, 104],
+        light: [248, 249, 250],
         white: [255, 255, 255]
     };
 
     <?php
-    // Consulta detallada para proveedores con fecha de venta
+    // Consulta detallada para proveedores
     $sqlProveedores = "
     SELECT 
         p.nombre AS producto,
@@ -918,7 +1366,6 @@ function generarPDF(tipo) {
             }
             $deudaPorProveedor[$prov] += $row['total_deuda'];
             
-            // Agrupar por fecha para análisis
             $fecha = $row['fecha_venta_iso'];
             if (!isset($ventasPorFecha[$fecha])) {
                 $ventasPorFecha[$fecha] = [
@@ -934,7 +1381,6 @@ function generarPDF(tipo) {
             $ventasPorFecha[$fecha]['total_ganancia'] += $row['ganancia'];
             $ventasPorFecha[$fecha]['cantidad_productos'] += $row['cantidad_vendida'];
             
-            // Resumen mensual
             $mes = date('Y-m', strtotime($row['fecha_venta']));
             if (!isset($resumenMensual[$mes])) {
                 $resumenMensual[$mes] = [
@@ -950,11 +1396,10 @@ function generarPDF(tipo) {
         }
     }
     
-    // Ordenar fechas
     ksort($ventasPorFecha);
     ?>
 
-    // Función para generar PDF General (Administrador)
+    // Función para generar PDF General
     function generarPDFGeneral() {
         const docAdmin = new jsPDF({
             orientation: "p",
@@ -968,14 +1413,12 @@ function generarPDF(tipo) {
         let y = 25;
         let pageNum = 1;
 
-        // Función para pie de página profesional
         function addFooter(doc, pageNum, totalPages) {
             doc.setPage(pageNum);
             doc.setFontSize(8);
             doc.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
             doc.setFont("helvetica", "normal");
             
-            // Línea superior del pie
             doc.setDrawColor(220, 220, 220);
             doc.line(20, pageHeight - 12, pageWidth - 20, pageHeight - 12);
             
@@ -1014,17 +1457,14 @@ function generarPDF(tipo) {
         <?php endif; ?>
 
         // --- PORTADA PROFESIONAL ---
-        // Barra superior de color
         docAdmin.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
         docAdmin.rect(0, 0, pageWidth, 12, "F");
 
-        // Título principal
         docAdmin.setFontSize(28);
         docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docAdmin.setFont("helvetica", "bold");
         docAdmin.text("REPORTE DE VENTAS", pageWidth / 2, 35, { align: "center" });
 
-        // Subtítulo con período
         docAdmin.setFontSize(12);
         docAdmin.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
         docAdmin.setFont("helvetica", "normal");
@@ -1042,7 +1482,6 @@ function generarPDF(tipo) {
 
         docAdmin.text(periodoTexto, pageWidth / 2, 70, { align: "center" });
 
-        // Cuadro de métricas principales
         docAdmin.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
         docAdmin.roundedRect(20, 85, pageWidth - 40, 45, 3, 3, "F");
 
@@ -1061,7 +1500,7 @@ function generarPDF(tipo) {
 
         y = 145;
 
-        // --- ANÁLISIS TEMPORAL CON PROVEEDOR Y ARTÍCULO ---
+        // --- ANÁLISIS TEMPORAL ---
         if (Object.keys(<?= json_encode($ventasPorFecha) ?>).length > 0) {
             if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
             
@@ -1142,7 +1581,6 @@ function generarPDF(tipo) {
                 margin: { left: 10, right: 10 }
             });
 
-            // Total acumulado de ganancia
             y = docAdmin.lastAutoTable.finalY + 5;
             docAdmin.setFontSize(9);
             docAdmin.setFont("helvetica", "bold");
@@ -1151,7 +1589,7 @@ function generarPDF(tipo) {
             y += 15;
         }
 
-        // --- DETALLE DE PRODUCTOS VENDIDOS CON TOTAL DE GANANCIAS ---
+        // --- DETALLE DE PRODUCTOS VENDIDOS ---
         if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
 
         docAdmin.setFontSize(16);
@@ -1172,7 +1610,6 @@ function generarPDF(tipo) {
             }
         });
 
-        // Calcular total de ganancias de la tabla
         let totalGananciasTabla = 0;
         const filasTabla = document.querySelectorAll(".card-warning table tbody tr");
         filasTabla.forEach(fila => {
@@ -1190,7 +1627,7 @@ function generarPDF(tipo) {
         docAdmin.text(`TOTAL GANANCIAS: $${totalGananciasTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
         y += 15;
 
-        // --- ANÁLISIS DE COSTOS CON TOTAL DE DEUDA ---
+        // --- ANÁLISIS DE COSTOS ---
         if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
 
         docAdmin.setFontSize(16);
@@ -1208,7 +1645,6 @@ function generarPDF(tipo) {
             margin: { left: 15, right: 15 }
         });
 
-        // Calcular total de deuda de la tabla
         let totalDeudaTabla = 0;
         const filasCosto = document.querySelectorAll(".card-danger table tbody tr");
         filasCosto.forEach(fila => {
@@ -1226,7 +1662,7 @@ function generarPDF(tipo) {
         docAdmin.text(`TOTAL DEUDA ACUMULADA: $${totalDeudaTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
         y += 15;
 
-        // --- GRÁFICA DE RENDIMIENTO ---
+        // --- GRÁFICA ---
         <?php if ($totalGanancia > 0 || $totalProveedor > 0): ?>
         if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
 
@@ -1246,7 +1682,6 @@ function generarPDF(tipo) {
         }
         <?php endif; ?>
 
-        // Agregar pie de página a todas las páginas
         const totalPagesAdmin = docAdmin.internal.getNumberOfPages();
         for (let i = 1; i <= totalPagesAdmin; i++) {
             addFooter(docAdmin, i, totalPagesAdmin);
@@ -1288,7 +1723,6 @@ function generarPDF(tipo) {
             );
         }
 
-        // Determinar el nombre del proveedor para el archivo
         <?php
         $nombreProveedorParaArchivo = 'todos';
         if ($filtroProveedor !== '') {
@@ -1296,7 +1730,7 @@ function generarPDF(tipo) {
         }
         ?>
 
-        // --- ENCABEZADO PROFESIONAL PROVEEDORES ---
+        // --- ENCABEZADO ---
         docProv.setFillColor(colors.danger[0], colors.danger[1], colors.danger[2]);
         docProv.rect(0, 0, provPageWidth, 10, "F");
         
@@ -1323,10 +1757,9 @@ function generarPDF(tipo) {
         docProv.text(`Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>`, provPageWidth / 2, 72, { align: "center" });
         <?php endif; ?>
         
-        // --- RESUMEN DE PAGOS DESTACADO ---
+        // --- RESUMEN ---
         provY = 85;
         
-        // Caja de resumen de pagos
         docProv.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
         docProv.roundedRect(30, provY - 10, provPageWidth - 60, 35, 3, 3, "F");
         docProv.setDrawColor(colors.danger[0], colors.danger[1], colors.danger[2]);
@@ -1344,7 +1777,7 @@ function generarPDF(tipo) {
         
         provY += 45;
 
-        // --- TABLA DETALLADA DE VENTAS POR PROVEEDOR ---
+        // --- TABLA DETALLADA ---
         docProv.setFontSize(14);
         docProv.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docProv.setFont("helvetica", "bold");
@@ -1432,7 +1865,6 @@ function generarPDF(tipo) {
             docProv.text("No hay ventas registradas en el período seleccionado.", provPageWidth / 2, provY + 20, { align: "center" });
         }
 
-        // Agregar pie de página a todas las páginas
         const totalPagesProv = docProv.internal.getNumberOfPages();
         for (let i = 1; i <= totalPagesProv; i++) {
             addProvFooter(docProv, i, totalPagesProv);
@@ -1452,13 +1884,11 @@ function generarPDF(tipo) {
         generarPDFGeneral();
     } else if (tipo === 'ambos') {
         generarPDFGeneral();
-        // Pequeño retraso para no sobrecargar el navegador
         setTimeout(() => {
             generarPDFProveedores();
         }, 500);
     }
     
-    // Cerrar el dropdown después de iniciar la descarga
     closeDropdown();
 }
 
