@@ -180,6 +180,187 @@ table {
     font-weight: bold;
     text-align: right;
 }
+
+/* ESTILOS PARA EL DROPDOWN PDF (MODAL QUE SALE DEL BOTÓN) */
+.pdf-dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+
+.pdf-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    width: 320px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.pdf-dropdown-menu.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: all;
+}
+
+/* Flecha superior del dropdown */
+.pdf-dropdown-menu::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    right: 20px;
+    width: 12px;
+    height: 12px;
+    background: white;
+    transform: rotate(45deg);
+    box-shadow: -2px -2px 5px rgba(0, 0, 0, 0.04);
+    border-left: 1px solid rgba(0, 0, 0, 0.05);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.pdf-dropdown-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pdf-dropdown-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.pdf-dropdown-header .close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #95a5a6;
+    transition: color 0.2s;
+    line-height: 1;
+    padding: 0 5px;
+}
+
+.pdf-dropdown-header .close-btn:hover {
+    color: #e74c3c;
+}
+
+.pdf-dropdown-body {
+    padding: 16px;
+}
+
+.pdf-dropdown-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pdf-dropdown-btn {
+    padding: 12px 16px;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    background: white;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #2c3e50;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+}
+
+.pdf-dropdown-btn:hover {
+    background: #f8f9fa;
+    border-color: #3498db;
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
+}
+
+.pdf-dropdown-btn .btn-icon {
+    font-size: 1.2rem;
+    margin-right: 12px;
+    width: 24px;
+    text-align: center;
+}
+
+.pdf-dropdown-btn .btn-text {
+    flex: 1;
+}
+
+.pdf-dropdown-btn .btn-text strong {
+    display: block;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+
+.pdf-dropdown-btn .btn-text small {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    font-weight: normal;
+}
+
+.pdf-dropdown-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e9ecef;
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    background: #f8f9fa;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+/* Colores para cada opción */
+.btn-proveedor:hover {
+    border-left: 4px solid #e74c3c;
+}
+
+.btn-general:hover {
+    border-left: 4px solid #27ae60;
+}
+
+.btn-ambos:hover {
+    border-left: 4px solid #3498db;
+}
+
+/* Overlay invisible para cerrar al hacer clic fuera */
+.dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    display: none;
+}
+
+.dropdown-overlay.active {
+    display: block;
+}
+
+/* Ajuste para móviles */
+@media (max-width: 768px) {
+    .pdf-dropdown-menu {
+        width: 290px;
+        right: -10px;
+    }
+    
+    .pdf-dropdown-menu::before {
+        right: 25px;
+    }
+}
 </style>
 
 <div class="content-wrapper">
@@ -207,11 +388,61 @@ table {
                         <i class="fas fa-sync-alt mr-1"></i> Reiniciar filtros
                     </a>
                     
-                    <!-- Botón PDF -->
-                    <button id="btnPDF" class="btn btn-danger btn-sm shadow-sm">
-                        <i class="fas fa-file-pdf mr-1"></i> Exportar PDF
-                    </button>
+                    <!-- CONTENEDOR DEL BOTÓN PDF CON DROPDOWN -->
+                    <div class="pdf-dropdown-container" id="pdfDropdownContainer">
+                        <button id="btnPDF" class="btn btn-danger btn-sm shadow-sm">
+                            <i class="fas fa-file-pdf mr-1"></i> Exportar PDF
+                            <i class="fas fa-chevron-down ml-1" style="font-size: 12px;"></i>
+                        </button>
+                        
+                        <!-- DROPDOWN MENU (sale del botón) -->
+                        <div class="pdf-dropdown-menu" id="pdfDropdown">
+                            <div class="pdf-dropdown-header">
+                                <h3><i class="fas fa-file-export text-primary mr-2"></i>Exportar Reporte</h3>
+                                <button class="close-btn" id="closeDropdownBtn">&times;</button>
+                            </div>
+                            <div class="pdf-dropdown-body">
+                                <div class="pdf-dropdown-options">
+                                    <button class="pdf-dropdown-btn btn-proveedor" id="pdfProveedor">
+                                        <span class="btn-icon">
+                                            <i class="fas fa-truck text-danger"></i>
+                                        </span>
+                                        <span class="btn-text">
+                                            <strong>Reporte por Proveedor</strong>
+                                            <small>Deuda detallada por proveedor</small>
+                                        </span>
+                                    </button>
+
+                                    <button class="pdf-dropdown-btn btn-general" id="pdfGeneral">
+                                        <span class="btn-icon">
+                                            <i class="fas fa-chart-line text-success"></i>
+                                        </span>
+                                        <span class="btn-text">
+                                            <strong>Reporte General</strong>
+                                            <small>Ventas y ganancias completas</small>
+                                        </span>
+                                    </button>
+
+                                    <button class="pdf-dropdown-btn btn-ambos" id="pdfAmbos">
+                                        <span class="btn-icon">
+                                            <i class="fas fa-layer-group text-primary"></i>
+                                        </span>
+                                        <span class="btn-text">
+                                            <strong>Generar Ambos</strong>
+                                            <small>Reporte general y de proveedores</small>
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="pdf-dropdown-footer">
+                                <i class="fas fa-info-circle mr-1"></i> Los PDFs se descargarán automáticamente
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Overlay para cerrar dropdown al hacer clic fuera -->
+                <div class="dropdown-overlay" id="dropdownOverlay"></div>
 
             </div>
         </div>
@@ -517,6 +748,57 @@ table {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
 <script>
+// Elementos del DOM
+const btnPDF = document.getElementById('btnPDF');
+const pdfDropdown = document.getElementById('pdfDropdown');
+const dropdownOverlay = document.getElementById('dropdownOverlay');
+const closeDropdownBtn = document.getElementById('closeDropdownBtn');
+
+// Función para abrir el dropdown
+function openDropdown() {
+    pdfDropdown.classList.add('active');
+    dropdownOverlay.classList.add('active');
+}
+
+// Función para cerrar el dropdown
+function closeDropdown() {
+    pdfDropdown.classList.remove('active');
+    dropdownOverlay.classList.remove('active');
+}
+
+// Evento para abrir al hacer clic en el botón
+btnPDF.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (pdfDropdown.classList.contains('active')) {
+        closeDropdown();
+    } else {
+        openDropdown();
+    }
+});
+
+// Cerrar al hacer clic en la X
+closeDropdownBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeDropdown();
+});
+
+// Cerrar al hacer clic en el overlay
+dropdownOverlay.addEventListener('click', closeDropdown);
+
+// Prevenir que el dropdown se cierre al hacer clic dentro de él
+pdfDropdown.addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+// Cerrar con tecla Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && pdfDropdown.classList.contains('active')) {
+        closeDropdown();
+    }
+});
+
 // Gráfica
 <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
 const ctx = document.getElementById('graficaVentas');
@@ -526,7 +808,7 @@ new Chart(ctx, {
     data: {
         labels: [
             'Ganancia neta ($<?= number_format($totalGanancia, 2) ?>)',
-            'Costo de ventas ($<?= number_format($totalProveedor, 2) ?>)'
+            'Deuda a proveedores ($<?= number_format($totalProveedor, 2) ?>)'
         ],
         datasets: [{
             data: [
@@ -568,25 +850,43 @@ new Chart(ctx, {
     }
 });
 <?php endif; ?>
-// Función para generar PDFs
-document.getElementById("btnPDF").addEventListener("click", () => {
+
+// Función para generar PDFs (la misma de antes)
+function generarPDF(tipo) {
     const { jsPDF } = window.jspdf;
     
     // ============================================
-    // CONSULTAS PARA PDF DE PROVEEDORES
+    // CONFIGURACIÓN PROFESIONAL
     // ============================================
+    const colors = {
+        primary: [26, 115, 232],      // Azul profesional
+        secondary: [66, 133, 244],     // Azul claro
+        success: [52, 168, 83],         // Verde
+        warning: [251, 188, 5],         // Amarillo
+        danger: [234, 67, 53],          // Rojo
+        dark: [32, 33, 36],             // Gris oscuro
+        medium: [95, 99, 104],          // Gris medio
+        light: [248, 249, 250],         // Gris claro
+        white: [255, 255, 255]
+    };
+
     <?php
     // Consulta detallada para proveedores con fecha de venta
     $sqlProveedores = "
     SELECT 
         p.nombre AS producto,
         p.proveedor,
+        v.fecha_venta,
         DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha_venta_formateada,
+        DATE_FORMAT(v.fecha_venta, '%Y-%m-%d') AS fecha_venta_iso,
         v.cantidad_vendida,
         p.cantidad AS stock_actual,
         p.precio_compra,
+        p.precio_venta,
         (p.cantidad + v.cantidad_vendida) AS stock_inicial,
-        (p.precio_compra * v.cantidad_vendida) AS total_deuda
+        (p.precio_compra * v.cantidad_vendida) AS total_deuda,
+        (p.precio_venta * v.cantidad_vendida) AS total_venta,
+        ((p.precio_venta - p.precio_compra) * v.cantidad_vendida) AS ganancia
     FROM ventas v
     INNER JOIN productos p ON v.id_producto = p.id
     WHERE 1
@@ -601,11 +901,13 @@ document.getElementById("btnPDF").addEventListener("click", () => {
         AND '" . $conn->real_escape_string($filtroFin) . "'";
     }
     
-    $sqlProveedores .= " ORDER BY p.proveedor, v.fecha_venta DESC";
+    $sqlProveedores .= " ORDER BY v.fecha_venta DESC, p.proveedor, p.nombre";
     
     $resultadoProveedores = $conn->query($sqlProveedores);
     $ventasDetalle = [];
     $deudaPorProveedor = [];
+    $ventasPorFecha = [];
+    $resumenMensual = [];
     
     if ($resultadoProveedores) {
         while ($row = $resultadoProveedores->fetch_assoc()) {
@@ -615,221 +917,440 @@ document.getElementById("btnPDF").addEventListener("click", () => {
                 $deudaPorProveedor[$prov] = 0;
             }
             $deudaPorProveedor[$prov] += $row['total_deuda'];
+            
+            // Agrupar por fecha para análisis
+            $fecha = $row['fecha_venta_iso'];
+            if (!isset($ventasPorFecha[$fecha])) {
+                $ventasPorFecha[$fecha] = [
+                    'fecha' => $row['fecha_venta_formateada'],
+                    'total_ventas' => 0,
+                    'total_deuda' => 0,
+                    'total_ganancia' => 0,
+                    'cantidad_productos' => 0
+                ];
+            }
+            $ventasPorFecha[$fecha]['total_ventas'] += $row['total_venta'];
+            $ventasPorFecha[$fecha]['total_deuda'] += $row['total_deuda'];
+            $ventasPorFecha[$fecha]['total_ganancia'] += $row['ganancia'];
+            $ventasPorFecha[$fecha]['cantidad_productos'] += $row['cantidad_vendida'];
+            
+            // Resumen mensual
+            $mes = date('Y-m', strtotime($row['fecha_venta']));
+            if (!isset($resumenMensual[$mes])) {
+                $resumenMensual[$mes] = [
+                    'mes' => date('F Y', strtotime($row['fecha_venta'])),
+                    'total_ventas' => 0,
+                    'total_deuda' => 0,
+                    'total_ganancia' => 0
+                ];
+            }
+            $resumenMensual[$mes]['total_ventas'] += $row['total_venta'];
+            $resumenMensual[$mes]['total_deuda'] += $row['total_deuda'];
+            $resumenMensual[$mes]['total_ganancia'] += $row['ganancia'];
         }
     }
+    
+    // Ordenar fechas
+    ksort($ventasPorFecha);
     ?>
-    
-    // ============================================
-    // PDF 1: PARA ADMINISTRADOR (Reporte General)
-    // ============================================
-    const docAdmin = new jsPDF("p", "mm", "a4");
-    const pageWidth = docAdmin.internal.pageSize.getWidth();
-    const pageHeight = docAdmin.internal.pageSize.getHeight();
-    let y = 20;
 
-    <?php if (empty($productos)): ?>
-    docAdmin.setFontSize(16);
-    docAdmin.text("REPORTE DE VENTAS", pageWidth / 2, 30, { align: "center" });
-    docAdmin.setFontSize(12);
-    docAdmin.text("No hay ventas registradas en el período seleccionado.", pageWidth / 2, 50, { align: "center" });
-    docAdmin.save("Reporte_Ventas_Admin.pdf");
-    return;
-    <?php endif; ?>
+    // Función para generar PDF General (Administrador)
+    function generarPDFGeneral() {
+        const docAdmin = new jsPDF({
+            orientation: "p",
+            unit: "mm",
+            format: "a4",
+            putOnlyUsedFonts: true
+        });
 
-    // --- ENCABEZADO ADMIN (Sobrio y profesional) ---
-    docAdmin.setFontSize(20);
-    docAdmin.setTextColor(44, 62, 80);
-    docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("REPORTE GENERAL DE VENTAS", pageWidth / 2, 18, { align: "center" });
-    
-    // Línea separadora
-    docAdmin.setDrawColor(200, 200, 200);
-    docAdmin.setLineWidth(0.5);
-    docAdmin.line(20, 24, pageWidth - 20, 24);
-    
-    docAdmin.setFontSize(10);
-    docAdmin.setTextColor(100);
-    docAdmin.setFont("helvetica", "normal");
-    
-    let filtrosTexto = "";
-    <?php if ($filtroProveedor !== ''): ?>
-    filtrosTexto += "Proveedor: " + "<?= htmlspecialchars($filtroProveedor) ?>";
-    <?php endif; ?>
-    <?php if ($filtroInicio !== '' && $filtroFin !== ''): ?>
-    filtrosTexto += (filtrosTexto ? " | " : "") + "Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>";
-    <?php endif; ?>
-    <?php if ($filtroProveedor === '' && ($filtroInicio === '' || $filtroFin === '')): ?>
-    filtrosTexto = "Todos los productos con ventas";
-    <?php endif; ?>
-    
-    docAdmin.text("Filtros aplicados: " + (filtrosTexto || "Ninguno"), 20, 32);
-    docAdmin.text(`Fecha de generación: ${new Date().toLocaleString()}`, pageWidth - 20, 32, { align: "right" });
-    
-    y = 42;
+        const pageWidth = docAdmin.internal.pageSize.getWidth();
+        const pageHeight = docAdmin.internal.pageSize.getHeight();
+        let y = 25;
+        let pageNum = 1;
 
-    // --- TABLA DE PRODUCTOS (ADMIN) ---
-    docAdmin.setFontSize(14);
-    docAdmin.setTextColor(41, 128, 185);
-    docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("1. DETALLE DE PRODUCTOS VENDIDOS", 20, y);
-    y += 6;
+        // Función para pie de página profesional
+        function addFooter(doc, pageNum, totalPages) {
+            doc.setPage(pageNum);
+            doc.setFontSize(8);
+            doc.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+            doc.setFont("helvetica", "normal");
+            
+            // Línea superior del pie
+            doc.setDrawColor(220, 220, 220);
+            doc.line(20, pageHeight - 12, pageWidth - 20, pageHeight - 12);
+            
+            doc.text(
+                `Documento generado el ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}`,
+                20,
+                pageHeight - 6
+            );
+            doc.text(
+                `Página ${pageNum} de ${totalPages} | Reporte Administrativo Confidencial`,
+                pageWidth - 20,
+                pageHeight - 6,
+                { align: "right" }
+            );
+        }
 
-    docAdmin.autoTable({
-        html: document.querySelector(".card-warning table"),
-        startY: y,
-        theme: "striped",
-        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
-        styles: { fontSize: 8, cellPadding: 4 },
-        margin: { left: 15, right: 15 },
-        didDrawPage: data => y = data.cursor.y + 8
-    });
+        <?php if (empty($productos)): ?>
+        docAdmin.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
+        docAdmin.rect(0, 0, pageWidth, pageHeight, "F");
 
-    // --- RESUMEN FINANCIERO (ADMIN) ---
-    if (y > 220) { docAdmin.addPage(); y = 25; }
-    
-    docAdmin.setFontSize(14);
-    docAdmin.setTextColor(46, 204, 113);
-    docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("2. RESUMEN FINANCIERO", 20, y);
-    y += 8;
+        docAdmin.setFontSize(24);
+        docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("REPORTE DE VENTAS", pageWidth / 2, 60, { align: "center" });
 
-    // Crear tabla de resumen
-    const resumenBody = [
-        ["Total de productos vendidos", "<?= number_format($totalVendidos) ?>", "unidades"],
-        ["Costo total de ventas", "$<?= number_format($totalProveedor, 2) ?>", ""],
-        ["Ganancia neta", "$<?= number_format($totalGanancia, 2) ?>", ""],
-        ["Stock restante", "<?= number_format($totalStock) ?>", "unidades"],
-        ["Productos diferentes", "<?= count($productos) ?>", ""]
-    ];
-    
-    docAdmin.autoTable({
-        startY: y,
-        body: resumenBody,
-        theme: "plain",
-        styles: { fontSize: 10, cellPadding: 4 },
-        columnStyles: {
-            0: { cellWidth: 80, fontStyle: 'bold' },
-            1: { cellWidth: 50, halign: 'right' },
-            2: { cellWidth: 40 }
-        },
-        margin: { left: 20, right: 20 },
-        didDrawPage: data => y = data.cursor.y + 8
-    });
-    y += 5;
+        docAdmin.setFontSize(14);
+        docAdmin.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docAdmin.text("No hay ventas registradas en el período seleccionado", pageWidth / 2, 100, { align: "center" });
 
-    // --- TABLA DE COSTOS (ADMIN) ---
-    if (y > 220) { docAdmin.addPage(); y = 25; }
-    
-    docAdmin.setFontSize(14);
-    docAdmin.setTextColor(231, 76, 60);
-    docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("3. DETALLE DE COSTOS POR PRODUCTO", 20, y);
-    y += 6;
+        docAdmin.setFontSize(10);
+        docAdmin.text("Por favor, seleccione un rango de fechas con ventas para visualizar el reporte", pageWidth / 2, 120, { align: "center" });
 
-    docAdmin.autoTable({
-        html: document.querySelector(".card-danger table"),
-        startY: y,
-        theme: "striped",
-        headStyles: { fillColor: [231, 76, 60], textColor: 255, fontStyle: "bold", fontSize: 9 },
-        styles: { fontSize: 8, cellPadding: 4 },
-        margin: { left: 15, right: 15 },
-        didDrawPage: data => y = data.cursor.y + 8
-    });
+        addFooter(docAdmin, 1, 1);
+        docAdmin.save("Reporte_Ejecutivo_Ventas.pdf");
+        return;
+        <?php endif; ?>
 
-    // --- GRÁFICA (ADMIN) ---
-    <?php if ($totalGanancia > 0 || $totalProveedor > 0): ?>
-    if (y > 200) { docAdmin.addPage(); y = 25; }
-    
-    docAdmin.setFontSize(14);
-    docAdmin.setTextColor(52, 152, 219);
-    docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("4. DISTRIBUCIÓN COSTOS VS GANANCIAS", 20, y);
-    y += 8;
+        // --- PORTADA PROFESIONAL ---
+        // Barra superior de color
+        docAdmin.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+        docAdmin.rect(0, 0, pageWidth, 12, "F");
 
-    const canvas = document.getElementById("graficaVentas");
-    if (canvas) {
-        const imgData = canvas.toDataURL("image/png");
-        const imgWidth = 120;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        docAdmin.addImage(imgData, "PNG", (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
+        // Título principal
+        docAdmin.setFontSize(28);
+        docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("REPORTE DE VENTAS", pageWidth / 2, 35, { align: "center" });
+
+        // Subtítulo con período
+        docAdmin.setFontSize(12);
+        docAdmin.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docAdmin.setFont("helvetica", "normal");
+
+        let periodoTexto = "";
+        <?php if ($filtroInicio !== '' && $filtroFin !== ''): ?>
+        periodoTexto = "Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>";
+        <?php else: ?>
+        periodoTexto = "Período: Histórico completo";
+        <?php endif; ?>
+
+        <?php if ($filtroProveedor !== ''): ?>
+        periodoTexto += " | Proveedor: <?= htmlspecialchars($filtroProveedor) ?>";
+        <?php endif; ?>
+
+        docAdmin.text(periodoTexto, pageWidth / 2, 70, { align: "center" });
+
+        // Cuadro de métricas principales
+        docAdmin.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
+        docAdmin.roundedRect(20, 85, pageWidth - 40, 45, 3, 3, "F");
+
+        docAdmin.setFontSize(10);
+        docAdmin.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docAdmin.text("TOTAL VENTAS", 35, 100);
+        docAdmin.text("DEUDA TOTAL", pageWidth / 2 - 25, 100);
+        docAdmin.text("GANANCIA NETA", pageWidth - 55, 100);
+
+        docAdmin.setFontSize(18);
+        docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("$<?= number_format($totalVendidos * 100, 2) ?>", 35, 115);
+        docAdmin.text("$<?= number_format($totalProveedor, 2) ?>", pageWidth / 2 - 25, 115);
+        docAdmin.text("$<?= number_format($totalGanancia, 2) ?>", pageWidth - 55, 115);
+
+        y = 145;
+
+        // --- ANÁLISIS TEMPORAL CON PROVEEDOR Y ARTÍCULO ---
+        if (Object.keys(<?= json_encode($ventasPorFecha) ?>).length > 0) {
+            if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
+            
+            docAdmin.setFontSize(16);
+            docAdmin.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+            docAdmin.setFont("helvetica", "bold");
+            docAdmin.text("Análisis Temporal de Ventas", 20, y);
+            y += 8;
+
+            <?php
+            $sqlDetallado = "
+            SELECT 
+                DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha,
+                p.proveedor,
+                p.nombre AS producto,
+                v.cantidad_vendida,
+                (p.precio_venta * v.cantidad_vendida) AS total_venta,
+                (p.precio_compra * v.cantidad_vendida) AS total_costo,
+                ((p.precio_venta - p.precio_compra) * v.cantidad_vendida) AS ganancia
+            FROM ventas v
+            INNER JOIN productos p ON v.id_producto = p.id
+            WHERE 1
+            ";
+            
+            if ($filtroProveedor !== '') {
+                $sqlDetallado .= " AND p.proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
+            }
+            
+            if ($filtroInicio !== '' && $filtroFin !== '') {
+                $sqlDetallado .= " AND DATE(v.fecha_venta) BETWEEN '" . $conn->real_escape_string($filtroInicio) . "' 
+                AND '" . $conn->real_escape_string($filtroFin) . "'";
+            }
+            
+            $sqlDetallado .= " ORDER BY v.fecha_venta DESC";
+            
+            $resultadoDetallado = $conn->query($sqlDetallado);
+            $detalleVentas = [];
+            $totalGananciaDetalle = 0;
+            
+            if ($resultadoDetallado) {
+                while ($row = $resultadoDetallado->fetch_assoc()) {
+                    $detalleVentas[] = $row;
+                    $totalGananciaDetalle += $row['ganancia'];
+                }
+            }
+            ?>
+
+            const detalleVentasData = [
+                <?php foreach ($detalleVentas as $venta): ?>
+                [
+                    '<?= $venta['fecha'] ?>',
+                    '<?= addslashes($venta['proveedor']) ?>',
+                    '<?= addslashes($venta['producto']) ?>',
+                    <?= $venta['cantidad_vendida'] ?>,
+                    '$<?= number_format($venta['total_venta'], 2) ?>',
+                    '$<?= number_format($venta['total_costo'], 2) ?>',
+                    '$<?= number_format($venta['ganancia'], 2) ?>'
+                ],
+                <?php endforeach; ?>
+            ];
+
+            docAdmin.autoTable({
+                head: [['Fecha', 'Proveedor', 'Artículo', 'Cant', 'Ventas', 'Costo', 'Ganancia']],
+                body: detalleVentasData,
+                startY: y,
+                theme: "grid",
+                headStyles: { fillColor: colors.secondary, textColor: colors.white, fontSize: 9 },
+                styles: { fontSize: 7, cellPadding: 2 },
+                columnStyles: {
+                    0: { cellWidth: 20 },
+                    1: { cellWidth: 30 },
+                    2: { cellWidth: 40 },
+                    3: { cellWidth: 12, halign: 'center' },
+                    4: { cellWidth: 22, halign: 'right' },
+                    5: { cellWidth: 22, halign: 'right' },
+                    6: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+                },
+                margin: { left: 10, right: 10 }
+            });
+
+            // Total acumulado de ganancia
+            y = docAdmin.lastAutoTable.finalY + 5;
+            docAdmin.setFontSize(9);
+            docAdmin.setFont("helvetica", "bold");
+            docAdmin.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+            docAdmin.text(`TOTAL GANANCIA ACUMULADA: $<?= number_format($totalGananciaDetalle, 2) ?>`, pageWidth - 30, y, { align: "right" });
+            y += 15;
+        }
+
+        // --- DETALLE DE PRODUCTOS VENDIDOS CON TOTAL DE GANANCIAS ---
+        if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
+
+        docAdmin.setFontSize(16);
+        docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("Detalle de Productos Vendidos", 20, y);
+        y += 8;
+
+        docAdmin.autoTable({
+            html: document.querySelector(".card-warning table"),
+            startY: y,
+            theme: "striped",
+            headStyles: { fillColor: colors.success, textColor: colors.white, fontSize: 9 },
+            styles: { fontSize: 8, cellPadding: 4 },
+            margin: { left: 15, right: 15 },
+            didDrawPage: function(data) {
+                y = data.cursor.y;
+            }
+        });
+
+        // Calcular total de ganancias de la tabla
+        let totalGananciasTabla = 0;
+        const filasTabla = document.querySelectorAll(".card-warning table tbody tr");
+        filasTabla.forEach(fila => {
+            const celdas = fila.querySelectorAll("td");
+            if (celdas.length >= 6) {
+                const ganancia = parseFloat(celdas[6].textContent.replace(/[$,]/g, '')) || 0;
+                totalGananciasTabla += ganancia;
+            }
+        });
+
+        y = docAdmin.lastAutoTable.finalY + 5;
+        docAdmin.setFontSize(9);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
+        docAdmin.text(`TOTAL GANANCIAS: $${totalGananciasTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
+        y += 15;
+
+        // --- ANÁLISIS DE COSTOS CON TOTAL DE DEUDA ---
+        if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
+
+        docAdmin.setFontSize(16);
+        docAdmin.setTextColor(colors.warning[0], colors.warning[1], colors.warning[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("Análisis de Costos por Producto", 20, y);
+        y += 8;
+
+        docAdmin.autoTable({
+            html: document.querySelector(".card-danger table"),
+            startY: y,
+            theme: "striped",
+            headStyles: { fillColor: colors.warning, textColor: colors.dark, fontSize: 9 },
+            styles: { fontSize: 8, cellPadding: 4 },
+            margin: { left: 15, right: 15 }
+        });
+
+        // Calcular total de deuda de la tabla
+        let totalDeudaTabla = 0;
+        const filasCosto = document.querySelectorAll(".card-danger table tbody tr");
+        filasCosto.forEach(fila => {
+            const celdas = fila.querySelectorAll("td");
+            if (celdas.length >= 4) {
+                const deuda = parseFloat(celdas[4].textContent.replace(/[$,]/g, '')) || 0;
+                totalDeudaTabla += deuda;
+            }
+        });
+
+        y = docAdmin.lastAutoTable.finalY + 5;
+        docAdmin.setFontSize(9);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.setTextColor(colors.warning[0], colors.warning[1], colors.warning[2]);
+        docAdmin.text(`TOTAL DEUDA ACUMULADA: $${totalDeudaTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
+        y += 15;
+
+        // --- GRÁFICA DE RENDIMIENTO ---
+        <?php if ($totalGanancia > 0 || $totalProveedor > 0): ?>
+        if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
+
+        docAdmin.setFontSize(16);
+        docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("Visualización de Rendimiento", 20, y);
+        y += 8;
+
+        const canvas = document.getElementById("graficaVentas");
+        if (canvas) {
+            const imgData = canvas.toDataURL("image/png");
+            const imgWidth = 150;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            docAdmin.addImage(imgData, "PNG", (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
+            y += imgHeight + 15;
+        }
+        <?php endif; ?>
+
+        // Agregar pie de página a todas las páginas
+        const totalPagesAdmin = docAdmin.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPagesAdmin; i++) {
+            addFooter(docAdmin, i, totalPagesAdmin);
+        }
+
+        docAdmin.save("Reporte_Administrador.pdf");
     }
-    <?php endif; ?>
 
-    // --- PIE DE PÁGINA ADMIN ---
-    const totalPagesAdmin = docAdmin.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPagesAdmin; i++) {
-        docAdmin.setPage(i);
-        docAdmin.setFontSize(8);
-        docAdmin.setTextColor(150);
-        docAdmin.text(
-            `Página ${i} de ${totalPagesAdmin} | Sistema Tienda Pescadores | Reporte Administrador`,
-            pageWidth / 2,
-            pageHeight - 8,
-            { align: "center" }
-        );
-    }
-
-    docAdmin.save("Reporte_Administrador.pdf");
-
-    // ============================================
-    // PDF 2: PARA PROVEEDORES (Reporte de Deuda)
-    // ============================================
-    setTimeout(() => {
-        const docProv = new jsPDF("p", "mm", "a4");
+    // Función para generar PDF de Proveedores
+    function generarPDFProveedores() {
+        const docProv = new jsPDF({
+            orientation: "p",
+            unit: "mm",
+            format: "a4"
+        });
+        
         const provPageWidth = docProv.internal.pageSize.getWidth();
         const provPageHeight = docProv.internal.pageSize.getHeight();
-        let provY = 20;
+        let provY = 25;
+        let provPageNum = 1;
 
-        // --- ENCABEZADO PROVEEDORES (Claro y directo) ---
-        docProv.setFontSize(22);
-        docProv.setTextColor(192, 57, 43);
+        function addProvFooter(doc, pageNum, totalPages) {
+            doc.setPage(pageNum);
+            doc.setFontSize(8);
+            doc.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+            doc.setFont("helvetica", "normal");
+            doc.setDrawColor(220, 220, 220);
+            doc.line(20, provPageHeight - 12, provPageWidth - 20, provPageHeight - 12);
+            doc.text(
+                `Documento confidencial para proveedores | ${new Date().toLocaleDateString()}`,
+                20,
+                provPageHeight - 6
+            );
+            doc.text(
+                `Página ${pageNum} de ${totalPages} | Estado de Cuenta`,
+                provPageWidth - 20,
+                provPageHeight - 6,
+                { align: "right" }
+            );
+        }
+
+        // Determinar el nombre del proveedor para el archivo
+        <?php
+        $nombreProveedorParaArchivo = 'todos';
+        if ($filtroProveedor !== '') {
+            $nombreProveedorParaArchivo = preg_replace('/[^a-zA-Z0-9]/', '_', $filtroProveedor);
+        }
+        ?>
+
+        // --- ENCABEZADO PROFESIONAL PROVEEDORES ---
+        docProv.setFillColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+        docProv.rect(0, 0, provPageWidth, 10, "F");
+        
+        docProv.setFontSize(24);
+        docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
         docProv.setFont("helvetica", "bold");
-        docProv.text("REPORTE PARA PROVEEDORES", provPageWidth / 2, 18, { align: "center" });
+        docProv.text("ESTADO DE CUENTA", provPageWidth / 2, 30, { align: "center" });
+        docProv.text("PAGO A PROVEEDORES", provPageWidth / 2, 42, { align: "center" });
         
-        docProv.setFontSize(11);
-        docProv.setTextColor(100);
-        docProv.setFont("helvetica", "normal");
-        docProv.text("Estado de cuenta - Productos vendidos", provPageWidth / 2, 26, { align: "center" });
+        docProv.setFontSize(10);
+        docProv.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docProv.text(`Generado: ${new Date().toLocaleString()}`, provPageWidth / 2, 55, { align: "center" });
         
-        // Línea separadora
-        docProv.setDrawColor(192, 57, 43);
-        docProv.setLineWidth(0.3);
-        docProv.line(20, 32, provPageWidth - 20, 32);
-        
-        docProv.setFontSize(9);
-        docProv.setTextColor(80);
-        docProv.text(`Fecha: ${new Date().toLocaleString()}`, provPageWidth - 20, 38, { align: "right" });
-        
-        <?php if ($filtroInicio !== '' && $filtroFin !== ''): ?>
-        docProv.text(`Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>`, 20, 38);
+        <?php if ($filtroProveedor !== ''): ?>
+        docProv.setFontSize(12);
+        docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+        docProv.setFont("helvetica", "bold");
+        docProv.text("Proveedor: <?= htmlspecialchars($filtroProveedor) ?>", provPageWidth / 2, 65, { align: "center" });
         <?php endif; ?>
         
-        provY = 48;
-
-        // --- INFORMACIÓN CLARAMENTE DESTACADA DEL TOTAL ---
-        docProv.setFillColor(192, 57, 43);
-        docProv.setTextColor(255);
+        <?php if ($filtroInicio !== '' && $filtroFin !== ''): ?>
+        docProv.setFontSize(10);
+        docProv.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docProv.text(`Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>`, provPageWidth / 2, 72, { align: "center" });
+        <?php endif; ?>
+        
+        // --- RESUMEN DE PAGOS DESTACADO ---
+        provY = 85;
+        
+        // Caja de resumen de pagos
+        docProv.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
+        docProv.roundedRect(30, provY - 10, provPageWidth - 60, 35, 3, 3, "F");
+        docProv.setDrawColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+        docProv.setLineWidth(0.5);
+        docProv.roundedRect(30, provY - 10, provPageWidth - 60, 35, 3, 3, "S");
+        
+        docProv.setFontSize(10);
+        docProv.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
+        docProv.text("TOTAL A PAGAR A PROVEEDORES", provPageWidth / 2, provY, { align: "center" });
+        
+        docProv.setFontSize(26);
+        docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
         docProv.setFont("helvetica", "bold");
+        docProv.text("$<?= number_format($totalProveedor, 2) ?>", provPageWidth / 2, provY + 15, { align: "center" });
         
-        // Rectángulo destacado para el total
-        docProv.setFillColor(192, 57, 43);
-        docProv.roundedRect(20, provY - 5, provPageWidth - 40, 18, 3, 3, "F");
-        
-        docProv.setFontSize(12);
-        docProv.text("TOTAL A PAGAR:", 30, provY + 5);
-        docProv.setFontSize(16);
-        docProv.text("$<?= number_format($totalProveedor, 2) ?>", provPageWidth - 30, provY + 5, { align: "right" });
-        
-        provY += 25;
+        provY += 45;
 
-        // --- TABLA DETALLADA PARA PROVEEDORES ---
-        docProv.setFontSize(12);
-        docProv.setTextColor(192, 57, 43);
+        // --- TABLA DETALLADA DE VENTAS POR PROVEEDOR ---
+        docProv.setFontSize(14);
+        docProv.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docProv.setFont("helvetica", "bold");
-        docProv.text("DETALLE DE VENTAS POR PRODUCTO", 20, provY);
-        provY += 6;
+        docProv.text("Detalle de Ventas por Producto", 20, provY);
+        provY += 8;
 
-        // Preparar datos para proveedores con formato claro
         const proveedoresData = [
             <?php foreach ($ventasDetalle as $venta): ?>
             [
@@ -837,8 +1358,6 @@ document.getElementById("btnPDF").addEventListener("click", () => {
                 '<?= addslashes($venta['proveedor']) ?>',
                 '<?= $venta['fecha_venta_formateada'] ?>',
                 <?= $venta['cantidad_vendida'] ?>,
-                <?= $venta['stock_inicial'] ?>,
-                <?= $venta['stock_actual'] ?>,
                 '$<?= number_format($venta['precio_compra'], 2) ?>',
                 '$<?= number_format($venta['total_deuda'], 2) ?>'
             ],
@@ -847,111 +1366,114 @@ document.getElementById("btnPDF").addEventListener("click", () => {
 
         if (proveedoresData.length > 0) {
             docProv.autoTable({
-                head: [['Producto', 'Proveedor', 'Fecha', 'Vend.', 'Stk.Ini', 'Stk.Fin', 'P.Compra', 'Deuda']],
+                head: [['Producto', 'Proveedor', 'Fecha Venta', 'Cant.', 'P.Compra', 'Deuda']],
                 body: proveedoresData,
                 startY: provY,
                 theme: "grid",
-                headStyles: { fillColor: [192, 57, 43], textColor: 255, fontStyle: "bold", fontSize: 8 },
-                styles: { fontSize: 7, cellPadding: 3 },
-                columnStyles: {
-                    0: { cellWidth: 28 },
-                    1: { cellWidth: 28 },
-                    2: { cellWidth: 18, halign: 'center' },
-                    3: { cellWidth: 12, halign: 'center' },
-                    4: { cellWidth: 14, halign: 'center' },
-                    5: { cellWidth: 14, halign: 'center' },
-                    6: { cellWidth: 18, halign: 'right' },
-                    7: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+                headStyles: { 
+                    fillColor: colors.danger, 
+                    textColor: colors.white, 
+                    fontSize: 9, 
+                    halign: 'center',
+                    fontStyle: 'bold'
                 },
-                margin: { left: 10, right: 10 },
-                didDrawPage: data => provY = data.cursor.y + 8
+                styles: { 
+                    fontSize: 8, 
+                    cellPadding: 3,
+                    overflow: 'linebreak',
+                    cellWidth: 'wrap'
+                },
+                columnStyles: {
+                    0: { cellWidth: 40, halign: 'left' },
+                    1: { cellWidth: 35, halign: 'left' },
+                    2: { cellWidth: 25, halign: 'center' },
+                    3: { cellWidth: 15, halign: 'center' },
+                    4: { cellWidth: 25, halign: 'right' },
+                    5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+                },
+                margin: { left: 15, right: 15 }
             });
+            
+            provY = docProv.lastAutoTable.finalY + 15;
 
             // --- RESUMEN POR PROVEEDOR ---
-            if (provY > 220) { docProv.addPage(); provY = 25; }
+            if (provY > 220) { docProv.addPage(); provY = 25; provPageNum++; }
             
-            docProv.setFontSize(12);
-            docProv.setTextColor(192, 57, 43);
+            docProv.setFontSize(14);
+            docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
             docProv.setFont("helvetica", "bold");
-            docProv.text("RESUMEN POR PROVEEDOR", 20, provY);
-            provY += 6;
+            docProv.text("Resumen por Proveedor", 20, provY);
+            provY += 8;
 
-            // Tabla de resumen por proveedor
             const resumenProvData = [
-                <?php 
-                $contador = 0;
-                foreach ($deudaPorProveedor as $prov => $total): 
-                ?>
+                <?php foreach ($deudaPorProveedor as $prov => $total): ?>
                 ['<?= addslashes($prov) ?>', '$<?= number_format($total, 2) ?>'],
                 <?php endforeach; ?>
+                ['', ''],
+                ['TOTAL GENERAL', '$<?= number_format($totalProveedor, 2) ?>']
             ];
 
             docProv.autoTable({
                 startY: provY,
                 body: resumenProvData,
                 theme: "plain",
-                styles: { fontSize: 9, cellPadding: 4 },
+                styles: { fontSize: 10, cellPadding: 4 },
                 columnStyles: {
-                    0: { cellWidth: 120, fontStyle: 'bold' },
-                    1: { cellWidth: 50, halign: 'right' }
+                    0: { cellWidth: 120, fontStyle: 'bold', halign: 'left' },
+                    1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }
                 },
-                margin: { left: 20, right: 20 },
-                didDrawPage: data => provY = data.cursor.y + 5
+                margin: { left: 30, right: 30 }
             });
-
-            // --- TOTAL GENERAL DESTACADO ---
-            provY += 5;
             
-            docProv.setFillColor(245, 245, 245);
-            docProv.roundedRect(20, provY - 5, provPageWidth - 40, 15, 3, 3, "F");
-            docProv.setDrawColor(192, 57, 43);
-            docProv.roundedRect(20, provY - 5, provPageWidth - 40, 15, 3, 3, "S");
-            
-            docProv.setFontSize(11);
-            docProv.setTextColor(192, 57, 43);
-            docProv.setFont("helvetica", "bold");
-            docProv.text("TOTAL A PAGAR:", 30, provY + 3);
-            docProv.text("$<?= number_format($totalProveedor, 2) ?>", provPageWidth - 30, provY + 3, { align: "right" });
-            
-            provY += 20;
-
-            // --- NOTA ACLARATORIA ---
-            if (provY > provPageHeight - 30) {
-                docProv.addPage();
-                provY = 25;
-            }
-            
-            docProv.setFontSize(8);
-            docProv.setTextColor(100);
-            docProv.setFont("helvetica", "italic");
-            docProv.text("Nota: Este documento detalla los productos vendidos y la deuda pendiente de pago.", 20, provY);
-            docProv.text("El pago debe realizarse según los términos acordados con cada proveedor.", 20, provY + 4);
-            
+            provY = docProv.lastAutoTable.finalY + 20;
         } else {
-            docProv.setFontSize(12);
-            docProv.setTextColor(192, 57, 43);
+            docProv.setFontSize(14);
+            docProv.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
             docProv.text("No hay ventas registradas en el período seleccionado.", provPageWidth / 2, provY + 20, { align: "center" });
         }
 
-        // --- PIE DE PÁGINA PROVEEDORES ---
+        // Agregar pie de página a todas las páginas
         const totalPagesProv = docProv.internal.getNumberOfPages();
         for (let i = 1; i <= totalPagesProv; i++) {
-            docProv.setPage(i);
-            docProv.setFontSize(7);
-            docProv.setTextColor(150);
-            docProv.text(
-                `Página ${i} de ${totalPagesProv} | Documento para proveedores - Sistema Tienda Pescadores`,
-                provPageWidth / 2,
-                provPageHeight - 6,
-                { align: "center" }
-            );
+            addProvFooter(docProv, i, totalPagesProv);
         }
 
-        docProv.save("Reporte_Proveedores.pdf");
-    }, 500);
+        <?php if ($filtroProveedor !== ''): ?>
+        docProv.save("reporte_deuda_proveedor_<?= $nombreProveedorParaArchivo ?>.pdf");
+        <?php else: ?>
+        docProv.save("reporte_deuda_todos_proveedores.pdf");
+        <?php endif; ?>
+    }
+
+    // Ejecutar según el tipo seleccionado
+    if (tipo === 'proveedor') {
+        generarPDFProveedores();
+    } else if (tipo === 'general') {
+        generarPDFGeneral();
+    } else if (tipo === 'ambos') {
+        generarPDFGeneral();
+        // Pequeño retraso para no sobrecargar el navegador
+        setTimeout(() => {
+            generarPDFProveedores();
+        }, 500);
+    }
+    
+    // Cerrar el dropdown después de iniciar la descarga
+    closeDropdown();
+}
+
+// Event listeners para los botones del dropdown
+document.getElementById('pdfProveedor').addEventListener('click', () => generarPDF('proveedor'));
+document.getElementById('pdfGeneral').addEventListener('click', () => generarPDF('general'));
+document.getElementById('pdfAmbos').addEventListener('click', () => generarPDF('ambos'));
+
+// Prevenir que los botones del dropdown cierren el dropdown sin generar PDF
+document.querySelectorAll('.pdf-dropdown-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 });
 </script>
-
 <?php
 include('includes/footer.php');
 ?>
