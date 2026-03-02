@@ -43,7 +43,7 @@ $sql .= " HAVING total_vendida > 0 ORDER BY p.nombre ASC";
 $resultado = $conn->query($sql);
 
 // --- Variables para la vista ---
-$totalGanancia = $totalProveedor = $totalVendidos = $totalStock = 0;
+$totalGanancia = $totalProveedor = $totalVendidos = $totalStock = $totalVentas = 0;
 $productos = [];
 
 if ($resultado) {
@@ -53,11 +53,13 @@ if ($resultado) {
 
         $ganancia = ($row['precio_venta'] - $row['precio_compra']) * $vendidos;
         $costoProveedor = $row['precio_compra'] * $vendidos;
+        $ventaTotal = $row['precio_venta'] * $vendidos; // NUEVO: Total de ventas en dinero
 
         $totalGanancia += $ganancia;
         $totalProveedor += $costoProveedor;
         $totalVendidos += $vendidos;
         $totalStock += $stock;
+        $totalVentas += $ventaTotal; // NUEVO: Acumular total de ventas
 
         $productos[] = [
             'nombre' => $row['nombre'],
@@ -511,6 +513,32 @@ table {
     pointer-events: none;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
+
+/* Forzar colores sólidos en los eventos de fondo */
+.evento-venta {
+    background-color: #38aa5389 !important; /* 25% opacidad */
+    opacity: 1 !important;
+}
+
+.evento-reporte {
+    background-color: #dc35469e !important; /* 25% opacidad */
+    opacity: 1 !important;
+}
+
+.evento-ambos {
+    background-color: #ffc107a7 !important; /* 25% opacidad */
+    opacity: 1 !important;
+}
+
+/* Asegurar que no haya opacidad heredada */
+.fc-bg-event {
+    opacity: 1 !important;
+}
+
+.fc-daygrid-bg-harness {
+    opacity: 1 !important;
+}
+
 </style>
 
 <div class="content-wrapper">
@@ -839,72 +867,74 @@ table {
                         <button type="button" class="btn btn-tool" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
                             <i class="fas fa-trash-alt"></i>
                         </button>
-                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
-                            <i class="fas fa-minus"></i>
-                        </button>
                     </div>
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-9">
-                            <div id="calendario"></div>
+                        <!-- Calendario - 9 columnas -->
+                        <div class="col-lg-9 col-md-8">
+                            <div id="calendario" style="min-height: 500px; width: 100%;"></div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="info-box bg-light p-3" style="border-left: 4px solid #17a2b8;">
-                                <h5 class="text-dark mb-3"><i class="fas fa-info-circle mr-2 text-info"></i>Leyenda</h5>
-                                <div class="d-flex align-items-center mb-3">
-                                    <div style="width: 20px; height: 20px; background: #28a745; border-radius: 4px; margin-right: 10px; border: 1px solid #1e7e34;"></div>
-                                    <span><strong>Ventas</strong> - Días con ventas registradas</span>
-                                </div>
-                                <div class="d-flex align-items-center mb-3">
-                                    <div style="width: 20px; height: 20px; background: #dc3545; border-radius: 4px; margin-right: 10px; border: 1px solid #a71d2a;"></div>
-                                    <span><strong>Reportes</strong> - Días donde se generaron reportes</span>
-                                </div>
-                                <div class="d-flex align-items-center mb-3">
-                                    <div style="width: 20px; height: 20px; background: #ffc107; border-radius: 4px; margin-right: 10px; border: 1px solid #d39e00;"></div>
-                                    <span><strong>Ambos</strong> - Ventas y reportes el mismo día</span>
-                                </div>
-                                <hr class="my-3">
-                                <div class="mt-2">
-                                    <h6 class="text-dark"><i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas</h6>
-                                    <table class="table table-sm table-borderless">
-                                        <tr>
-                                            <td class="pl-0">Días con ventas:</td>
-                                            <td class="text-success font-weight-bold text-right" id="diasVentas">0</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="pl-0">Días con reportes:</td>
-                                            <td class="text-danger font-weight-bold text-right" id="diasReportes">0</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="pl-0">Total días activos:</td>
-                                            <td class="text-primary font-weight-bold text-right" id="diasActivos">0</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                                
-                                <!-- Información del filtro actual -->
-                                <div class="mt-3 p-2 bg-white rounded" style="border: 1px solid #dee2e6;">
-                                    <h6 class="text-dark"><i class="fas fa-filter mr-2 text-info"></i>Filtro actual</h6>
-                                    <p class="mb-1 small">
-                                        <strong>Proveedor:</strong> 
-                                        <span id="filtroProveedor"><?= $filtroProveedor ?: 'Todos' ?></span>
+                        
+                        <!-- Panel lateral - 3 columnas -->
+                        <div class="col-lg-3 col-md-4">
+                            <div class="info-box bg-light p-3 h-100" style="border-left: 4px solid #17a2b8;">
+                                <div class="info-box-content">
+                                    <!-- Título principal con tooltip informativo -->
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <h5 class="text-dark mb-0">
+                                            <i class="fas fa-calendar-alt mr-2 text-info"></i>
+                                            Calendario
+                                        </h5>
+                                    </div>
+                                    <br>
+                                    <p class="text-muted small mb-3">
+                                        <i class="fas fa-chart-line mr-1"></i>
+                                        Visualiza en el calendario los días con ventas (verde) y los días donde generaste reportes (rojo)
                                     </p>
-                                    <p class="mb-0 small">
-                                        <strong>Período:</strong> 
-                                        <span id="filtroPeriodo">
-                                            <?php 
-                                            if ($filtroInicio && $filtroFin) {
-                                                echo date('d/m/Y', strtotime($filtroInicio)) . ' - ' . date('d/m/Y', strtotime($filtroFin));
-                                            } else {
-                                                echo 'Histórico completo';
-                                            }
-                                            ?>
-                                        </span>
-                                    </p>
+                                    
+                                    <hr class="my-2">
+                                    
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div style="width: 20px; height: 20px; background: #28a745; border-radius: 4px; margin-right: 10px; border: 1px solid #1e7e34; flex-shrink: 0;"></div>
+                                        <span style="font-size: 0.9rem;"><strong>Ventas</strong> - Días con ventas</span>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div style="width: 20px; height: 20px; background: #dc3545; border-radius: 4px; margin-right: 10px; border: 1px solid #a71d2a; flex-shrink: 0;"></div>
+                                        <span style="font-size: 0.9rem;"><strong>Reportes</strong> - Días con reportes</span>
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div style="width: 20px; height: 20px; background: #ffc107; border-radius: 4px; margin-right: 10px; border: 1px solid #d39e00; flex-shrink: 0;"></div>
+                                        <span style="font-size: 0.9rem;"><strong>Ambos</strong> - Ventas y reportes</span>
+                                    </div>
+                                    
+                                    <hr class="my-3">
+                                    
+                                    <div class="mt-2">
+                                        <h6 class="text-dark">
+                                            <i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas
+                                        </h6>
+                                        <table class="table table-sm table-borderless mb-0">
+                                            <tr>
+                                                <td class="pl-0 py-1">Días con ventas:</td>
+                                                <td class="text-success font-weight-bold text-right py-1" id="diasVentas">0</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="pl-0 py-1">Días con reportes:</td>
+                                                <td class="text-danger font-weight-bold text-right py-1" id="diasReportes">0</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="pl-0 py-1">Total días activos:</td>
+                                                <td class="text-primary font-weight-bold text-right py-1" id="diasActivos">0</td>
+                                            </tr>
+                                        </table>
+                                    </div>                        
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -1065,17 +1095,21 @@ function cargarEventosCalendario() {
     
     // Agregar días con ventas (desde PHP)
     fechasVentasPHP.forEach(fecha => {
-        eventosMap.set(fecha, {
+        // Asegurar formato YYYY-MM-DD
+        const fechaStr = fecha.split('T')[0];
+        eventosMap.set(fechaStr, {
             venta: true,
-            reporte: eventosMap.get(fecha)?.reporte || false
+            reporte: eventosMap.get(fechaStr)?.reporte || false
         });
     });
     
     // Agregar días con reportes (desde localStorage)
     const reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
     reportesGuardados.forEach(fecha => {
-        eventosMap.set(fecha, {
-            venta: eventosMap.get(fecha)?.venta || false,
+        // Asegurar formato YYYY-MM-DD
+        const fechaStr = fecha.split('T')[0];
+        eventosMap.set(fechaStr, {
+            venta: eventosMap.get(fechaStr)?.venta || false,
             reporte: true
         });
     });
@@ -1084,39 +1118,40 @@ function cargarEventosCalendario() {
     let contVentas = 0;
     let contReportes = 0;
     
-    eventosMap.forEach((valor, fecha) => {
-        const fechaObj = new Date(fecha + 'T12:00:00');
-        
-        if (valor.venta) contVentas++;
-        if (valor.reporte) contReportes++;
-        
-        let className = '';
-        let tooltip = '';
-        
-        if (valor.venta && valor.reporte) {
-            className = 'fc-day-ambos';
-            tooltip = 'Ventas y reportes';
-        } else if (valor.venta) {
-            className = 'fc-day-venta';
-            tooltip = 'Día con ventas';
-        } else if (valor.reporte) {
-            className = 'fc-day-reporte';
-            tooltip = 'Día con reportes';
+eventosMap.forEach((valor, fecha) => {
+    // Crear fecha en zona horaria local (mediodía para evitar problemas)
+    const [year, month, day] = fecha.split('-').map(Number);
+    const fechaObj = new Date(year, month - 1, day, 12, 0, 0);
+    
+    if (valor.venta) contVentas++;
+    if (valor.reporte) contReportes++;
+    
+    let className = '';
+    let tooltip = '';
+    
+    if (valor.venta && valor.reporte) {
+        className = 'evento-ambos';
+        tooltip = 'Ventas y reportes';
+    } else if (valor.venta) {
+        className = 'evento-venta';
+        tooltip = 'Día con ventas';
+    } else if (valor.reporte) {
+        className = 'evento-reporte';
+        tooltip = 'Día con reportes';
+    }
+    
+    eventos.push({
+        start: fechaObj,
+        allDay: true,
+        display: 'background',
+        classNames: [className],
+        extendedProps: {
+            tooltip: tooltip,
+            tieneVenta: valor.venta,
+            tieneReporte: valor.reporte
         }
-        
-        eventos.push({
-            start: fechaObj,
-            allDay: true,
-            display: 'background',
-            color: valor.venta && valor.reporte ? '#ffc107' : (valor.venta ? '#28a745' : '#dc3545'),
-            classNames: [className],
-            extendedProps: {
-                tooltip: tooltip,
-                tieneVenta: valor.venta,
-                tieneReporte: valor.reporte
-            }
-        });
     });
+});
     
     document.getElementById('diasVentas').textContent = contVentas;
     document.getElementById('diasReportes').textContent = contReportes;
@@ -1125,14 +1160,6 @@ function cargarEventosCalendario() {
     eventos.forEach(evento => {
         calendar.addEvent(evento);
     });
-}
-
-// Función para limpiar historial de reportes
-function limpiarHistorialReportes() {
-    if (confirm('¿Estás seguro de limpiar el historial de reportes?')) {
-        localStorage.removeItem('diasReportes');
-        cargarEventosCalendario();
-    }
 }
 
 // Inicializar calendario
@@ -1161,22 +1188,125 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             eventClick: function(info) {
-                const fecha = info.event.start.toLocaleDateString('es-ES', {
+                const fecha = info.event.start;
+                const fechaStr = fecha.toISOString().split('T')[0];
+                const fechaLocal = fecha.toLocaleDateString('es-ES', {
                     weekday: 'long',
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
                 });
                 
-                let mensaje = `Fecha: ${fecha}\n`;
-                if (info.event.extendedProps.tieneVenta) {
-                    mensaje += '✓ Hay ventas registradas\n';
-                }
-                if (info.event.extendedProps.tieneReporte) {
-                    mensaje += '📄 Se generaron reportes\n';
+                // Capitalizar primera letra del día
+                const fechaCapitalizada = fechaLocal.charAt(0).toUpperCase() + fechaLocal.slice(1);
+                
+                // Obtener reportes guardados para esta fecha específica
+                const reportesGuardados = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
+                const reportesFecha = reportesGuardados[fechaStr] || [];
+                
+                // Determinar icono y mensaje según el tipo de día
+                let icono = 'info';
+                let titulo = 'Detalle del día';
+                let iconoHeader = '';
+                
+                if (info.event.extendedProps.tieneVenta && info.event.extendedProps.tieneReporte) {
+                    icono = 'warning';
+                    titulo = 'Día con ventas y reportes';
+                } else if (info.event.extendedProps.tieneVenta) {
+                    icono = 'success';
+                    titulo = 'Día con ventas';
+                } else if (info.event.extendedProps.tieneReporte) {
+                    icono = 'info';
+                    titulo = 'Día con reportes';
                 }
                 
-                alert(mensaje);
+                // Construir HTML del detalle
+                let html = `<div style="text-align: left;">`;
+                html += `<p><i class="fas fa-calendar-alt text-info mr-2"></i> <strong>Fecha:</strong> ${fechaCapitalizada}</p>`;
+                
+                if (info.event.extendedProps.tieneVenta) {
+                    html += `<p><i class="fas fa-shopping-cart text-success mr-2"></i> <strong>Ventas:</strong> Hay ventas registradas</p>`;
+                }
+                
+                if (info.event.extendedProps.tieneReporte) {
+                    html += `<p><i class="fas fa-file-pdf text-danger mr-2"></i> <strong>Reportes generados:</strong></p>`;
+                    
+                    if (reportesFecha.length > 0) {
+                        html += `<div style="margin-left: 25px; margin-top: 5px;">`;
+                        
+                        // Mostrar cada reporte según su tipo
+                        reportesFecha.forEach(reporte => {
+                            if (reporte.tipo === 'general') {
+                                if (reporte.proveedor === 'TODOS') {
+                                    html += `
+                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-chart-line text-success mr-2"></i>
+                                                <strong> Reporte General</strong>
+                                                <span class="ml-2 badge badge-success">Todos los proveedores</span>
+                                            </div>
+                                        </div>
+                                    `;
+                                } else {
+                                    html += `
+                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-chart-line text-success mr-2"></i>
+                                                <strong> ${reporte.proveedor}</strong>
+                                                <span class="ml-2 badge badge-success">Reporte General</span>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                            } else if (reporte.tipo === 'proveedor') {
+                                // Verificar si es reporte por proveedor para TODOS o para uno específico
+                                if (reporte.proveedor === 'TODOS_PROVEEDORES') {
+                                    html += `
+                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-truck text-danger mr-2"></i>
+                                                <strong>Reporte por proveedor</strong>
+                                                <span class="ml-2 badge badge-danger">Todos los proveedores</span>
+                                            </div>
+                                        </div>
+                                    `;
+                                } else {
+                                    html += `
+                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-truck text-danger mr-2"></i>
+                                                <strong>${reporte.proveedor}</strong>
+                                                <span class="ml-2 badge badge-danger">Reporte por proveedor</span>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                            }
+                        });
+                        
+                        html += `</div>`;
+                    }
+                }
+                
+                if (!info.event.extendedProps.tieneVenta && !info.event.extendedProps.tieneReporte) {
+                    html += `<p class="text-muted"><i class="fas fa-minus-circle text-muted mr-2"></i> No hay actividad registrada en este día</p>`;
+                }
+                
+                html += `</div>`;
+                
+                Swal.fire({
+                    title: `<i class="fas ${iconoHeader} mr-2"></i>${titulo}`,
+                    html: html,
+                    icon: icono,
+                    confirmButtonText: 'Cerrar',
+                    confirmButtonColor: '#3085d6',
+                    width: 500,
+                    background: '#fff',
+                    customClass: {
+                        popup: 'rounded-lg shadow-lg',
+                        title: 'font-weight-bold'
+                    }
+                });
             }
         });
         
@@ -1184,9 +1314,455 @@ document.addEventListener('DOMContentLoaded', function() {
         cargarEventosCalendario();
     }
     
-    // Evento para limpiar historial
-    document.getElementById('limpiarHistorialBtn')?.addEventListener('click', limpiarHistorialReportes);
+    // Evento para limpiar historial con SweetAlert2
+    document.getElementById('limpiarHistorialBtn')?.addEventListener('click', function() {
+        Swal.fire({
+            title: '¿Limpiar historial de reportes?',
+            html: '<p>Esta acción eliminará todos los registros de reportes generados.</p><p class="text-muted small"><i class="fas fa-info-circle mr-1"></i> Los días con ventas no se verán afectados.</p>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, limpiar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            customClass: {
+                confirmButton: 'btn btn-danger',
+                cancelButton: 'btn btn-secondary'
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                limpiarHistorialReportes();
+                Swal.fire({
+                    title: '<i class="fas fa-check-circle text-success mr-2"></i>¡Historial limpiado!',
+                    text: 'Los registros de reportes han sido eliminados.',
+                    icon: 'success',
+                    confirmButtonColor: '#28a745',
+                    confirmButtonText: 'Aceptar',
+                    timer: 2000,
+                    timerProgressBar: true
+                });
+            }
+        });
+    });
 });
+
+// Modificar la función registrarRangoReporte para recibir el tipo de reporte
+function registrarRangoReporte(tipoGenerado) {
+    const filtroInicio = '<?= $filtroInicio ?>';
+    const filtroFin = '<?= $filtroFin ?>';
+    const filtroProveedor = '<?= $filtroProveedor ?>';
+    
+    // Obtener lista de proveedores con ventas en el período
+    <?php
+    // Consulta para obtener proveedores únicos con ventas en el período
+    $sqlProveedoresActivos = "
+    SELECT DISTINCT p.proveedor
+    FROM ventas v
+    INNER JOIN productos p ON v.id_producto = p.id
+    WHERE 1
+    ";
+    
+    if ($filtroProveedor !== '') {
+        $sqlProveedoresActivos .= " AND p.proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
+    }
+    
+    if ($filtroInicio !== '' && $filtroFin !== '') {
+        $sqlProveedoresActivos .= " AND DATE(v.fecha_venta) BETWEEN '" . $conn->real_escape_string($filtroInicio) . "' 
+        AND '" . $conn->real_escape_string($filtroFin) . "'";
+    }
+    
+    $sqlProveedoresActivos .= " ORDER BY p.proveedor";
+    
+    $resultadoProveedoresActivos = $conn->query($sqlProveedoresActivos);
+    $proveedoresActivos = [];
+    if ($resultadoProveedoresActivos) {
+        while ($row = $resultadoProveedoresActivos->fetch_assoc()) {
+            $proveedoresActivos[] = $row['proveedor'];
+        }
+    }
+    ?>
+    
+    const proveedoresEnReporte = <?= json_encode($proveedoresActivos) ?>;
+    
+    // Función para obtener fecha local en formato YYYY-MM-DD
+    function getFechaLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    // Fecha actual en zona local
+    const hoy = new Date();
+    const hoyStr = getFechaLocal(hoy);
+    
+    // Sistema de almacenamiento mejorado para reportes por fecha
+    let reportesPorFecha = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
+    
+    if (filtroInicio && filtroFin) {
+        // Crear fechas en zona local
+        const [inicioYear, inicioMonth, inicioDay] = filtroInicio.split('-').map(Number);
+        const [finYear, finMonth, finDay] = filtroFin.split('-').map(Number);
+        
+        let fechaActual = new Date(inicioYear, inicioMonth - 1, inicioDay);
+        const fechaFin = new Date(finYear, finMonth - 1, finDay);
+        
+        let fechasProcesadas = [];
+        
+        // Recorrer todas las fechas del rango
+        while (fechaActual <= fechaFin) {
+            const fechaStr = getFechaLocal(fechaActual);
+            
+            // SOLO registrar si la fecha es menor o igual a hoy
+            if (fechaActual <= new Date()) {
+                fechasProcesadas.push(fechaStr);
+                
+                // Crear entrada para esta fecha si no existe
+                if (!reportesPorFecha[fechaStr]) {
+                    reportesPorFecha[fechaStr] = [];
+                }
+                
+                // Determinar qué tipo de reporte según el botón presionado
+                if (tipoGenerado === 'proveedor') {
+                    // Reporte SOLO de proveedor
+                    if (filtroProveedor) {
+                        // Reporte de UN proveedor específico
+                        const reporteInfo = {
+                            fecha: fechaStr,
+                            proveedor: filtroProveedor,
+                            tipo: 'proveedor',
+                            descripcion: 'Reporte por proveedor',
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        // Verificar si ya existe para evitar duplicados
+                        const existe = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === filtroProveedor && r.tipo === 'proveedor'
+                        );
+                        
+                        if (!existe) {
+                            reportesPorFecha[fechaStr].push(reporteInfo);
+                        }
+                    } else {
+                        // Reporte por proveedor de TODOS los proveedores
+                        const reporteInfo = {
+                            fecha: fechaStr,
+                            proveedor: 'TODOS_PROVEEDORES',
+                            tipo: 'proveedor',
+                            descripcion: 'Reporte por proveedor - Todos los proveedores',
+                            proveedoresIncluidos: proveedoresEnReporte,
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        const existe = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === 'TODOS_PROVEEDORES' && r.tipo === 'proveedor'
+                        );
+                        
+                        if (!existe) {
+                            reportesPorFecha[fechaStr].push(reporteInfo);
+                        }
+                    }
+                } 
+                else if (tipoGenerado === 'general') {
+                    // Reporte GENERAL - puede ser con o sin filtro de proveedor
+                    if (filtroProveedor) {
+                        // Reporte general de UN proveedor específico
+                        const reporteGeneral = {
+                            fecha: fechaStr,
+                            proveedor: filtroProveedor,
+                            tipo: 'general',
+                            descripcion: 'Reporte General',
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        const existeGeneral = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === filtroProveedor && r.tipo === 'general'
+                        );
+                        
+                        if (!existeGeneral) {
+                            reportesPorFecha[fechaStr].push(reporteGeneral);
+                        }
+                    } else {
+                        // Reporte general de TODOS los proveedores
+                        const reporteGeneral = {
+                            fecha: fechaStr,
+                            proveedor: 'TODOS',
+                            tipo: 'general',
+                            descripcion: 'Reporte General (Todos los proveedores)',
+                            proveedoresIncluidos: proveedoresEnReporte,
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        const existeGeneral = reportesPorFecha[fechaStr].some(r => r.tipo === 'general' && r.proveedor === 'TODOS');
+                        
+                        if (!existeGeneral) {
+                            reportesPorFecha[fechaStr].push(reporteGeneral);
+                        }
+                    }
+                }
+                else if (tipoGenerado === 'ambos') {
+                    // AMBOS reportes: general y de proveedor
+                    
+                    // Agregar reporte de proveedor
+                    if (filtroProveedor) {
+                        // Reporte de UN proveedor específico
+                        const existeProv = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === filtroProveedor && r.tipo === 'proveedor'
+                        );
+                        
+                        if (!existeProv) {
+                            reportesPorFecha[fechaStr].push({
+                                fecha: fechaStr,
+                                proveedor: filtroProveedor,
+                                tipo: 'proveedor',
+                                descripcion: 'Reporte por proveedor',
+                                timestamp: new Date().toISOString()
+                            });
+                        }
+                    } else {
+                        // Reporte por proveedor de TODOS
+                        const existeProvTodos = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === 'TODOS_PROVEEDORES' && r.tipo === 'proveedor'
+                        );
+                        
+                        if (!existeProvTodos) {
+                            reportesPorFecha[fechaStr].push({
+                                fecha: fechaStr,
+                                proveedor: 'TODOS_PROVEEDORES',
+                                tipo: 'proveedor',
+                                descripcion: 'Reporte por proveedor - Todos los proveedores',
+                                proveedoresIncluidos: proveedoresEnReporte,
+                                timestamp: new Date().toISOString()
+                            });
+                        }
+                    }
+                    
+                    // Agregar reporte general
+                    if (filtroProveedor) {
+                        // Reporte general de UN proveedor
+                        const existeGeneral = reportesPorFecha[fechaStr].some(r => 
+                            r.proveedor === filtroProveedor && r.tipo === 'general'
+                        );
+                        
+                        if (!existeGeneral) {
+                            reportesPorFecha[fechaStr].push({
+                                fecha: fechaStr,
+                                proveedor: filtroProveedor,
+                                tipo: 'general',
+                                descripcion: 'Reporte General',
+                                timestamp: new Date().toISOString()
+                            });
+                        }
+                    } else {
+                        // Reporte general de TODOS
+                        const existeGeneral = reportesPorFecha[fechaStr].some(r => r.tipo === 'general' && r.proveedor === 'TODOS');
+                        
+                        if (!existeGeneral) {
+                            reportesPorFecha[fechaStr].push({
+                                fecha: fechaStr,
+                                proveedor: 'TODOS',
+                                tipo: 'general',
+                                descripcion: 'Reporte General (Todos los proveedores)',
+                                proveedoresIncluidos: proveedoresEnReporte,
+                                timestamp: new Date().toISOString()
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Avanzar al siguiente día
+            fechaActual.setDate(fechaActual.getDate() + 1);
+        }
+        
+        // Guardar en localStorage
+        localStorage.setItem('reportesPorFecha', JSON.stringify(reportesPorFecha));
+        
+        // Actualizar también el sistema antiguo de días reporte para compatibilidad
+        let diasReporte = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+        fechasProcesadas.forEach(fecha => {
+            if (!diasReporte.includes(fecha)) {
+                diasReporte.push(fecha);
+            }
+        });
+        localStorage.setItem('diasReportes', JSON.stringify(diasReporte));
+        
+        // Actualizar el calendario
+        if (calendar) {
+            cargarEventosCalendario();
+        }
+        
+    } else {
+        // Sin filtros: solo registrar el día de HOY (local)
+        if (!reportesPorFecha[hoyStr]) {
+            reportesPorFecha[hoyStr] = [];
+        }
+        
+        // Determinar qué tipo de reporte según el botón presionado
+        if (tipoGenerado === 'proveedor') {
+            if (filtroProveedor) {
+                // Reporte de UN proveedor específico
+                const reporteInfo = {
+                    fecha: hoyStr,
+                    proveedor: filtroProveedor,
+                    tipo: 'proveedor',
+                    descripcion: 'Reporte por proveedor',
+                    timestamp: new Date().toISOString()
+                };
+                
+                const existe = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === filtroProveedor && r.tipo === 'proveedor'
+                );
+                
+                if (!existe) {
+                    reportesPorFecha[hoyStr].push(reporteInfo);
+                }
+            } else {
+                // Reporte por proveedor de TODOS
+                const reporteInfo = {
+                    fecha: hoyStr,
+                    proveedor: 'TODOS_PROVEEDORES',
+                    tipo: 'proveedor',
+                    descripcion: 'Reporte por proveedor - Todos los proveedores',
+                    proveedoresIncluidos: proveedoresEnReporte,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const existe = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === 'TODOS_PROVEEDORES' && r.tipo === 'proveedor'
+                );
+                
+                if (!existe) {
+                    reportesPorFecha[hoyStr].push(reporteInfo);
+                }
+            }
+        }
+        else if (tipoGenerado === 'general') {
+            if (filtroProveedor) {
+                // Reporte general de UN proveedor
+                const reporteGeneral = {
+                    fecha: hoyStr,
+                    proveedor: filtroProveedor,
+                    tipo: 'general',
+                    descripcion: 'Reporte General',
+                    timestamp: new Date().toISOString()
+                };
+                
+                const existeGeneral = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === filtroProveedor && r.tipo === 'general'
+                );
+                
+                if (!existeGeneral) {
+                    reportesPorFecha[hoyStr].push(reporteGeneral);
+                }
+            } else {
+                // Reporte general de TODOS
+                const reporteGeneral = {
+                    fecha: hoyStr,
+                    proveedor: 'TODOS',
+                    tipo: 'general',
+                    descripcion: 'Reporte General (Todos los proveedores)',
+                    proveedoresIncluidos: proveedoresEnReporte,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const existeGeneral = reportesPorFecha[hoyStr].some(r => r.tipo === 'general' && r.proveedor === 'TODOS');
+                
+                if (!existeGeneral) {
+                    reportesPorFecha[hoyStr].push(reporteGeneral);
+                }
+            }
+        }
+        else if (tipoGenerado === 'ambos') {
+            // Agregar reporte de proveedor
+            if (filtroProveedor) {
+                // Reporte de UN proveedor específico
+                const existeProv = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === filtroProveedor && r.tipo === 'proveedor'
+                );
+                
+                if (!existeProv) {
+                    reportesPorFecha[hoyStr].push({
+                        fecha: hoyStr,
+                        proveedor: filtroProveedor,
+                        tipo: 'proveedor',
+                        descripcion: 'Reporte por proveedor',
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            } else {
+                // Reporte por proveedor de TODOS
+                const existeProvTodos = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === 'TODOS_PROVEEDORES' && r.tipo === 'proveedor'
+                );
+                
+                if (!existeProvTodos) {
+                    reportesPorFecha[hoyStr].push({
+                        fecha: hoyStr,
+                        proveedor: 'TODOS_PROVEEDORES',
+                        tipo: 'proveedor',
+                        descripcion: 'Reporte por proveedor - Todos los proveedores',
+                        proveedoresIncluidos: proveedoresEnReporte,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }
+            
+            // Agregar reporte general
+            if (filtroProveedor) {
+                // Reporte general de UN proveedor
+                const existeGeneral = reportesPorFecha[hoyStr].some(r => 
+                    r.proveedor === filtroProveedor && r.tipo === 'general'
+                );
+                
+                if (!existeGeneral) {
+                    reportesPorFecha[hoyStr].push({
+                        fecha: hoyStr,
+                        proveedor: filtroProveedor,
+                        tipo: 'general',
+                        descripcion: 'Reporte General',
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            } else {
+                // Reporte general de TODOS
+                const existeGeneral = reportesPorFecha[hoyStr].some(r => r.tipo === 'general' && r.proveedor === 'TODOS');
+                
+                if (!existeGeneral) {
+                    reportesPorFecha[hoyStr].push({
+                        fecha: hoyStr,
+                        proveedor: 'TODOS',
+                        tipo: 'general',
+                        descripcion: 'Reporte General (Todos los proveedores)',
+                        proveedoresIncluidos: proveedoresEnReporte,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }
+        }
+        
+        localStorage.setItem('reportesPorFecha', JSON.stringify(reportesPorFecha));
+        
+        // Actualizar días de reporte
+        let diasReporte = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+        if (!diasReporte.includes(hoyStr)) {
+            diasReporte.push(hoyStr);
+            localStorage.setItem('diasReportes', JSON.stringify(diasReporte));
+        }
+        
+        if (calendar) {
+            cargarEventosCalendario();
+        }
+    }
+}
+
+// Función para limpiar historial
+function limpiarHistorialReportes() {
+    localStorage.removeItem('diasReportes');
+    localStorage.removeItem('reportesPorFecha');
+    cargarEventosCalendario();
+}
 
 // Gráfica
 <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
@@ -1241,65 +1817,10 @@ if (ctx) {
 }
 <?php endif; ?>
 
-// Función para registrar el RANGO de fechas del reporte
-function registrarRangoReporte() {
-    // Obtener las fechas del filtro actual
-    const filtroInicio = '<?= $filtroInicio ?>';
-    const filtroFin = '<?= $filtroFin ?>';
-    
-    // Si hay un rango de fechas seleccionado
-    if (filtroInicio && filtroFin) {
-        let fechaActual = new Date(filtroInicio);
-        const fechaFin = new Date(filtroFin);
-        
-        let fechasReporte = [];
-        
-        // Recorrer todas las fechas del rango
-        while (fechaActual <= fechaFin) {
-            const fechaStr = fechaActual.toISOString().split('T')[0];
-            fechasReporte.push(fechaStr);
-            
-            // Avanzar al siguiente día
-            fechaActual.setDate(fechaActual.getDate() + 1);
-        }
-        
-        // Guardar en localStorage
-        let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
-        
-        // Agregar las nuevas fechas (sin duplicados)
-        fechasReporte.forEach(fecha => {
-            if (!reportesGuardados.includes(fecha)) {
-                reportesGuardados.push(fecha);
-            }
-        });
-        
-        localStorage.setItem('diasReportes', JSON.stringify(reportesGuardados));
-        
-        // Actualizar el calendario
-        if (calendar) {
-            cargarEventosCalendario();
-        }
-    } else {
-        // Si no hay filtro de fechas, solo registrar el día actual
-        const hoy = new Date();
-        const fechaStr = hoy.toISOString().split('T')[0];
-        
-        let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
-        if (!reportesGuardados.includes(fechaStr)) {
-            reportesGuardados.push(fechaStr);
-            localStorage.setItem('diasReportes', JSON.stringify(reportesGuardados));
-            
-            if (calendar) {
-                cargarEventosCalendario();
-            }
-        }
-    }
-}
-
 // Función para generar PDFs
 function generarPDF(tipo) {
-    // Registrar el rango de fechas del reporte (NO solo el día actual)
-    registrarRangoReporte();
+    // Pasar el tipo a registrarRangoReporte
+    registrarRangoReporte(tipo);
     
     const { jsPDF } = window.jspdf;
     
@@ -1319,7 +1840,7 @@ function generarPDF(tipo) {
     };
 
     <?php
-    // Consulta detallada para proveedores
+    // Consulta detallada para proveedores - ORDENADA por proveedor primero
     $sqlProveedores = "
     SELECT 
         p.nombre AS producto,
@@ -1349,7 +1870,8 @@ function generarPDF(tipo) {
         AND '" . $conn->real_escape_string($filtroFin) . "'";
     }
     
-    $sqlProveedores .= " ORDER BY v.fecha_venta DESC, p.proveedor, p.nombre";
+    // ORDENAR PRIMERO POR PROVEEDOR, LUEGO POR PRODUCTO
+    $sqlProveedores .= " ORDER BY p.proveedor ASC, p.nombre ASC, v.fecha_venta DESC";
     
     $resultadoProveedores = $conn->query($sqlProveedores);
     $ventasDetalle = [];
@@ -1487,20 +2009,20 @@ function generarPDF(tipo) {
 
         docAdmin.setFontSize(10);
         docAdmin.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
-        docAdmin.text("TOTAL VENTAS", 35, 100);
+        docAdmin.text("TOTAL INGRESOS", 35, 100);
         docAdmin.text("DEUDA TOTAL", pageWidth / 2 - 25, 100);
         docAdmin.text("GANANCIA NETA", pageWidth - 55, 100);
 
         docAdmin.setFontSize(18);
         docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("$<?= number_format($totalVendidos * 100, 2) ?>", 35, 115);
+        docAdmin.text("$<?= number_format($totalVentas, 2) ?>", 35, 115);
         docAdmin.text("$<?= number_format($totalProveedor, 2) ?>", pageWidth / 2 - 25, 115);
         docAdmin.text("$<?= number_format($totalGanancia, 2) ?>", pageWidth - 55, 115);
 
         y = 145;
 
-        // --- ANÁLISIS TEMPORAL ---
+        // --- ANÁLISIS TEMPORAL (con Proveedor primero) ---
         if (Object.keys(<?= json_encode($ventasPorFecha) ?>).length > 0) {
             if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
             
@@ -1513,9 +2035,9 @@ function generarPDF(tipo) {
             <?php
             $sqlDetallado = "
             SELECT 
-                DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha,
                 p.proveedor,
                 p.nombre AS producto,
+                DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha,
                 v.cantidad_vendida,
                 (p.precio_venta * v.cantidad_vendida) AS total_venta,
                 (p.precio_compra * v.cantidad_vendida) AS total_costo,
@@ -1534,7 +2056,8 @@ function generarPDF(tipo) {
                 AND '" . $conn->real_escape_string($filtroFin) . "'";
             }
             
-            $sqlDetallado .= " ORDER BY v.fecha_venta DESC";
+            // ORDENAR POR PROVEEDOR PRIMERO
+            $sqlDetallado .= " ORDER BY p.proveedor ASC, p.nombre ASC, v.fecha_venta DESC";
             
             $resultadoDetallado = $conn->query($sqlDetallado);
             $detalleVentas = [];
@@ -1551,9 +2074,9 @@ function generarPDF(tipo) {
             const detalleVentasData = [
                 <?php foreach ($detalleVentas as $venta): ?>
                 [
-                    '<?= $venta['fecha'] ?>',
                     '<?= addslashes($venta['proveedor']) ?>',
                     '<?= addslashes($venta['producto']) ?>',
+                    '<?= $venta['fecha'] ?>',
                     <?= $venta['cantidad_vendida'] ?>,
                     '$<?= number_format($venta['total_venta'], 2) ?>',
                     '$<?= number_format($venta['total_costo'], 2) ?>',
@@ -1563,16 +2086,16 @@ function generarPDF(tipo) {
             ];
 
             docAdmin.autoTable({
-                head: [['Fecha', 'Proveedor', 'Artículo', 'Cant', 'Ventas', 'Costo', 'Ganancia']],
+                head: [['Proveedor', 'Producto', 'Fecha', 'Cant', 'Venta', 'Costo', 'Ganancia']],
                 body: detalleVentasData,
                 startY: y,
                 theme: "grid",
                 headStyles: { fillColor: colors.secondary, textColor: colors.white, fontSize: 9 },
                 styles: { fontSize: 7, cellPadding: 2 },
                 columnStyles: {
-                    0: { cellWidth: 20 },
-                    1: { cellWidth: 30 },
-                    2: { cellWidth: 40 },
+                    0: { cellWidth: 30, fontStyle: 'bold' },
+                    1: { cellWidth: 40 },
+                    2: { cellWidth: 20, halign: 'center' },
                     3: { cellWidth: 12, halign: 'center' },
                     4: { cellWidth: 22, halign: 'right' },
                     5: { cellWidth: 22, halign: 'right' },
@@ -1589,35 +2112,76 @@ function generarPDF(tipo) {
             y += 15;
         }
 
-        // --- DETALLE DE PRODUCTOS VENDIDOS ---
+        // --- DETALLE DE PRODUCTOS VENDIDOS (con Proveedor primero) ---
         if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
 
         docAdmin.setFontSize(16);
         docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
         docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("Detalle de Productos Vendidos", 20, y);
+        docAdmin.text("Detalle de Productos Vendidos por Proveedor", 20, y);
         y += 8;
 
+        // Crear datos ordenados con Proveedor primero
+        const productosData = [
+            <?php
+            // Obtener productos y ordenar por proveedor
+            $productosOrdenados = [];
+            foreach ($productos as $p) {
+                $productosOrdenados[] = [
+                    'proveedor' => $p['proveedor'],
+                    'nombre' => $p['nombre'],
+                    'vendidos' => $p['vendidos'],
+                    'stock' => $p['stock'],
+                    'precio_compra' => $p['precio_compra'],
+                    'precio_venta' => $p['precio_venta'],
+                    'ganancia' => $p['ganancia']
+                ];
+            }
+            
+            // Ordenar por proveedor y luego por producto
+            usort($productosOrdenados, function($a, $b) {
+                if ($a['proveedor'] == $b['proveedor']) {
+                    return strcmp($a['nombre'], $b['nombre']);
+                }
+                return strcmp($a['proveedor'], $b['proveedor']);
+            });
+            
+            foreach ($productosOrdenados as $prod): 
+            ?>
+            [
+                '<?= addslashes($prod['proveedor']) ?>',
+                '<?= addslashes($prod['nombre']) ?>',
+                <?= $prod['vendidos'] ?>,
+                <?= $prod['stock'] ?>,
+                '$<?= number_format($prod['precio_compra'], 2) ?>',
+                '$<?= number_format($prod['precio_venta'], 2) ?>',
+                '$<?= number_format($prod['ganancia'], 2) ?>'
+            ],
+            <?php endforeach; ?>
+        ];
+
         docAdmin.autoTable({
-            html: document.querySelector(".card-warning table"),
+            head: [['Proveedor', 'Producto', 'Vend.', 'Stock', 'Compra', 'Venta', 'Ganancia']],
+            body: productosData,
             startY: y,
             theme: "striped",
             headStyles: { fillColor: colors.success, textColor: colors.white, fontSize: 9 },
             styles: { fontSize: 8, cellPadding: 4 },
-            margin: { left: 15, right: 15 },
-            didDrawPage: function(data) {
-                y = data.cursor.y;
-            }
+            columnStyles: {
+                0: { cellWidth: 35, fontStyle: 'bold' },
+                1: { cellWidth: 45 },
+                2: { cellWidth: 15, halign: 'center' },
+                3: { cellWidth: 15, halign: 'center' },
+                4: { cellWidth: 20, halign: 'right' },
+                5: { cellWidth: 20, halign: 'right' },
+                6: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
+            },
+            margin: { left: 15, right: 15 }
         });
 
         let totalGananciasTabla = 0;
-        const filasTabla = document.querySelectorAll(".card-warning table tbody tr");
-        filasTabla.forEach(fila => {
-            const celdas = fila.querySelectorAll("td");
-            if (celdas.length >= 6) {
-                const ganancia = parseFloat(celdas[6].textContent.replace(/[$,]/g, '')) || 0;
-                totalGananciasTabla += ganancia;
-            }
+        productosData.forEach(item => {
+            totalGananciasTabla += parseFloat(item[6].replace(/[$,]/g, ''));
         });
 
         y = docAdmin.lastAutoTable.finalY + 5;
@@ -1627,32 +2191,72 @@ function generarPDF(tipo) {
         docAdmin.text(`TOTAL GANANCIAS: $${totalGananciasTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
         y += 15;
 
-        // --- ANÁLISIS DE COSTOS ---
+        // --- ANÁLISIS DE COSTOS (con Proveedor primero) ---
         if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
 
         docAdmin.setFontSize(16);
         docAdmin.setTextColor(colors.warning[0], colors.warning[1], colors.warning[2]);
         docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("Análisis de Costos por Producto", 20, y);
+        docAdmin.text("Análisis de Costos por Proveedor", 20, y);
         y += 8;
 
+        // Crear datos de costos ordenados por proveedor
+        const costosData = [
+            <?php
+            $costosOrdenados = [];
+            foreach ($productos as $p) {
+                $deuda = $p['precio_compra'] * $p['vendidos'];
+                if ($deuda > 0) {
+                    $costosOrdenados[] = [
+                        'proveedor' => $p['proveedor'],
+                        'producto' => $p['nombre'],
+                        'vendidos' => $p['vendidos'],
+                        'precio_compra' => $p['precio_compra'],
+                        'deuda' => $deuda
+                    ];
+                }
+            }
+            
+            // Ordenar por proveedor y luego por producto
+            usort($costosOrdenados, function($a, $b) {
+                if ($a['proveedor'] == $b['proveedor']) {
+                    return strcmp($a['producto'], $b['producto']);
+                }
+                return strcmp($a['proveedor'], $b['proveedor']);
+            });
+            
+            foreach ($costosOrdenados as $costo): 
+            ?>
+            [
+                '<?= addslashes($costo['proveedor']) ?>',
+                '<?= addslashes($costo['producto']) ?>',
+                <?= $costo['vendidos'] ?>,
+                '$<?= number_format($costo['precio_compra'], 2) ?>',
+                '$<?= number_format($costo['deuda'], 2) ?>'
+            ],
+            <?php endforeach; ?>
+        ];
+
         docAdmin.autoTable({
-            html: document.querySelector(".card-danger table"),
+            head: [['Proveedor', 'Producto', 'Vendidos', 'Costo Unit.', 'Deuda Total']],
+            body: costosData,
             startY: y,
             theme: "striped",
             headStyles: { fillColor: colors.warning, textColor: colors.dark, fontSize: 9 },
             styles: { fontSize: 8, cellPadding: 4 },
+            columnStyles: {
+                0: { cellWidth: 35, fontStyle: 'bold' },
+                1: { cellWidth: 45 },
+                2: { cellWidth: 20, halign: 'center' },
+                3: { cellWidth: 25, halign: 'right' },
+                4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+            },
             margin: { left: 15, right: 15 }
         });
 
         let totalDeudaTabla = 0;
-        const filasCosto = document.querySelectorAll(".card-danger table tbody tr");
-        filasCosto.forEach(fila => {
-            const celdas = fila.querySelectorAll("td");
-            if (celdas.length >= 4) {
-                const deuda = parseFloat(celdas[4].textContent.replace(/[$,]/g, '')) || 0;
-                totalDeudaTabla += deuda;
-            }
+        costosData.forEach(item => {
+            totalDeudaTabla += parseFloat(item[4].replace(/[$,]/g, ''));
         });
 
         y = docAdmin.lastAutoTable.finalY + 5;
@@ -1777,18 +2381,30 @@ function generarPDF(tipo) {
         
         provY += 45;
 
-        // --- TABLA DETALLADA ---
+        // --- TABLA DETALLADA (con Proveedor primero) ---
         docProv.setFontSize(14);
         docProv.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docProv.setFont("helvetica", "bold");
-        docProv.text("Detalle de Ventas por Producto", 20, provY);
+        docProv.text("Detalle de Ventas por Proveedor", 20, provY);
         provY += 8;
 
+        // Ordenar datos por proveedor primero
         const proveedoresData = [
-            <?php foreach ($ventasDetalle as $venta): ?>
+            <?php
+            // Ordenar ventasDetalle por proveedor y luego por producto
+            $ventasOrdenadas = $ventasDetalle;
+            usort($ventasOrdenadas, function($a, $b) {
+                if ($a['proveedor'] == $b['proveedor']) {
+                    return strcmp($a['producto'], $b['producto']);
+                }
+                return strcmp($a['proveedor'], $b['proveedor']);
+            });
+            
+            foreach ($ventasOrdenadas as $venta): 
+            ?>
             [
-                '<?= addslashes($venta['producto']) ?>',
                 '<?= addslashes($venta['proveedor']) ?>',
+                '<?= addslashes($venta['producto']) ?>',
                 '<?= $venta['fecha_venta_formateada'] ?>',
                 <?= $venta['cantidad_vendida'] ?>,
                 '$<?= number_format($venta['precio_compra'], 2) ?>',
@@ -1799,7 +2415,7 @@ function generarPDF(tipo) {
 
         if (proveedoresData.length > 0) {
             docProv.autoTable({
-                head: [['Producto', 'Proveedor', 'Fecha Venta', 'Cant.', 'P.Compra', 'Deuda']],
+                head: [['Proveedor', 'Producto', 'Fecha Venta', 'Cant.', 'P.Compra', 'Deuda']],
                 body: proveedoresData,
                 startY: provY,
                 theme: "grid",
@@ -1817,11 +2433,11 @@ function generarPDF(tipo) {
                     cellWidth: 'wrap'
                 },
                 columnStyles: {
-                    0: { cellWidth: 40, halign: 'left' },
-                    1: { cellWidth: 35, halign: 'left' },
+                    0: { cellWidth: 35, fontStyle: 'bold', halign: 'left' },
+                    1: { cellWidth: 40, halign: 'left' },
                     2: { cellWidth: 25, halign: 'center' },
                     3: { cellWidth: 15, halign: 'center' },
-                    4: { cellWidth: 25, halign: 'right' },
+                    4: { cellWidth: 20, halign: 'right' },
                     5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
                 },
                 margin: { left: 15, right: 15 }
@@ -1839,7 +2455,11 @@ function generarPDF(tipo) {
             provY += 8;
 
             const resumenProvData = [
-                <?php foreach ($deudaPorProveedor as $prov => $total): ?>
+                <?php 
+                // Ordenar proveedores alfabéticamente
+                ksort($deudaPorProveedor);
+                foreach ($deudaPorProveedor as $prov => $total): 
+                ?>
                 ['<?= addslashes($prov) ?>', '$<?= number_format($total, 2) ?>'],
                 <?php endforeach; ?>
                 ['', ''],
@@ -1904,6 +2524,3 @@ document.querySelectorAll('.pdf-dropdown-btn').forEach(btn => {
     });
 });
 </script>
-<?php
-include('includes/footer.php');
-?>

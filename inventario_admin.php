@@ -573,6 +573,36 @@ function obtenerEstadisticas($conn) {
     }
 }
 
+.product-img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px 8px 0 0;
+}
+
+.product-img.no-image {
+    height: 200px;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.3s ease;
+}
+
+.product-card:hover .product-img.no-image {
+    transform: scale(1.02);
+}
+
+.product-img.no-image i {
+    transition: all 0.3s ease;
+}
+
+.product-card:hover .product-img.no-image i {
+    transform: scale(1.1);
+}
+
+/* Estilos adicionales para los badges */
+.badge-pill {
+    padding: 8px 15px;
+    font-size: 0.85rem;
+}
 </style>
 
 <div class="content-wrapper">
@@ -715,29 +745,107 @@ function obtenerEstadisticas($conn) {
                             $categoria_lower = strtolower($row['categoria']);
                             
                             $iconos_categoria = [
-                                'electronica' => 'fa-microchip',
-                                'computo' => 'fa-laptop',
-                                'telefonia' => 'fa-mobile-alt',
-                                'audio' => 'fa-headphones',
-                                'video' => 'fa-tv',
-                                'accesorios' => 'fa-keyboard',
-                                'ropa' => 'fa-tshirt',
-                                'calzado' => 'fa-shoe-prints',
-                                'hogar' => 'fa-couch',
-                                'cocina' => 'fa-utensils',
-                                'herramientas' => 'fa-tools',
-                                'juguetes' => 'fa-gamepad',
-                                'deportes' => 'fa-futbol',
-                                'libros' => 'fa-book',
-                                'papeleria' => 'fa-pencil-alt',
-                                'belleza' => 'fa-spa',
-                                'salud' => 'fa-heartbeat',
-                                'mascotas' => 'fa-paw',
-                                'alimentos' => 'fa-apple-alt',
-                                'bebidas' => 'fa-wine-bottle',
-                                'llaveros' => 'fa-key',
-                                'llavero' => 'fa-key'
-                            ];
+                            // Souvenirs clásicos
+                            'llaveros' => 'fa-key',
+                            'llavero' => 'fa-key',
+                            'imanes' => 'fa-magnet',
+                            'postales' => 'fa-envelope',
+                            'fotografias' => 'fa-camera',
+                            'fotos' => 'fa-camera-retro',
+                            'albumes' => 'fa-images',
+                            'marcos' => 'fa-frame',
+                            'cuadros' => 'fa-painting',
+                            
+                            // Artesanías y decoración
+                            'artesanias' => 'fa-hands',
+                            'ceramica' => 'fa-mug-saucer',
+                            'barro' => 'fa-jug',
+                            'textiles' => 'fa-scroll',
+                            'decoracion' => 'fa-vase',
+                            'figuras' => 'fa-chess-queen',
+                            'estatuillas' => 'fa-crown',
+                            'adornos' => 'fa-star',
+                            
+                            // Recuerdos típicos
+                            'recuerdos' => 'fa-gift',
+                            'recuerdo' => 'fa-gift',
+                            'tradicional' => 'fa-flag',
+                            'tipico' => 'fa-earth-americas',
+                            'region' => 'fa-map-location',
+                            'local' => 'fa-store',
+                            
+                            // Regalos personalizados
+                            'personalizado' => 'fa-pen-fancy',
+                            'grabados' => 'fa-engraving',
+                            'iniciales' => 'fa-font',
+                            'nombres' => 'fa-signature',
+                            'fechas' => 'fa-calendar',
+                            
+                            // Bolsas y empaques
+                            'bolsas' => 'fa-shopping-bag',
+                            'empaques' => 'fa-box-open',
+                            'cajas' => 'fa-cube',
+                            'papel_regalo' => 'fa-wrapping-paper',
+                            
+                            // Souvenirs para ocasiones
+                            'bodas' => 'fa-ring',
+                            'cumpleanos' => 'fa-birthday-cake',
+                            'bautizos' => 'fa-dove',
+                            'comunion' => 'fa-church',
+                            'graduacion' => 'fa-graduation-cap',
+                            'aniversario' => 'fa-heart',
+                            
+                            // Souvenirs por material
+                            'madera' => 'fa-tree',
+                            'metal' => 'fa-gear',
+                            'vidrio' => 'fa-wine-glass',
+                            'tela' => 'fa-tshirt',
+                            'cuero' => 'fa-hand',
+                            'piedra' => 'fa-gem',
+                            
+                            // Souvenirs comestibles
+                            'dulces' => 'fa-candy-cane',
+                            'chocolates' => 'fa-cookie-bite',
+                            'miel' => 'fa-jar',
+                            'licores' => 'fa-wine-bottle',
+                            'vinos' => 'fa-wine-glass-alt',
+                            
+                            // Souvenirs para eventos
+                            'eventos' => 'fa-calendar-check',
+                            'ferias' => 'fa-tents',
+                            'exposiciones' => 'fa-image',
+                            'congresos' => 'fa-users',
+                            
+                            // Souvenirs para turistas
+                            'turismo' => 'fa-map',
+                            'viajes' => 'fa-plane',
+                            'destinos' => 'fa-location-dot',
+                            'paises' => 'fa-globe',
+                            'ciudades' => 'fa-city',
+                            
+                            // Souvenirs para mascotas
+                            'mascotas' => 'fa-paw',
+                            'perros' => 'fa-dog',
+                            'gatos' => 'fa-cat',
+                            
+                            // Souvenirs para niños
+                            'infantil' => 'fa-child',
+                            'bebes' => 'fa-baby',
+                            'juguetes' => 'fa-puzzle-piece',
+                            
+                            // Souvenirs religiosos
+                            'religioso' => 'fa-cross',
+                            'virgen' => 'fa-church',
+                            'santos' => 'fa-pray',
+                            
+                            // Souvenirs de naturaleza
+                            'naturaleza' => 'fa-leaf',
+                            'flores' => 'fa-seedling',
+                            'animales' => 'fa-dragon',
+                            'mar' => 'fa-fish',
+                            'playa' => 'fa-umbrella-beach',
+                            'montana' => 'fa-mountain'
+                        ];
                             
                             foreach($iconos_categoria as $cat => $icono) {
                                 if(strpos($categoria_lower, $cat) !== false) {
@@ -863,14 +971,147 @@ function obtenerEstadisticas($conn) {
             <div class="section-title mt-5">
                 <i class="fas fa-tools"></i>
                 Insumos y Materiales
-                <div class="float-right">
-                    <a href="agregar_insumo.php" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-plus mr-2"></i>Nuevo Insumo
-                    </a>
-                </div>
             </div>
 
             <?php
+            // Función para obtener el icono según el tipo de insumo
+            function getIconoInsumo($nombre, $categoria, $atributos) {
+                $nombre_lower = strtolower($nombre);
+                $categoria_lower = strtolower($categoria ?? '');
+                $unidad = strtolower($atributos['unidad'] ?? '');
+                
+                // Mapeo de palabras clave a iconos
+                $iconos = [
+                    // DTF y impresión
+                    'dtf' => 'fa-print',
+                    'transfer' => 'fa-print',
+                    'polvo' => 'fa-cube',
+                    'pelicula' => 'fa-film',
+                    'film' => 'fa-film',
+                    'tinta' => 'fa-fill-drip',
+                    
+                    // Telas y textil
+                    'tela' => 'fa-tshirt',
+                    'poliéster' => 'fa-tshirt',
+                    'algodon' => 'fa-tshirt',
+                    'lienzo' => 'fa-paint-roller',
+                    'franela' => 'fa-tshirt',
+                    'dril' => 'fa-tshirt',
+                    
+                    // Vinilos
+                    'vinilo' => 'fa-sticky-note',
+                    'calendario' => 'fa-sticky-note',
+                    'imprimible' => 'fa-sticky-note',
+                    'corte' => 'fa-cut',
+                    
+                    // Sublimación
+                    'sublimacion' => 'fa-hot-tub',
+                    'sublimación' => 'fa-hot-tub',
+                    'papel' => 'fa-copy',
+                    'termico' => 'fa-temperature-high',
+                    
+                    // Hilos y costura
+                    'hilo' => 'fa-thread',
+                    'cordon' => 'fa-grip-lines',
+                    
+                    // Pegamentos y químicos
+                    'pegamento' => 'fa-flask',
+                    'adhesivo' => 'fa-flask',
+                    'silicona' => 'fa-flask',
+                    'quimico' => 'fa-flask',
+                    'químico' => 'fa-flask',
+                    
+                    // Herramientas
+                    'herramienta' => 'fa-tools',
+                    'cutter' => 'fa-cut',
+                    'tijera' => 'fa-cut',
+                    'regla' => 'fa-ruler',
+                    
+                    // Empaque
+                    'empaque' => 'fa-box',
+                    'bolsa' => 'fa-shopping-bag',
+                    'caja' => 'fa-box-open',
+                    'etiqueta' => 'fa-tag',
+                    
+                    // Metales y plásticos
+                    'metal' => 'fa-cog',
+                    'acero' => 'fa-cog',
+                    'aluminio' => 'fa-cog',
+                    'plastico' => 'fa-cube',
+                    'plástico' => 'fa-cube',
+                    
+                    // Madera
+                    'madera' => 'fa-tree',
+                    'mdf' => 'fa-tree',
+                    'triplex' => 'fa-tree',
+                    
+                    // Electrónica
+                    'electronico' => 'fa-microchip',
+                    'electrónico' => 'fa-microchip',
+                    'cable' => 'fa-plug',
+                    'led' => 'fa-lightbulb',
+                    
+                    // Acrílicos
+                    'acrilico' => 'fa-gem',
+                    'acrílico' => 'fa-gem',
+                    
+                    // Llaveros y accesorios
+                    'llavero' => 'fa-key',
+                    'accesorio' => 'fa-crown',
+                    'broche' => 'fa-circle',
+                    
+                    // Por metros (DTF, telas, vinilos)
+                    'metro' => 'fa-ruler',
+                    'metros' => 'fa-ruler',
+                    'rollo' => 'fa-scroll',
+                ];
+                
+                // Buscar coincidencias en nombre
+                foreach ($iconos as $key => $icono) {
+                    if (strpos($nombre_lower, $key) !== false) {
+                        return $icono;
+                    }
+                }
+                
+                // Buscar coincidencias en categoría
+                foreach ($iconos as $key => $icono) {
+                    if (strpos($categoria_lower, $key) !== false) {
+                        return $icono;
+                    }
+                }
+                
+                // Si tiene unidad en metros, sugerir regla
+                if (strpos($unidad, 'm') !== false || strpos($unidad, 'metro') !== false) {
+                    return 'fa-ruler';
+                }
+                
+                // Icono por defecto
+                return 'fa-cubes';
+            }
+
+            // Función para obtener el color de fondo del icono
+            function getColorInsumo($icono) {
+                $colores = [
+                    'fa-print' => '#4361ee', // Azul para DTF/impresión
+                    'fa-tshirt' => '#f72585', // Rosa para telas
+                    'fa-sticky-note' => '#ff9e00', // Naranja para vinilos
+                    'fa-hot-tub' => '#b5179e', // Morado para sublimación
+                    'fa-thread' => '#4cc9f0', // Celeste para hilos
+                    'fa-flask' => '#f8961e', // Naranja para químicos
+                    'fa-tools' => '#6c757d', // Gris para herramientas
+                    'fa-box' => '#2b9348', // Verde para empaques
+                    'fa-cog' => '#3d5a80', // Azul oscuro para metales
+                    'fa-tree' => '#588157', // Verde bosque para madera
+                    'fa-microchip' => '#7209b7', // Púrpura para electrónica
+                    'fa-gem' => '#4895ef', // Azul claro para acrílicos
+                    'fa-key' => '#f9c74f', // Amarillo para llaveros
+                    'fa-ruler' => '#577590', // Azul grisáceo para metros
+                    'fa-scroll' => '#ad9b84', // Beige para rollos
+                ];
+                
+                return $colores[$icono] ?? '#6c757d';
+            }
+
             $insumos = obtenerInsumos($conn);
             $total_insumos = $insumos->num_rows;
             ?>
@@ -891,13 +1132,34 @@ function obtenerEstadisticas($conn) {
                         $stock_class = 'normal';
                         $stock_badge = 'success';
                     }
+                    
+                    $icono = getIconoInsumo($row['nombre'], $row['categoria'], $atributos);
+                    $color_icono = getColorInsumo($icono);
                 ?>
                 <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
                     <div class="product-card">
-                        <img src="<?= $row['imagen'] ?: 'uploads/no-image.png' ?>" class="product-img" alt="<?= htmlspecialchars($row['nombre']) ?>">
+                        <?php if($row['imagen'] && file_exists($row['imagen'])): ?>
+                            <img src="<?= $row['imagen'] ?>" class="product-img" alt="<?= htmlspecialchars($row['nombre']) ?>">
+                        <?php else: ?>
+                            <div class="product-img no-image d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, <?= $color_icono ?>20, <?= $color_icono ?>40);">
+                                <div class="text-center">
+                                    <i class="fas <?= $icono ?> fa-4x" style="color: <?= $color_icono ?>"></i>
+                                    <?php if(strpos($row['nombre'], 'DTF') !== false || strpos($row['nombre'], 'dtf') !== false): ?>
+                                        <small class="d-block mt-2 font-weight-bold" style="color: <?= $color_icono ?>">DTF</small>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                         
                         <div class="card-body">
                             <h5 class="card-title font-weight-bold mb-1"><?= htmlspecialchars($row['nombre']) ?></h5>
+                            
+                            <!-- Badge especial para DTF -->
+                            <?php if(strpos($row['nombre'], 'DTF') !== false || strpos($row['nombre'], 'dtf') !== false): ?>
+                                <span class="badge badge-primary mb-2" style="background: <?= $color_icono ?>">
+                                    <i class="fas fa-print mr-1"></i> DTF
+                                </span>
+                            <?php endif; ?>
                             
                             <?php if($row['categoria']): ?>
                             <small class="text-secondary d-block mb-2">
@@ -917,7 +1179,22 @@ function obtenerEstadisticas($conn) {
                                 <?php if($atributos && isset($atributos['unidad'])): ?>
                                 <tr>
                                     <td class="text-muted p-0"><small>Unidad:</small></td>
-                                    <td class="p-0 text-right"><small><?= $atributos['unidad'] ?></small></td>
+                                    <td class="p-0 text-right">
+                                        <small>
+                                            <?php if(strpos($atributos['unidad'], 'm') !== false): ?>
+                                                <i class="fas fa-ruler mr-1"></i>
+                                            <?php endif; ?>
+                                            <?= $atributos['unidad'] ?>
+                                        </small>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                                
+                                <!-- Mostrar ancho si existe (útil para DTF, telas) -->
+                                <?php if($atributos && isset($atributos['ancho'])): ?>
+                                <tr>
+                                    <td class="text-muted p-0"><small>Ancho:</small></td>
+                                    <td class="p-0 text-right"><small><?= $atributos['ancho'] ?> m</small></td>
                                 </tr>
                                 <?php endif; ?>
                             </table>
@@ -926,32 +1203,44 @@ function obtenerEstadisticas($conn) {
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">Stock:</small>
                                     <span class="badge badge-<?= $stock_badge ?>">
-                                        <?= $row['cantidad'] ?> <?= $atributos['unidad'] ?? 'unidades' ?>
+                                        <?= number_format($row['cantidad'], ($row['cantidad'] == intval($row['cantidad']) ? 0 : 2)) ?> 
+                                        <?= $atributos['unidad'] ?? 'unidades' ?>
                                     </span>
                                 </div>
                                 <div class="stock-bar">
                                     <div class="stock-fill <?= $stock_class ?>" style="width: <?= $porcentaje_stock ?>%"></div>
                                 </div>
                             </div>
-                            
-                            <div class="btn-group btn-group-sm mt-3 w-100">
-                                <button class="btn btn-outline-primary" onclick="editarInsumo(<?= $row['id'] ?>)" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-outline-success" onclick="ajustarStock(<?= $row['id'] ?>)" title="Ajustar stock">
-                                    <i class="fas fa-boxes"></i>
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
                 <?php endwhile; ?>
             </div>
+
             <?php else: ?>
             <div class="empty-state">
-                <i class="fas fa-tools"></i>
+                <i class="fas fa-tools fa-4x text-muted mb-3"></i>
                 <h5>No hay insumos registrados</h5>
-                <p class="text-muted">Agrega materiales para personalización</p>
+                <p class="text-muted">Agrega materiales para personalización como:</p>
+                <div class="row justify-content-center mt-3">
+                    <div class="col-auto">
+                        <span class="badge badge-pill badge-primary p-2 m-1">
+                            <i class="fas fa-print mr-1"></i> DTF
+                        </span>
+                        <span class="badge badge-pill badge-danger p-2 m-1">
+                            <i class="fas fa-tshirt mr-1"></i> Telas
+                        </span>
+                        <span class="badge badge-pill badge-warning p-2 m-1">
+                            <i class="fas fa-sticky-note mr-1"></i> Vinilos
+                        </span>
+                        <span class="badge badge-pill badge-info p-2 m-1">
+                            <i class="fas fa-hot-tub mr-1"></i> Sublimación
+                        </span>
+                        <span class="badge badge-pill badge-success p-2 m-1">
+                            <i class="fas fa-thread mr-1"></i> Hilos
+                        </span>
+                    </div>
+                </div>
             </div>
             <?php endif; ?>
 
