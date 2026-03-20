@@ -3,10 +3,141 @@ include('includes/header.php');
 include('includes/navbar.php');
 include 'includes/db.php';
 
+// ======================= PRODUCTO ESPECIAL (PAGADO) =======================
+// Este producto NO debe aparecer en la deuda con proveedores
+define('PRODUCTO_ESPECIAL_NOMBRE', 'libretas');
+define('PROVEEDOR_ESPECIAL', 'Nevaris 3D');
+
 // --- Filtros (proveedor y fechas) ---
 $filtroProveedor = $_GET['proveedor'] ?? '';
 $filtroInicio = $_GET['fecha_inicio'] ?? '';
 $filtroFin = $_GET['fecha_fin'] ?? '';
+
+// ============================================
+// CONSULTA PRINCIPAL - AGRUPADA POR PROVEEDOR Y PRODUCTO
+// EXCLUYE EL PRODUCTO ESPECIAL DE LA DEUDA
+// ============================================
+
+// Consulta para obtener ventas AGRUPADAS por proveedor y producto
+// SOLO PRODUCTOS (excluir insumos)
+$sqlVentasAgrupadas = "
+SELECT 
+    p.proveedor,
+    p.nombre AS producto,
+    p.cantidad AS stock_actual,
+    p.precio_compra,
+    p.precio_venta,
+    SUM(v.cantidad_vendida) AS total_vendido,
+    COUNT(v.id) AS numero_ventas,
+    
+    -- Deuda: es 0 para el producto especial, precio_compra * vendidos para los demás
+    CASE 
+        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
+             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
+        THEN 0
+        ELSE (p.precio_compra * SUM(v.cantidad_vendida))
+    END AS deuda_total,
+    
+    -- Venta total (siempre se calcula normal, independientemente del producto)
+    (p.precio_venta * SUM(v.cantidad_vendida)) AS venta_total,
+    
+    -- Ganancia total (venta - compra, normal para todos)
+    ((p.precio_venta - p.precio_compra) * SUM(v.cantidad_vendida)) AS ganancia_total,
+    
+    -- Indicador de producto especial (para mostrarlo en la tabla)
+    CASE 
+        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
+             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
+        THEN 1
+        ELSE 0
+    END AS es_producto_especial
+    
+FROM ventas v
+INNER JOIN productos p ON v.id_producto = p.id
+WHERE p.tipo_inventario = 'producto'  /* EXCLUIR INSUMOS */
+";
+
+if ($filtroProveedor !== '') {
+    $sqlVentasAgrupadas .= " AND p.proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
+}
+
+if ($filtroInicio !== '' && $filtroFin !== '') {
+    $sqlVentasAgrupadas .= " AND DATE(v.fecha_venta) BETWEEN '" . $conn->real_escape_string($filtroInicio) . "' 
+    AND '" . $conn->real_escape_string($filtroFin) . "'";
+}
+
+// AGRUPAR por proveedor y producto
+$sqlVentasAgrupadas .= " GROUP BY p.proveedor, p.nombre, p.cantidad, p.precio_compra, p.precio_venta";
+$sqlVentasAgrupadas .= " ORDER BY p.proveedor ASC, p.nombre ASC";
+
+$resultadoVentasAgrupadas = $conn->query($sqlVentasAgrupadas);
+$ventasAgrupadas = [];
+$deudaPorProveedor = [];
+$totalesGlobales = [
+    'total_ventas' => 0,
+    'total_deuda' => 0,
+    'total_ganancia' => 0
+];
+
+if ($resultadoVentasAgrupadas) {
+    while ($row = $resultadoVentasAgrupadas->fetch_assoc()) {
+        $ventasAgrupadas[] = $row;
+        $prov = $row['proveedor'];
+        
+        // Solo acumular deuda si NO es el producto especial
+        if (!$row['es_producto_especial']) {
+            // Acumular deuda por proveedor
+            if (!isset($deudaPorProveedor[$prov])) {
+                $deudaPorProveedor[$prov] = 0;
+            }
+            $deudaPorProveedor[$prov] += $row['deuda_total'];
+            
+            // Acumular deuda total global
+            $totalesGlobales['total_deuda'] += $row['deuda_total'];
+        }
+        
+        // Las ventas y ganancias siempre se acumulan (para todos los productos)
+        $totalesGlobales['total_ventas'] += $row['venta_total'];
+        $totalesGlobales['total_ganancia'] += $row['ganancia_total'];
+    }
+}
+
+// Obtener todos los productos (para stock, incluso sin ventas) - SOLO PRODUCTOS
+$sqlProductosConStock = "
+SELECT 
+    proveedor,
+    nombre,
+    cantidad AS stock_actual,
+    precio_compra,
+    precio_venta,
+    CASE 
+        WHEN LOWER(nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
+             AND LOWER(proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
+        THEN 1
+        ELSE 0
+    END AS es_producto_especial
+FROM productos
+WHERE activo = 1 
+AND tipo_inventario = 'producto'  /* EXCLUIR INSUMOS */
+";
+
+if ($filtroProveedor !== '') {
+    $sqlProductosConStock .= " AND proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
+}
+
+$sqlProductosConStock .= " ORDER BY proveedor ASC, nombre ASC";
+$resultadoProductos = $conn->query($sqlProductosConStock);
+$todosProductos = [];
+if ($resultadoProductos) {
+    while ($row = $resultadoProductos->fetch_assoc()) {
+        $todosProductos[] = $row;
+    }
+}
+
+// Para compatibilidad con el código existente
+$totalVentas = $totalesGlobales['total_ventas'];
+$totalProveedor = $totalesGlobales['total_deuda']; // AHORA esto NO incluye el producto especial
+$totalGanancia = $totalesGlobales['total_ganancia']; // Esto SÍ incluye ganancia del producto especial
 
 // --- CONSULTA PARA PRODUCTOS CON VENTAS (para la vista) ---
 $sql = "
@@ -17,6 +148,12 @@ SELECT
     p.precio_compra,
     p.precio_venta,
     p.cantidad,
+    CASE 
+        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
+             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
+        THEN 1
+        ELSE 0
+    END AS es_producto_especial,
     IFNULL((
         SELECT SUM(v.cantidad_vendida)
         FROM ventas v
@@ -52,14 +189,21 @@ if ($resultado) {
         $stock = (int)$row['cantidad'];
 
         $ganancia = ($row['precio_venta'] - $row['precio_compra']) * $vendidos;
-        $costoProveedor = $row['precio_compra'] * $vendidos;
-        $ventaTotal = $row['precio_venta'] * $vendidos; // NUEVO: Total de ventas en dinero
+        
+        // Para la deuda, si es producto especial, la deuda es 0
+        if ($row['es_producto_especial']) {
+            $costoProveedor = 0;
+        } else {
+            $costoProveedor = $row['precio_compra'] * $vendidos;
+        }
+        
+        $ventaTotal = $row['precio_venta'] * $vendidos;
 
         $totalGanancia += $ganancia;
         $totalProveedor += $costoProveedor;
         $totalVendidos += $vendidos;
         $totalStock += $stock;
-        $totalVentas += $ventaTotal; // NUEVO: Acumular total de ventas
+        $totalVentas += $ventaTotal;
 
         $productos[] = [
             'nombre' => $row['nombre'],
@@ -68,7 +212,8 @@ if ($resultado) {
             'stock' => $stock,
             'precio_compra' => $row['precio_compra'],
             'precio_venta' => $row['precio_venta'],
-            'ganancia' => $ganancia
+            'ganancia' => $ganancia,
+            'es_especial' => $row['es_producto_especial']
         ];
     }
 }
@@ -89,6 +234,31 @@ if ($resultadoFechas) {
         $fechasVentas[] = $row['fecha'];
     }
 }
+
+// Calcular total de productos vendidos (solo de ventas agrupadas)
+$totalVendidosCorrecto = array_sum(array_column($ventasAgrupadas, 'total_vendido'));
+
+// Calcular stock total (de TODOS los productos activos)
+$totalStockCorrecto = array_sum(array_column($todosProductos, 'stock_actual'));
+
+// Calcular número total de productos diferentes (activos)
+$totalProductosDiferentes = count($todosProductos);
+
+// Calcular valor del inventario (precio_venta * stock_actual) de TODOS los productos
+$valorInventarioTotal = 0;
+foreach ($todosProductos as $producto) {
+    $valorInventarioTotal += $producto['precio_venta'] * $producto['stock_actual'];
+}
+
+// Verificar si hay producto especial para mostrar mensajes
+$hayProductoEspecial = false;
+foreach ($ventasAgrupadas as $v) {
+    if ($v['es_producto_especial']) {
+        $hayProductoEspecial = true;
+        break;
+    }
+}
+
 ?>
 
 <style>
@@ -197,7 +367,7 @@ table {
     text-align: right;
 }
 
-/* ESTILOS PARA EL DROPDOWN PDF (MODAL QUE SALE DEL BOTÓN) */
+/* ESTILOS PARA EL DROPDOWN PDF */
 .pdf-dropdown-container {
     position: relative;
     display: inline-block;
@@ -516,17 +686,17 @@ table {
 
 /* Forzar colores sólidos en los eventos de fondo */
 .evento-venta {
-    background-color: #38aa5389 !important; /* 25% opacidad */
+    background-color: #38aa5389 !important;
     opacity: 1 !important;
 }
 
 .evento-reporte {
-    background-color: #dc35469e !important; /* 25% opacidad */
+    background-color: #dc35469e !important;
     opacity: 1 !important;
 }
 
 .evento-ambos {
-    background-color: #ffc107a7 !important; /* 25% opacidad */
+    background-color: #ffc107a7 !important;
     opacity: 1 !important;
 }
 
@@ -573,7 +743,7 @@ table {
                             <i class="fas fa-chevron-down ml-1" style="font-size: 12px;"></i>
                         </button>
                         
-                        <!-- DROPDOWN MENU (sale del botón) -->
+                        <!-- DROPDOWN MENU -->
                         <div class="pdf-dropdown-menu" id="pdfDropdown">
                             <div class="pdf-dropdown-header">
                                 <h3><i class="fas fa-file-export text-primary mr-2"></i>Exportar Reporte</h3>
@@ -674,80 +844,93 @@ table {
             </div>
 
             <!-- KPIs con información adicional -->
-            <div class="row">
-
-                <div class="col-12 col-md-6 col-lg-3 mb-3">
-                    <div class="small-box bg-info">
-                        <div class="inner">
-                            <h3><?= number_format($totalVendidos) ?></h3>
-                            <p class="mb-0">Productos vendidos</p>
-                            <small><?= count($productos) ?> productos diferentes</small>
-                            <div class="mini-progress">
-                                <div class="mini-progress-bar" style="width: 100%"></div>
-                            </div>
-                        </div>
-                        <div class="icon"><i class="fas fa-box"></i></div>
-                        <div class="small-box-footer">
-                            <i class="fas fa-chart-bar mr-1"></i> Total del período
-                        </div>
-                    </div>
+            <!-- KPIs con información CORREGIDA -->
+<div class="row">
+    <div class="col-12 col-md-6 col-lg-3 mb-3 d-flex">
+        <div class="small-box bg-info d-flex flex-column w-100">
+            <div class="inner flex-grow-1">
+                <h3><?= number_format($totalVendidosCorrecto) ?></h3>
+                <p class="mb-0">Productos vendidos</p>
+                <small><?= $totalProductosDiferentes ?> productos en inventario</small>
+                <div class="mini-progress mt-2">
+                    <?php $porcentajeVendido = $totalStockCorrecto > 0 ? ($totalVendidosCorrecto / $totalStockCorrecto) * 100 : 0; ?>
+                    <div class="mini-progress-bar" style="width: <?= min(100, $porcentajeVendido) ?>%"></div>
                 </div>
-
-                <div class="col-12 col-md-6 col-lg-3 mb-3">
-                    <div class="small-box bg-danger">
-                        <div class="inner">
-                            <h3>$<?= number_format($totalProveedor, 2) ?></h3>
-                            <p class="mb-0">Deuda con proveedores</p>
-                            <small>Costo de productos vendidos</small>
-                            <div class="mini-progress">
-                                <?php $porcentajeCosto = ($totalGanancia + $totalProveedor) > 0 ? ($totalProveedor / ($totalGanancia + $totalProveedor)) * 100 : 0; ?>
-                                <div class="mini-progress-bar" style="width: <?= $porcentajeCosto ?>%"></div>
-                            </div>
-                        </div>
-                        <div class="icon"><i class="fas fa-hand-holding-usd"></i></div>
-                        <div class="small-box-footer">
-                            <i class="fas fa-percentage mr-1"></i> <?= number_format($porcentajeCosto, 1) ?>% del costo total
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-6 col-lg-3 mb-3">
-                    <div class="small-box bg-success">
-                        <div class="inner">
-                            <h3>$<?= number_format($totalGanancia, 2) ?></h3>
-                            <p class="mb-0">Ganancia neta</p>
-                            <small>Margen: <?= $totalProveedor > 0 ? number_format(($totalGanancia / $totalProveedor) * 100, 1) : 0 ?>%</small>
-                            <div class="mini-progress">
-                                <?php $porcentajeGanancia = ($totalGanancia + $totalProveedor) > 0 ? ($totalGanancia / ($totalGanancia + $totalProveedor)) * 100 : 0; ?>
-                                <div class="mini-progress-bar" style="width: <?= $porcentajeGanancia ?>%"></div>
-                            </div>
-                        </div>
-                        <div class="icon"><i class="fas fa-chart-line"></i></div>
-                        <div class="small-box-footer">
-                            <i class="fas fa-arrow-up mr-1"></i> Rentabilidad
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-6 col-lg-3 mb-3">
-                    <div class="small-box bg-warning">
-                        <div class="inner">
-                            <h3><?= number_format($totalStock) ?></h3>
-                            <p class="mb-0">Stock restante</p>
-                            <small>Valor: $<?= number_format($totalStock * 100, 2) ?></small>
-                            <div class="mini-progress">
-                                <?php $porcentajeStock = $totalVendidos > 0 ? min(100, ($totalStock / $totalVendidos) * 100) : 0; ?>
-                                <div class="mini-progress-bar" style="width: <?= $porcentajeStock ?>%"></div>
-                            </div>
-                        </div>
-                        <div class="icon"><i class="fas fa-warehouse"></i></div>
-                        <div class="small-box-footer">
-                            <i class="fas fa-boxes mr-1"></i> Inventario actual
-                        </div>
-                    </div>
-                </div>
-
             </div>
+            <div class="icon"><i class="fas fa-box"></i></div>
+            <div class="small-box-footer mt-auto">
+                <i class="fas fa-chart-bar mr-1"></i> <?= number_format($porcentajeVendido, 1) ?>% del inventario vendido
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-3 mb-3 d-flex">
+        <div class="small-box bg-danger d-flex flex-column w-100">
+            <div class="inner flex-grow-1">
+                <h3>$<?= number_format($totalProveedor, 2) ?></h3>
+                <p class="mb-0">Deuda con proveedores</p>
+                <small>
+                    Costo de productos vendidos
+                    <?php if ($hayProductoEspecial): ?>
+                    <br><span class="text-warning"><i class="fas fa-check-circle"></i> (Excluye libretas pagadas)</span>
+                    <?php endif; ?>
+                </small>
+                <div class="mini-progress mt-2">
+                    <?php $porcentajeCosto = ($totalGanancia + $totalProveedor) > 0 ? ($totalProveedor / ($totalGanancia + $totalProveedor)) * 100 : 0; ?>
+                    <div class="mini-progress-bar" style="width: <?= $porcentajeCosto ?>%"></div>
+                </div>
+            </div>
+            <div class="icon"><i class="fas fa-hand-holding-usd"></i></div>
+            <div class="small-box-footer mt-auto">
+                <i class="fas fa-percentage mr-1"></i> <?= number_format($porcentajeCosto, 1) ?>% del costo total
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-3 mb-3 d-flex">
+        <div class="small-box bg-success d-flex flex-column w-100">
+            <div class="inner flex-grow-1">
+                <h3>$<?= number_format($totalGanancia, 2) ?></h3>
+                <p class="mb-0">Ganancia neta</p>
+                <small>
+                    Margen: <?= $totalProveedor > 0 ? number_format(($totalGanancia / $totalProveedor) * 100, 1) : 0 ?>%
+                    <?php if ($hayProductoEspecial): ?>
+                    <br><span class="text-light"><i class="fas fa-check-circle"></i> Incluye libretas pagadas</span>
+                    <?php endif; ?>
+                </small>
+                <div class="mini-progress mt-2">
+                    <?php $porcentajeGanancia = ($totalGanancia + $totalProveedor) > 0 ? ($totalGanancia / ($totalGanancia + $totalProveedor)) * 100 : 0; ?>
+                    <div class="mini-progress-bar" style="width: <?= $porcentajeGanancia ?>%"></div>
+                </div>
+            </div>
+            <div class="icon"><i class="fas fa-chart-line"></i></div>
+            <div class="small-box-footer mt-auto">
+                <i class="fas fa-arrow-up mr-1"></i> Rentabilidad
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-3 mb-3 d-flex">
+        <div class="small-box bg-warning d-flex flex-column w-100">
+            <div class="inner flex-grow-1">
+                <h3><?= number_format($totalStockCorrecto) ?></h3>
+                <p class="mb-0">Stock restante total</p>
+                <small>
+                    Valor: $<?= number_format($valorInventarioTotal, 2) ?> | 
+                    <?= $totalProductosDiferentes ?> productos
+                </small>
+                <div class="mini-progress mt-2">
+                    <?php $porcentajeStock = $totalStockCorrecto > 0 ? (($totalStockCorrecto - $totalVendidosCorrecto) / $totalStockCorrecto) * 100 : 0; ?>
+                    <div class="mini-progress-bar" style="width: <?= $porcentajeStock ?>%"></div>
+                </div>
+            </div>
+            <div class="icon"><i class="fas fa-warehouse"></i></div>
+            <div class="small-box-footer mt-auto">
+                <i class="fas fa-boxes mr-1"></i> Invetario actual
+            </div>
+        </div>
+    </div>
+</div>
             
             <!-- Mensaje si no hay ventas -->
             <?php if (empty($productos)): ?>
@@ -779,7 +962,7 @@ table {
                                 <th>Producto</th>
                                 <th>Proveedor</th>
                                 <th class="text-center">Vendidos</th>
-                                <th class="text-center">Stock</th>
+                                <th class="text-center">Stock Restante</th>
                                 <th class="text-right">Compra</th>
                                 <th class="text-right">Venta</th>
                                 <th class="text-right">Ganancia</th>
@@ -787,8 +970,12 @@ table {
                         </thead>
                         <tbody>
                         <?php foreach ($productos as $p): ?>
-                            <tr>
-                                <td><?= $p['nombre'] ?></td>
+                            <tr class="<?= $p['es_especial'] ? 'table-success' : '' ?>">
+                                <td><?= $p['nombre'] ?>
+                                    <?php if ($p['es_especial']): ?>
+                                        <span class="badge badge-success ml-1"><i class="fas fa-check-circle"></i> Pagado</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= $p['proveedor'] ?></td>
                                 <td class="text-center"><?= $p['vendidos'] ?></td>
                                 <td class="text-center">
@@ -808,7 +995,7 @@ table {
                 </div>
             </div>
 
-            <!-- DEUDA CON PROVEEDORES -->
+            <!-- DEUDA CON PROVEEDORES - MODIFICADA PARA MOSTRAR EL PRODUCTO ESPECIAL -->
             <div class="card card-outline card-danger shadow-sm mt-4">
                 <div class="card-header d-flex flex-column flex-md-row align-items-md-center">
                     <h3 class="card-title font-weight-bold mb-2 mb-md-0">
@@ -821,37 +1008,71 @@ table {
                     </span>
                 </div>
 
-                <div class="card-body table-responsive p-0">
-                    <table class="table table-hover table-sm mb-0 text-nowrap">
-                        <thead class="thead-dark">
-                            <tr>
-                                <th>Producto</th>
-                                <th>Proveedor</th>
-                                <th class="text-center">Vendidos</th>
-                                <th class="text-right">Costo unitario</th>
-                                <th class="text-right">Deuda total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($productos as $p): ?>
-                            <?php $deuda = $p['precio_compra'] * $p['vendidos']; ?>
-                            <tr>
-                                <td><?= $p['nombre'] ?></td>
-                                <td><?= $p['proveedor'] ?></td>
-                                <td class="text-center"><?= $p['vendidos'] ?></td>
-                                <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
-                                <td class="text-right font-weight-bold text-danger">
-                                    $<?= number_format($deuda, 2) ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                <div class="card-body">
+                    <!-- ALERTA PARA EL PRODUCTO ESPECIAL -->
+                    <div class="alert alert-success alert-dismissible fade show" id="alertaProductoEspecial">
+                        <button type="button" class="close" onclick="ocultarAlertaProductoEspecial()" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h5><i class="icon fas fa-check-circle"></i> Producto pagado por adelantado</h5>
+                        <p>
+                            Las <strong>libretas del proveedor Nevaris 3D</strong> están excluidas de esta deuda porque se pagaron por adelantado. 
+                            Sin embargo, su ganancia SÍ está incluida en el reporte de ventas.
+                        </p>
+                    </div>
+
+                    <!-- BOTÓN PARA MOSTRAR LA ALERTA (OCULTO POR DEFECTO) -->
+                    <div class="text-center mb-3" id="btnMostrarAlertaEspecial" style="display: none;">
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="mostrarAlertaProductoEspecial()">
+                            <i class="fas fa-info-circle mr-1"></i> Ver información sobre productos pagados
+                        </button>
+                    </div>
+
+                    <div class="table-responsive p-0">
+                        <table class="table table-hover table-sm mb-0 text-nowrap">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Proveedor</th>
+                                    <th class="text-center">Vendidos</th>
+                                    <th class="text-right">Costo unitario</th>
+                                    <th class="text-right">Deuda total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($ventasAgrupadas as $p): ?>
+                                <?php 
+                                $deuda = $p['deuda_total']; // Esto ya es 0 para el producto especial
+                                $esEspecial = $p['es_producto_especial'];
+                                
+                                // Solo mostrar productos con deuda > 0 O el producto especial (para mostrarlo como pagado)
+                                if ($deuda > 0 || $esEspecial):
+                                ?>
+                                <tr class="<?= $esEspecial ? 'table-success' : '' ?>">
+                                    <td><?= $p['producto'] ?></td>
+                                    <td><?= $p['proveedor'] ?></td>
+                                    <td class="text-center"><?= $p['total_vendido'] ?></td>
+                                    <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
+                                    <td class="text-right font-weight-bold <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
+                                        <?php if ($esEspecial): ?>
+                                            <span class="badge badge-success">PAGADO</span>
+                                        <?php else: ?>
+                                            $<?= number_format($deuda, 2) ?>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div class="card-footer text-right">
                     <small class="text-muted">
-                        Este monto representa el total pendiente de pago a proveedores.
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Este monto representa el total pendiente de pago a proveedores. 
+                        Las <strong>libretas de Nevaris 3D</strong> están excluidas (ya pagadas).
                     </small>
                 </div>
             </div>
@@ -880,7 +1101,6 @@ table {
                         <div class="col-lg-3 col-md-4">
                             <div class="info-box bg-light p-3 h-100" style="border-left: 4px solid #17a2b8;">
                                 <div class="info-box-content">
-                                    <!-- Título principal con tooltip informativo -->
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <h5 class="text-dark mb-0">
                                             <i class="fas fa-calendar-alt mr-2 text-info"></i>
@@ -919,15 +1139,15 @@ table {
                                         <table class="table table-sm table-borderless mb-0">
                                             <tr>
                                                 <td class="pl-0 py-1">Días con ventas:</td>
-                                                <td class="text-success font-weight-bold text-right py-1" id="diasVentas">0</td>
+                                                <td class="text-success font-weight-bold py-1" id="diasVentas">0</td>
                                             </tr>
                                             <tr>
                                                 <td class="pl-0 py-1">Días con reportes:</td>
-                                                <td class="text-danger font-weight-bold text-right py-1" id="diasReportes">0</td>
+                                                <td class="text-danger font-weight-bold py-1" id="diasReportes">0</td>
                                             </tr>
                                             <tr>
                                                 <td class="pl-0 py-1">Total días activos:</td>
-                                                <td class="text-primary font-weight-bold text-right py-1" id="diasActivos">0</td>
+                                                <td class="text-primary font-weight-bold py-1" id="diasActivos">0</td>
                                             </tr>
                                         </table>
                                     </div>                        
@@ -990,6 +1210,9 @@ table {
                                         <i class="fas fa-info-circle mr-1"></i>
                                         La ganancia representa el <?= ($totalGanancia + $totalProveedor) > 0 ? number_format(($totalGanancia / ($totalGanancia + $totalProveedor)) * 100, 1) : 0 ?>% 
                                         de los ingresos totales.
+                                        <?php if ($hayProductoEspecial): ?>
+                                        <br><span class="text-success"><i class="fas fa-check-circle"></i> Incluye libretas pagadas</span>
+                                        <?php endif; ?>
                                     </small>
                                 </div>
                             </div>
@@ -1023,6 +1246,48 @@ const closeDropdownBtn = document.getElementById('closeDropdownBtn');
 // Variables para el calendario
 let calendar = null;
 let fechasVentasPHP = <?= json_encode($fechasVentas) ?>;
+
+// ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
+const STORAGE_KEY_ESPECIAL = 'ocultarAlertaProductoEspecial';
+
+function ocultarAlertaProductoEspecial() {
+    const alerta = document.getElementById('alertaProductoEspecial');
+    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    
+    if (alerta && btnContainer) {
+        alerta.style.display = 'none';
+        btnContainer.style.display = 'block';
+        localStorage.setItem(STORAGE_KEY_ESPECIAL, 'true');
+    }
+}
+
+function mostrarAlertaProductoEspecial() {
+    const alerta = document.getElementById('alertaProductoEspecial');
+    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    
+    if (alerta && btnContainer) {
+        alerta.style.display = 'block';
+        btnContainer.style.display = 'none';
+        localStorage.removeItem(STORAGE_KEY_ESPECIAL);
+    }
+}
+
+function verificarEstadoAlertaEspecial() {
+    const alerta = document.getElementById('alertaProductoEspecial');
+    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    
+    if (!alerta || !btnContainer) return;
+    
+    const alertaOculta = localStorage.getItem(STORAGE_KEY_ESPECIAL);
+    
+    if (alertaOculta === 'true') {
+        alerta.style.display = 'none';
+        btnContainer.style.display = 'block';
+    } else {
+        alerta.style.display = 'block';
+        btnContainer.style.display = 'none';
+    }
+}
 
 // Función para abrir el dropdown
 function openDropdown() {
@@ -1095,7 +1360,6 @@ function cargarEventosCalendario() {
     
     // Agregar días con ventas (desde PHP)
     fechasVentasPHP.forEach(fecha => {
-        // Asegurar formato YYYY-MM-DD
         const fechaStr = fecha.split('T')[0];
         eventosMap.set(fechaStr, {
             venta: true,
@@ -1106,7 +1370,6 @@ function cargarEventosCalendario() {
     // Agregar días con reportes (desde localStorage)
     const reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
     reportesGuardados.forEach(fecha => {
-        // Asegurar formato YYYY-MM-DD
         const fechaStr = fecha.split('T')[0];
         eventosMap.set(fechaStr, {
             venta: eventosMap.get(fechaStr)?.venta || false,
@@ -1118,40 +1381,39 @@ function cargarEventosCalendario() {
     let contVentas = 0;
     let contReportes = 0;
     
-eventosMap.forEach((valor, fecha) => {
-    // Crear fecha en zona horaria local (mediodía para evitar problemas)
-    const [year, month, day] = fecha.split('-').map(Number);
-    const fechaObj = new Date(year, month - 1, day, 12, 0, 0);
-    
-    if (valor.venta) contVentas++;
-    if (valor.reporte) contReportes++;
-    
-    let className = '';
-    let tooltip = '';
-    
-    if (valor.venta && valor.reporte) {
-        className = 'evento-ambos';
-        tooltip = 'Ventas y reportes';
-    } else if (valor.venta) {
-        className = 'evento-venta';
-        tooltip = 'Día con ventas';
-    } else if (valor.reporte) {
-        className = 'evento-reporte';
-        tooltip = 'Día con reportes';
-    }
-    
-    eventos.push({
-        start: fechaObj,
-        allDay: true,
-        display: 'background',
-        classNames: [className],
-        extendedProps: {
-            tooltip: tooltip,
-            tieneVenta: valor.venta,
-            tieneReporte: valor.reporte
+    eventosMap.forEach((valor, fecha) => {
+        const [year, month, day] = fecha.split('-').map(Number);
+        const fechaObj = new Date(year, month - 1, day, 12, 0, 0);
+        
+        if (valor.venta) contVentas++;
+        if (valor.reporte) contReportes++;
+        
+        let className = '';
+        let tooltip = '';
+        
+        if (valor.venta && valor.reporte) {
+            className = 'evento-ambos';
+            tooltip = 'Ventas y reportes';
+        } else if (valor.venta) {
+            className = 'evento-venta';
+            tooltip = 'Día con ventas';
+        } else if (valor.reporte) {
+            className = 'evento-reporte';
+            tooltip = 'Día con reportes';
         }
+        
+        eventos.push({
+            start: fechaObj,
+            allDay: true,
+            display: 'background',
+            classNames: [className],
+            extendedProps: {
+                tooltip: tooltip,
+                tieneVenta: valor.venta,
+                tieneReporte: valor.reporte
+            }
+        });
     });
-});
     
     document.getElementById('diasVentas').textContent = contVentas;
     document.getElementById('diasReportes').textContent = contReportes;
@@ -1164,6 +1426,8 @@ eventosMap.forEach((valor, fecha) => {
 
 // Inicializar calendario
 document.addEventListener('DOMContentLoaded', function() {
+    verificarEstadoAlertaEspecial();
+    
     const calendarEl = document.getElementById('calendario');
     
     if (calendarEl) {
@@ -1197,14 +1461,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     day: 'numeric'
                 });
                 
-                // Capitalizar primera letra del día
                 const fechaCapitalizada = fechaLocal.charAt(0).toUpperCase() + fechaLocal.slice(1);
                 
-                // Obtener reportes guardados para esta fecha específica
                 const reportesGuardados = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
                 const reportesFecha = reportesGuardados[fechaStr] || [];
                 
-                // Determinar icono y mensaje según el tipo de día
                 let icono = 'info';
                 let titulo = 'Detalle del día';
                 let iconoHeader = '';
@@ -1220,7 +1481,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     titulo = 'Día con reportes';
                 }
                 
-                // Construir HTML del detalle
                 let html = `<div style="text-align: left;">`;
                 html += `<p><i class="fas fa-calendar-alt text-info mr-2"></i> <strong>Fecha:</strong> ${fechaCapitalizada}</p>`;
                 
@@ -1234,7 +1494,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (reportesFecha.length > 0) {
                         html += `<div style="margin-left: 25px; margin-top: 5px;">`;
                         
-                        // Mostrar cada reporte según su tipo
                         reportesFecha.forEach(reporte => {
                             if (reporte.tipo === 'general') {
                                 if (reporte.proveedor === 'TODOS') {
@@ -1259,7 +1518,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                     `;
                                 }
                             } else if (reporte.tipo === 'proveedor') {
-                                // Verificar si es reporte por proveedor para TODOS o para uno específico
                                 if (reporte.proveedor === 'TODOS_PROVEEDORES') {
                                     html += `
                                         <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
@@ -1817,7 +2075,7 @@ if (ctx) {
 }
 <?php endif; ?>
 
-// Función para generar PDFs
+// Función para generar PDFs - VERSIÓN CON ARCHIVO SEPARADO
 function generarPDF(tipo) {
     // Pasar el tipo a registrarRangoReporte
     registrarRangoReporte(tipo);
@@ -1840,88 +2098,53 @@ function generarPDF(tipo) {
     };
 
     <?php
-    // Consulta detallada para proveedores - ORDENADA por proveedor primero
-    $sqlProveedores = "
-    SELECT 
-        p.nombre AS producto,
-        p.proveedor,
-        v.fecha_venta,
-        DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha_venta_formateada,
-        DATE_FORMAT(v.fecha_venta, '%Y-%m-%d') AS fecha_venta_iso,
-        v.cantidad_vendida,
-        p.cantidad AS stock_actual,
-        p.precio_compra,
-        p.precio_venta,
-        (p.cantidad + v.cantidad_vendida) AS stock_inicial,
-        (p.precio_compra * v.cantidad_vendida) AS total_deuda,
-        (p.precio_venta * v.cantidad_vendida) AS total_venta,
-        ((p.precio_venta - p.precio_compra) * v.cantidad_vendida) AS ganancia
-    FROM ventas v
-    INNER JOIN productos p ON v.id_producto = p.id
-    WHERE 1
-    ";
+    // ============================================
+    // CONSULTA PRINCIPAL - AGRUPADA POR PROVEEDOR Y PRODUCTO
+    // ============================================
     
-    if ($filtroProveedor !== '') {
-        $sqlProveedores .= " AND p.proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
-    }
+    // Reutilizar las consultas que ya tienes al inicio del archivo
+    // No es necesario repetirlas aquí, ya están definidas arriba
     
-    if ($filtroInicio !== '' && $filtroFin !== '') {
-        $sqlProveedores .= " AND DATE(v.fecha_venta) BETWEEN '" . $conn->real_escape_string($filtroInicio) . "' 
-        AND '" . $conn->real_escape_string($filtroFin) . "'";
-    }
+    // Generar nombres de archivo - SOLO DEFINIR VARIABLES, NO FUNCIONES
+    $fechaActual = date('Y-m-d_H-i-s');
+    $usuario_nombre = $_SESSION['nombre'] ?? 'Sistema';
+    $usuario_id = $_SESSION['usuario_id'] ?? 0;
+    $totalRegistros = count($ventasAgrupadas);
     
-    // ORDENAR PRIMERO POR PROVEEDOR, LUEGO POR PRODUCTO
-    $sqlProveedores .= " ORDER BY p.proveedor ASC, p.nombre ASC, v.fecha_venta DESC";
-    
-    $resultadoProveedores = $conn->query($sqlProveedores);
-    $ventasDetalle = [];
-    $deudaPorProveedor = [];
-    $ventasPorFecha = [];
-    $resumenMensual = [];
-    
-    if ($resultadoProveedores) {
-        while ($row = $resultadoProveedores->fetch_assoc()) {
-            $ventasDetalle[] = $row;
-            $prov = $row['proveedor'];
-            if (!isset($deudaPorProveedor[$prov])) {
-                $deudaPorProveedor[$prov] = 0;
-            }
-            $deudaPorProveedor[$prov] += $row['total_deuda'];
-            
-            $fecha = $row['fecha_venta_iso'];
-            if (!isset($ventasPorFecha[$fecha])) {
-                $ventasPorFecha[$fecha] = [
-                    'fecha' => $row['fecha_venta_formateada'],
-                    'total_ventas' => 0,
-                    'total_deuda' => 0,
-                    'total_ganancia' => 0,
-                    'cantidad_productos' => 0
-                ];
-            }
-            $ventasPorFecha[$fecha]['total_ventas'] += $row['total_venta'];
-            $ventasPorFecha[$fecha]['total_deuda'] += $row['total_deuda'];
-            $ventasPorFecha[$fecha]['total_ganancia'] += $row['ganancia'];
-            $ventasPorFecha[$fecha]['cantidad_productos'] += $row['cantidad_vendida'];
-            
-            $mes = date('Y-m', strtotime($row['fecha_venta']));
-            if (!isset($resumenMensual[$mes])) {
-                $resumenMensual[$mes] = [
-                    'mes' => date('F Y', strtotime($row['fecha_venta'])),
-                    'total_ventas' => 0,
-                    'total_deuda' => 0,
-                    'total_ganancia' => 0
-                ];
-            }
-            $resumenMensual[$mes]['total_ventas'] += $row['total_venta'];
-            $resumenMensual[$mes]['total_deuda'] += $row['total_deuda'];
-            $resumenMensual[$mes]['total_ganancia'] += $row['ganancia'];
-        }
-    }
-    
-    ksort($ventasPorFecha);
+    // Determinar nombres de archivo según los filtros
+    $nombreArchivoGeneral = "reporte_admin_{$fechaActual}.pdf";
+    $nombreArchivoProveedor = $filtroProveedor ? 
+        "reporte_proveedor_" . preg_replace('/[^a-zA-Z0-9]/', '_', $filtroProveedor) . "_{$fechaActual}.pdf" : 
+        "reporte_proveedores_todos_{$fechaActual}.pdf";
     ?>
 
-    // Función para generar PDF General
+    // Función para guardar el PDF en el servidor usando fetch
+    function guardarPDFenServidor(pdfBlob, nombreArchivo, tipoPDF) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('pdf_file', pdfBlob, nombreArchivo);
+            formData.append('carpeta', 'reportes_ventas');
+            formData.append('tipo', tipoPDF);
+            formData.append('proveedor', '<?= $filtroProveedor ?>');
+            formData.append('total_registros', '<?= $totalRegistros ?>');
+            
+            fetch('guardar_pdf.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resolve(data);
+                } else {
+                    reject(data.error || 'Error al guardar el PDF');
+                }
+            })
+            .catch(error => reject(error));
+        });
+    }
+
+    // Función para generar PDF General (Administrador)
     function generarPDFGeneral() {
         const docAdmin = new jsPDF({
             orientation: "p",
@@ -1957,7 +2180,7 @@ function generarPDF(tipo) {
             );
         }
 
-        <?php if (empty($productos)): ?>
+        <?php if (empty($ventasAgrupadas)): ?>
         docAdmin.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
         docAdmin.rect(0, 0, pageWidth, pageHeight, "F");
 
@@ -1974,7 +2197,21 @@ function generarPDF(tipo) {
         docAdmin.text("Por favor, seleccione un rango de fechas con ventas para visualizar el reporte", pageWidth / 2, 120, { align: "center" });
 
         addFooter(docAdmin, 1, 1);
-        docAdmin.save("Reporte_Ejecutivo_Ventas.pdf");
+        
+        // Guardar el PDF en el servidor y abrir en nueva ventana
+        const pdfBlob = docAdmin.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, '_blank');
+        
+        guardarPDFenServidor(pdfBlob, '<?= $nombreArchivoGeneral ?>', 'general')
+            .then(() => {
+                console.log('PDF guardado en servidor');
+                mostrarNotificacion('Reporte guardado exitosamente', 'success');
+            })
+            .catch(error => {
+                console.error('Error al guardar PDF:', error);
+                mostrarNotificacion('Reporte descargado pero no se pudo guardar en el servidor', 'warning');
+            });
         return;
         <?php endif; ?>
 
@@ -2022,279 +2259,168 @@ function generarPDF(tipo) {
 
         y = 145;
 
-        // --- ANÁLISIS TEMPORAL (con Proveedor primero) ---
-        if (Object.keys(<?= json_encode($ventasPorFecha) ?>).length > 0) {
-            if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
-            
-            docAdmin.setFontSize(16);
-            docAdmin.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-            docAdmin.setFont("helvetica", "bold");
-            docAdmin.text("Análisis Temporal de Ventas", 20, y);
-            y += 8;
-
-            <?php
-            $sqlDetallado = "
-            SELECT 
-                p.proveedor,
-                p.nombre AS producto,
-                DATE_FORMAT(v.fecha_venta, '%d/%m/%Y') AS fecha,
-                v.cantidad_vendida,
-                (p.precio_venta * v.cantidad_vendida) AS total_venta,
-                (p.precio_compra * v.cantidad_vendida) AS total_costo,
-                ((p.precio_venta - p.precio_compra) * v.cantidad_vendida) AS ganancia
-            FROM ventas v
-            INNER JOIN productos p ON v.id_producto = p.id
-            WHERE 1
-            ";
-            
-            if ($filtroProveedor !== '') {
-                $sqlDetallado .= " AND p.proveedor = '" . $conn->real_escape_string($filtroProveedor) . "'";
-            }
-            
-            if ($filtroInicio !== '' && $filtroFin !== '') {
-                $sqlDetallado .= " AND DATE(v.fecha_venta) BETWEEN '" . $conn->real_escape_string($filtroInicio) . "' 
-                AND '" . $conn->real_escape_string($filtroFin) . "'";
-            }
-            
-            // ORDENAR POR PROVEEDOR PRIMERO
-            $sqlDetallado .= " ORDER BY p.proveedor ASC, p.nombre ASC, v.fecha_venta DESC";
-            
-            $resultadoDetallado = $conn->query($sqlDetallado);
-            $detalleVentas = [];
-            $totalGananciaDetalle = 0;
-            
-            if ($resultadoDetallado) {
-                while ($row = $resultadoDetallado->fetch_assoc()) {
-                    $detalleVentas[] = $row;
-                    $totalGananciaDetalle += $row['ganancia'];
-                }
-            }
-            ?>
-
-            const detalleVentasData = [
-                <?php foreach ($detalleVentas as $venta): ?>
-                [
-                    '<?= addslashes($venta['proveedor']) ?>',
-                    '<?= addslashes($venta['producto']) ?>',
-                    '<?= $venta['fecha'] ?>',
-                    <?= $venta['cantidad_vendida'] ?>,
-                    '$<?= number_format($venta['total_venta'], 2) ?>',
-                    '$<?= number_format($venta['total_costo'], 2) ?>',
-                    '$<?= number_format($venta['ganancia'], 2) ?>'
-                ],
-                <?php endforeach; ?>
-            ];
-
-            docAdmin.autoTable({
-                head: [['Proveedor', 'Producto', 'Fecha', 'Cant', 'Venta', 'Costo', 'Ganancia']],
-                body: detalleVentasData,
-                startY: y,
-                theme: "grid",
-                headStyles: { fillColor: colors.secondary, textColor: colors.white, fontSize: 9 },
-                styles: { fontSize: 7, cellPadding: 2 },
-                columnStyles: {
-                    0: { cellWidth: 30, fontStyle: 'bold' },
-                    1: { cellWidth: 40 },
-                    2: { cellWidth: 20, halign: 'center' },
-                    3: { cellWidth: 12, halign: 'center' },
-                    4: { cellWidth: 22, halign: 'right' },
-                    5: { cellWidth: 22, halign: 'right' },
-                    6: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
-                },
-                margin: { left: 10, right: 10 }
-            });
-
-            y = docAdmin.lastAutoTable.finalY + 5;
-            docAdmin.setFontSize(9);
-            docAdmin.setFont("helvetica", "bold");
-            docAdmin.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-            docAdmin.text(`TOTAL GANANCIA ACUMULADA: $<?= number_format($totalGananciaDetalle, 2) ?>`, pageWidth - 30, y, { align: "right" });
-            y += 15;
-        }
-
-        // --- DETALLE DE PRODUCTOS VENDIDOS (con Proveedor primero) ---
-        if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
-
-        docAdmin.setFontSize(16);
-        docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
-        docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("Detalle de Productos Vendidos por Proveedor", 20, y);
-        y += 8;
-
-        // Crear datos ordenados con Proveedor primero
-        const productosData = [
-            <?php
-            // Obtener productos y ordenar por proveedor
-            $productosOrdenados = [];
-            foreach ($productos as $p) {
-                $productosOrdenados[] = [
-                    'proveedor' => $p['proveedor'],
-                    'nombre' => $p['nombre'],
-                    'vendidos' => $p['vendidos'],
-                    'stock' => $p['stock'],
-                    'precio_compra' => $p['precio_compra'],
-                    'precio_venta' => $p['precio_venta'],
-                    'ganancia' => $p['ganancia']
-                ];
-            }
-            
-            // Ordenar por proveedor y luego por producto
-            usort($productosOrdenados, function($a, $b) {
-                if ($a['proveedor'] == $b['proveedor']) {
-                    return strcmp($a['nombre'], $b['nombre']);
-                }
-                return strcmp($a['proveedor'], $b['proveedor']);
-            });
-            
-            foreach ($productosOrdenados as $prod): 
-            ?>
-            [
-                '<?= addslashes($prod['proveedor']) ?>',
-                '<?= addslashes($prod['nombre']) ?>',
-                <?= $prod['vendidos'] ?>,
-                <?= $prod['stock'] ?>,
-                '$<?= number_format($prod['precio_compra'], 2) ?>',
-                '$<?= number_format($prod['precio_venta'], 2) ?>',
-                '$<?= number_format($prod['ganancia'], 2) ?>'
-            ],
-            <?php endforeach; ?>
-        ];
-
-        docAdmin.autoTable({
-            head: [['Proveedor', 'Producto', 'Vend.', 'Stock', 'Compra', 'Venta', 'Ganancia']],
-            body: productosData,
-            startY: y,
-            theme: "striped",
-            headStyles: { fillColor: colors.success, textColor: colors.white, fontSize: 9 },
-            styles: { fontSize: 8, cellPadding: 4 },
-            columnStyles: {
-                0: { cellWidth: 35, fontStyle: 'bold' },
-                1: { cellWidth: 45 },
-                2: { cellWidth: 15, halign: 'center' },
-                3: { cellWidth: 15, halign: 'center' },
-                4: { cellWidth: 20, halign: 'right' },
-                5: { cellWidth: 20, halign: 'right' },
-                6: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
-            },
-            margin: { left: 15, right: 15 }
-        });
-
-        let totalGananciasTabla = 0;
-        productosData.forEach(item => {
-            totalGananciasTabla += parseFloat(item[6].replace(/[$,]/g, ''));
-        });
-
-        y = docAdmin.lastAutoTable.finalY + 5;
-        docAdmin.setFontSize(9);
-        docAdmin.setFont("helvetica", "bold");
-        docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
-        docAdmin.text(`TOTAL GANANCIAS: $${totalGananciasTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
-        y += 15;
-
-        // --- ANÁLISIS DE COSTOS (con Proveedor primero) ---
-        if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
-
-        docAdmin.setFontSize(16);
-        docAdmin.setTextColor(colors.warning[0], colors.warning[1], colors.warning[2]);
-        docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("Análisis de Costos por Proveedor", 20, y);
-        y += 8;
-
-        // Crear datos de costos ordenados por proveedor
-        const costosData = [
-            <?php
-            $costosOrdenados = [];
-            foreach ($productos as $p) {
-                $deuda = $p['precio_compra'] * $p['vendidos'];
-                if ($deuda > 0) {
-                    $costosOrdenados[] = [
-                        'proveedor' => $p['proveedor'],
-                        'producto' => $p['nombre'],
-                        'vendidos' => $p['vendidos'],
-                        'precio_compra' => $p['precio_compra'],
-                        'deuda' => $deuda
-                    ];
-                }
-            }
-            
-            // Ordenar por proveedor y luego por producto
-            usort($costosOrdenados, function($a, $b) {
-                if ($a['proveedor'] == $b['proveedor']) {
-                    return strcmp($a['producto'], $b['producto']);
-                }
-                return strcmp($a['proveedor'], $b['proveedor']);
-            });
-            
-            foreach ($costosOrdenados as $costo): 
-            ?>
-            [
-                '<?= addslashes($costo['proveedor']) ?>',
-                '<?= addslashes($costo['producto']) ?>',
-                <?= $costo['vendidos'] ?>,
-                '$<?= number_format($costo['precio_compra'], 2) ?>',
-                '$<?= number_format($costo['deuda'], 2) ?>'
-            ],
-            <?php endforeach; ?>
-        ];
-
-        docAdmin.autoTable({
-            head: [['Proveedor', 'Producto', 'Vendidos', 'Costo Unit.', 'Deuda Total']],
-            body: costosData,
-            startY: y,
-            theme: "striped",
-            headStyles: { fillColor: colors.warning, textColor: colors.dark, fontSize: 9 },
-            styles: { fontSize: 8, cellPadding: 4 },
-            columnStyles: {
-                0: { cellWidth: 35, fontStyle: 'bold' },
-                1: { cellWidth: 45 },
-                2: { cellWidth: 20, halign: 'center' },
-                3: { cellWidth: 25, halign: 'right' },
-                4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
-            },
-            margin: { left: 15, right: 15 }
-        });
-
-        let totalDeudaTabla = 0;
-        costosData.forEach(item => {
-            totalDeudaTabla += parseFloat(item[4].replace(/[$,]/g, ''));
-        });
-
-        y = docAdmin.lastAutoTable.finalY + 5;
-        docAdmin.setFontSize(9);
-        docAdmin.setFont("helvetica", "bold");
-        docAdmin.setTextColor(colors.warning[0], colors.warning[1], colors.warning[2]);
-        docAdmin.text(`TOTAL DEUDA ACUMULADA: $${totalDeudaTabla.toFixed(2)}`, pageWidth - 30, y, { align: "right" });
-        y += 15;
-
-        // --- GRÁFICA ---
-        <?php if ($totalGanancia > 0 || $totalProveedor > 0): ?>
+        // ============================================
+        // TABLA PRINCIPAL - VENTAS AGRUPADAS POR PROVEEDOR Y PRODUCTO
+        // ============================================
         if (y > 200) { docAdmin.addPage(); y = 25; pageNum++; }
+        
+        docAdmin.setFontSize(16);
+        docAdmin.setTextColor(colors.success[0], colors.success[1], colors.success[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("Resumen de Ventas por Producto", 20, y);
+        y += 8;
+
+        // Datos agrupados
+        const ventasAgrupadasData = [
+            <?php foreach ($ventasAgrupadas as $venta): ?>
+            [
+                '<?= addslashes($venta['proveedor']) ?>',
+                '<?= addslashes($venta['producto']) ?>',
+                <?= $venta['total_vendido'] ?>,
+                <?= $venta['stock_actual'] ?>,
+                '$<?= number_format($venta['precio_compra'], 2) ?>',
+                '$<?= number_format($venta['precio_venta'], 2) ?>',
+                '<?= $venta['es_producto_especial'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>',
+                '$<?= number_format($venta['ganancia_total'], 2) ?>'
+            ],
+            <?php endforeach; ?>
+        ];
+
+        docAdmin.autoTable({
+            head: [['Proveedor', 'Producto', 'Vendidos', 'Stock Restante', 'P.Compra', 'P.Venta', 'Deuda', 'Ganancia']],
+            body: ventasAgrupadasData,
+            startY: y,
+            theme: "striped",
+            headStyles: { fillColor: colors.success, textColor: colors.white, fontSize: 8 },
+            styles: { fontSize: 7, cellPadding: 2 },
+            columnStyles: {
+                0: { cellWidth: 30, fontStyle: 'bold' },
+                1: { cellWidth: 40 },
+                2: { cellWidth: 15, halign: 'center' },
+                3: { cellWidth: 20, halign: 'center' },
+                4: { cellWidth: 18, halign: 'right' },
+                5: { cellWidth: 18, halign: 'right' },
+                6: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
+                7: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+            },
+            margin: { left: 10, right: 10 }
+        });
+
+        y = docAdmin.lastAutoTable.finalY + 10;
+
+        // ============================================
+        // TABLA DE STOCK COMPLETO (INCLUYE PRODUCTOS SIN VENTAS)
+        // ============================================
+        if (y > 240) { docAdmin.addPage(); y = 25; pageNum++; }
 
         docAdmin.setFontSize(16);
+        docAdmin.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("Inventario Completo por Proveedor", 20, y);
+        y += 8;
+
+        // Crear datos de stock completo (todos los productos)
+        const stockCompletoData = [
+            <?php foreach ($todosProductos as $producto): 
+                // Buscar si este producto tiene ventas en el período
+                $vendido = 0;
+                $deuda = 0;
+                foreach ($ventasAgrupadas as $venta) {
+                    if ($venta['proveedor'] == $producto['proveedor'] && $venta['producto'] == $producto['nombre']) {
+                        $vendido = $venta['total_vendido'];
+                        $deuda = $venta['deuda_total'];
+                        break;
+                    }
+                }
+                $stockRestante = $producto['stock_actual'];
+            ?>
+            [
+                '<?= addslashes($producto['proveedor']) ?>',
+                '<?= addslashes($producto['nombre']) ?>',
+                <?= $producto['stock_actual'] ?>,
+                <?= $vendido ?>,
+                <?= $stockRestante - $vendido ?>,
+                '$<?= number_format($producto['precio_venta'], 2) ?>',
+                '<?= $producto['es_producto_especial'] ? "PAGADO" : "" ?>'
+            ],
+            <?php endforeach; ?>
+        ];
+
+        docAdmin.autoTable({
+            head: [['Proveedor', 'Producto', 'Stock Inicial', 'Vendidos', 'Stock Restante', 'P.Venta', 'Estado']],
+            body: stockCompletoData,
+            startY: y,
+            theme: "grid",
+            headStyles: { fillColor: colors.secondary, textColor: colors.white, fontSize: 8 },
+            styles: { fontSize: 7, cellPadding: 2 },
+            columnStyles: {
+                0: { cellWidth: 30, fontStyle: 'bold' },
+                1: { cellWidth: 40 },
+                2: { cellWidth: 20, halign: 'center' },
+                3: { cellWidth: 18, halign: 'center' },
+                4: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+                5: { cellWidth: 20, halign: 'right' },
+                6: { cellWidth: 20, halign: 'center' }
+            },
+            margin: { left: 10, right: 10 }
+        });
+
+        y = docAdmin.lastAutoTable.finalY + 15;
+
+        // --- RESUMEN POR PROVEEDOR ---
+        docAdmin.setFontSize(14);
         docAdmin.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docAdmin.setFont("helvetica", "bold");
-        docAdmin.text("Visualización de Rendimiento", 20, y);
+        docAdmin.text("Resumen de Deuda por Proveedor", 20, y);
         y += 8;
 
-        const canvas = document.getElementById("graficaVentas");
-        if (canvas) {
-            const imgData = canvas.toDataURL("image/png");
-            const imgWidth = 150;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            docAdmin.addImage(imgData, "PNG", (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
-            y += imgHeight + 15;
-        }
-        <?php endif; ?>
+        const resumenProvData = [
+            <?php 
+            ksort($deudaPorProveedor);
+            foreach ($deudaPorProveedor as $prov => $total): 
+            ?>
+            ['<?= addslashes($prov) ?>', '$<?= number_format($total, 2) ?>'],
+            <?php endforeach; ?>
+            ['', ''],
+            ['TOTAL GENERAL', '$<?= number_format($totalProveedor, 2) ?>']
+        ];
+
+        docAdmin.autoTable({
+            startY: y,
+            body: resumenProvData,
+            theme: "plain",
+            styles: { fontSize: 10, cellPadding: 4 },
+            columnStyles: {
+                0: { cellWidth: 120, fontStyle: 'bold', halign: 'left' },
+                1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }
+            },
+            margin: { left: 30, right: 30 }
+        });
 
         const totalPagesAdmin = docAdmin.internal.getNumberOfPages();
         for (let i = 1; i <= totalPagesAdmin; i++) {
             addFooter(docAdmin, i, totalPagesAdmin);
         }
 
-        docAdmin.save("Reporte_Administrador.pdf");
+        // Guardar el PDF en el servidor y abrir en nueva ventana
+        const pdfBlob = docAdmin.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, '_blank');
+        
+        guardarPDFenServidor(pdfBlob, '<?= $nombreArchivoGeneral ?>', 'general')
+            .then(() => {
+                console.log('PDF guardado en servidor');
+                mostrarNotificacion('Reporte guardado exitosamente', 'success');
+            })
+            .catch(error => {
+                console.error('Error al guardar PDF:', error);
+                mostrarNotificacion('Reporte descargado pero no se pudo guardar en el servidor', 'warning');
+            });
     }
 
-    // Función para generar PDF de Proveedores
+    // ============================================
+    // PDF PARA PROVEEDORES
+    // ============================================
     function generarPDFProveedores() {
         const docProv = new jsPDF({
             orientation: "p",
@@ -2361,7 +2487,7 @@ function generarPDF(tipo) {
         docProv.text(`Período: <?= htmlspecialchars($filtroInicio) ?> al <?= htmlspecialchars($filtroFin) ?>`, provPageWidth / 2, 72, { align: "center" });
         <?php endif; ?>
         
-        // --- RESUMEN ---
+        // --- RESUMEN DE DEUDA ---
         provY = 85;
         
         docProv.setFillColor(colors.light[0], colors.light[1], colors.light[2]);
@@ -2381,64 +2507,112 @@ function generarPDF(tipo) {
         
         provY += 45;
 
-        // --- TABLA DETALLADA (con Proveedor primero) ---
+        // ============================================
+        // TABLA PRINCIPAL - VENTAS AGRUPADAS PARA PROVEEDORES
+        // ============================================
         docProv.setFontSize(14);
         docProv.setTextColor(colors.dark[0], colors.dark[1], colors.dark[2]);
         docProv.setFont("helvetica", "bold");
-        docProv.text("Detalle de Ventas por Proveedor", 20, provY);
+        docProv.text("Detalle de Productos Vendidos", 20, provY);
         provY += 8;
 
-        // Ordenar datos por proveedor primero
-        const proveedoresData = [
-            <?php
-            // Ordenar ventasDetalle por proveedor y luego por producto
-            $ventasOrdenadas = $ventasDetalle;
-            usort($ventasOrdenadas, function($a, $b) {
-                if ($a['proveedor'] == $b['proveedor']) {
-                    return strcmp($a['producto'], $b['producto']);
-                }
-                return strcmp($a['proveedor'], $b['proveedor']);
-            });
-            
-            foreach ($ventasOrdenadas as $venta): 
-            ?>
+        // Datos agrupados para proveedores
+        const proveedoresDataAgrupados = [
+            <?php foreach ($ventasAgrupadas as $venta): ?>
             [
                 '<?= addslashes($venta['proveedor']) ?>',
                 '<?= addslashes($venta['producto']) ?>',
-                '<?= $venta['fecha_venta_formateada'] ?>',
-                <?= $venta['cantidad_vendida'] ?>,
+                <?= $venta['total_vendido'] ?>,
+                <?= $venta['stock_actual'] ?>,
                 '$<?= number_format($venta['precio_compra'], 2) ?>',
-                '$<?= number_format($venta['total_deuda'], 2) ?>'
+                '<?= $venta['es_producto_especial'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>'
             ],
             <?php endforeach; ?>
         ];
 
-        if (proveedoresData.length > 0) {
+        if (proveedoresDataAgrupados.length > 0) {
             docProv.autoTable({
-                head: [['Proveedor', 'Producto', 'Fecha Venta', 'Cant.', 'P.Compra', 'Deuda']],
-                body: proveedoresData,
+                head: [['Proveedor', 'Producto', 'Vendidos', 'Stock Restante', 'P.Compra', 'Deuda Total']],
+                body: proveedoresDataAgrupados,
                 startY: provY,
                 theme: "grid",
                 headStyles: { 
                     fillColor: colors.danger, 
                     textColor: colors.white, 
-                    fontSize: 9, 
+                    fontSize: 8, 
                     halign: 'center',
                     fontStyle: 'bold'
                 },
                 styles: { 
-                    fontSize: 8, 
+                    fontSize: 7, 
                     cellPadding: 3,
-                    overflow: 'linebreak',
-                    cellWidth: 'wrap'
+                    overflow: 'linebreak'
                 },
                 columnStyles: {
-                    0: { cellWidth: 35, fontStyle: 'bold', halign: 'left' },
-                    1: { cellWidth: 40, halign: 'left' },
-                    2: { cellWidth: 25, halign: 'center' },
-                    3: { cellWidth: 15, halign: 'center' },
-                    4: { cellWidth: 20, halign: 'right' },
-                    5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+                    0: { cellWidth: 30, fontStyle: 'bold', halign: 'left' },
+                    1: { cellWidth: 35, halign: 'left' },
+                    2: { cellWidth: 20, halign: 'center' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 23, halign: 'right' },
+                    5: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
+                },
+                margin: { left: 15, right: 15 }
+            });
+            
+            provY = docProv.lastAutoTable.finalY + 15;
+
+            // ============================================
+            // STOCK RESTANTE POR PRODUCTO
+            // ============================================
+            if (provY > 220) { docProv.addPage(); provY = 25; provPageNum++; }
+            
+            docProv.setFontSize(14);
+            docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+            docProv.setFont("helvetica", "bold");
+            docProv.text("Stock Restante por Producto", 20, provY);
+            provY += 8;
+
+            const stockRestanteData = [
+                <?php foreach ($todosProductos as $producto): 
+                    // Si hay filtro de proveedor, solo mostrar ese proveedor
+                    if ($filtroProveedor !== '' && $producto['proveedor'] != $filtroProveedor) continue;
+                    
+                    // Buscar ventas de este producto
+                    $vendido = 0;
+                    foreach ($ventasAgrupadas as $venta) {
+                        if ($venta['proveedor'] == $producto['proveedor'] && $venta['producto'] == $producto['nombre']) {
+                            $vendido = $venta['total_vendido'];
+                            break;
+                        }
+                    }
+                    $stockInicial = $producto['stock_actual'];
+                    $stockRestante = $stockInicial - $vendido;
+                ?>
+                [
+                    '<?= addslashes($producto['proveedor']) ?>',
+                    '<?= addslashes($producto['nombre']) ?>',
+                    <?= $stockInicial ?>,
+                    <?= $vendido ?>,
+                    <?= $stockRestante ?>,
+                    '<?= $producto['es_producto_especial'] ? "PAGADO" : "" ?>'
+                ],
+                <?php endforeach; ?>
+            ];
+
+            docProv.autoTable({
+                head: [['Proveedor', 'Producto', 'Stock Inicial', 'Vendidos', 'Stock Restante', 'Estado']],
+                body: stockRestanteData,
+                startY: provY,
+                theme: "striped",
+                headStyles: { fillColor: colors.danger, textColor: colors.white, fontSize: 8 },
+                styles: { fontSize: 7, cellPadding: 3 },
+                columnStyles: {
+                    0: { cellWidth: 35, fontStyle: 'bold' },
+                    1: { cellWidth: 50 },
+                    2: { cellWidth: 22, halign: 'center' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+                    5: { cellWidth: 20, halign: 'center' }
                 },
                 margin: { left: 15, right: 15 }
             });
@@ -2446,7 +2620,7 @@ function generarPDF(tipo) {
             provY = docProv.lastAutoTable.finalY + 15;
 
             // --- RESUMEN POR PROVEEDOR ---
-            if (provY > 220) { docProv.addPage(); provY = 25; provPageNum++; }
+            if (provY > 240) { docProv.addPage(); provY = 25; provPageNum++; }
             
             docProv.setFontSize(14);
             docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
@@ -2456,7 +2630,6 @@ function generarPDF(tipo) {
 
             const resumenProvData = [
                 <?php 
-                // Ordenar proveedores alfabéticamente
                 ksort($deudaPorProveedor);
                 foreach ($deudaPorProveedor as $prov => $total): 
                 ?>
@@ -2477,8 +2650,6 @@ function generarPDF(tipo) {
                 },
                 margin: { left: 30, right: 30 }
             });
-            
-            provY = docProv.lastAutoTable.finalY + 20;
         } else {
             docProv.setFontSize(14);
             docProv.setTextColor(colors.medium[0], colors.medium[1], colors.medium[2]);
@@ -2490,11 +2661,57 @@ function generarPDF(tipo) {
             addProvFooter(docProv, i, totalPagesProv);
         }
 
-        <?php if ($filtroProveedor !== ''): ?>
-        docProv.save("reporte_deuda_proveedor_<?= $nombreProveedorParaArchivo ?>.pdf");
-        <?php else: ?>
-        docProv.save("reporte_deuda_todos_proveedores.pdf");
-        <?php endif; ?>
+        // Guardar el PDF en el servidor y abrir en nueva ventana
+        const pdfBlob = docProv.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, '_blank');
+        
+        guardarPDFenServidor(pdfBlob, '<?= $nombreArchivoProveedor ?>', 'proveedor')
+            .then(() => {
+                console.log('PDF guardado en servidor');
+                mostrarNotificacion('Reporte guardado exitosamente', 'success');
+            })
+            .catch(error => {
+                console.error('Error al guardar PDF:', error);
+                mostrarNotificacion('Reporte descargado pero no se pudo guardar en el servidor', 'warning');
+            });
+    }
+
+    // Función para mostrar notificaciones
+    function mostrarNotificacion(mensaje, tipo) {
+        // Crear elemento de notificación si no existe
+        let notificacion = document.getElementById('notificacion-pdf');
+        if (!notificacion) {
+            notificacion = document.createElement('div');
+            notificacion.id = 'notificacion-pdf';
+            notificacion.style.position = 'fixed';
+            notificacion.style.top = '20px';
+            notificacion.style.right = '20px';
+            notificacion.style.padding = '15px 20px';
+            notificacion.style.borderRadius = '5px';
+            notificacion.style.color = 'white';
+            notificacion.style.fontWeight = 'bold';
+            notificacion.style.zIndex = '9999';
+            notificacion.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+            document.body.appendChild(notificacion);
+        }
+        
+        // Configurar estilo según tipo
+        if (tipo === 'success') {
+            notificacion.style.backgroundColor = '#4CAF50';
+        } else if (tipo === 'warning') {
+            notificacion.style.backgroundColor = '#ff9800';
+        } else {
+            notificacion.style.backgroundColor = '#f44336';
+        }
+        
+        notificacion.textContent = mensaje;
+        notificacion.style.display = 'block';
+        
+        // Ocultar después de 3 segundos
+        setTimeout(() => {
+            notificacion.style.display = 'none';
+        }, 3000);
     }
 
     // Ejecutar según el tipo seleccionado
@@ -2524,3 +2741,5 @@ document.querySelectorAll('.pdf-dropdown-btn').forEach(btn => {
     });
 });
 </script>
+
+<?php include('includes/footer.php'); ?>

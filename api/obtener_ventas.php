@@ -18,28 +18,28 @@ if ($rol === 'vendedor') {
     $where[] = "v.id_vendedor = " . intval($usuario_id);
 }
 
-if ($producto)
-    $where[] = "p.nombre LIKE '%" . $conn->real_escape_string($producto) . "%'";
+if ($producto) {
+    $producto_escaped = $conn->real_escape_string($producto);
+    $where[] = "EXISTS (
+        SELECT 1 FROM ventas v2 
+        JOIN productos p2 ON v2.id_producto = p2.id 
+        WHERE v2.folio_ticket = v.folio_ticket 
+        AND p2.nombre LIKE '%$producto_escaped%'
+    )";
+}
 
-if ($cliente)
-    $where[] = "v.correo_cliente LIKE '%" . $conn->real_escape_string($cliente) . "%'";
+if ($cliente) {
+    $cliente_escaped = $conn->real_escape_string($cliente);
+    $where[] = "v.correo_cliente LIKE '%$cliente_escaped%'";
+}
 
-if ($inicio && $fin)
-    $where[] = "DATE(v.fecha_venta) BETWEEN '" . 
-                $conn->real_escape_string($inicio) . "' 
-                AND '" . 
-                $conn->real_escape_string($fin) . "'";
+if ($inicio && $fin) {
+    $inicio_escaped = $conn->real_escape_string($inicio);
+    $fin_escaped = $conn->real_escape_string($fin);
+    $where[] = "DATE(v.fecha_venta) BETWEEN '$inicio_escaped' AND '$fin_escaped'";
+}
 
 $condicion = $where ? "WHERE " . implode(" AND ", $where) : "";
-
-/*
-|--------------------------------------------------------------------------
-| CONSULTA PRINCIPAL
-|--------------------------------------------------------------------------
-| Agregamos detección de pedido usando SUBSTRING_INDEX
-| Extrae el número después de PEDIDO-
-|--------------------------------------------------------------------------
-*/
 
 $sql = "
     SELECT 
@@ -47,42 +47,36 @@ $sql = "
         v.correo_cliente,
         v.fecha_venta,
         v.ticket_pdf,
+        
+        -- Calcular total general sumando todos los productos de la venta
+        (
+            SELECT SUM(v2.cantidad_vendida * p2.precio_venta)
+            FROM ventas v2
+            JOIN productos p2 ON v2.id_producto = p2.id
+            WHERE v2.folio_ticket = v.folio_ticket
+        ) AS total_general,
 
-        GROUP_CONCAT(p.nombre SEPARATOR '||') AS productos,
-        GROUP_CONCAT(v.cantidad_vendida SEPARATOR '||') AS cantidades,
-        GROUP_CONCAT((v.cantidad_vendida * p.precio_venta) SEPARATOR '||') AS totales,
-        GROUP_CONCAT(p.id SEPARATOR '||') AS ids_productos,
-
-        SUM(v.cantidad_vendida * p.precio_venta) AS total_general,
-
+        -- Determinar si es pedido y su estado
         CASE 
-            WHEN pe.total_pedidos IS NOT NULL 
-                 AND pe.total_pedidos = pe.completados
-            THEN 'completado'
-            WHEN pe.total_pedidos IS NOT NULL
-            THEN 'pendiente'
+            WHEN v.folio_ticket LIKE 'PEDIDO-%' THEN
+                CASE
+                    -- Extraer el número después de PEDIDO-
+                    WHEN (
+                        SELECT COUNT(*) FROM pedidos 
+                        WHERE id_orden = CAST(SUBSTRING_INDEX(v.folio_ticket, 'PEDIDO-', -1) AS UNSIGNED)
+                        AND estado = 'completado'
+                    ) = (
+                        SELECT COUNT(*) FROM pedidos 
+                        WHERE id_orden = CAST(SUBSTRING_INDEX(v.folio_ticket, 'PEDIDO-', -1) AS UNSIGNED)
+                    )
+                    THEN 'completado'
+                    ELSE 'pendiente'
+                END
             ELSE NULL
         END AS estado_pedido
 
     FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-
-    LEFT JOIN (
-        SELECT 
-            id_orden,
-            COUNT(*) as total_pedidos,
-            SUM(CASE WHEN estado = 'completado' THEN 1 ELSE 0 END) as completados
-        FROM pedidos
-        GROUP BY id_orden
-    ) pe ON pe.id_orden = 
-        CASE 
-            WHEN v.folio_ticket LIKE 'PEDIDO-%'
-            THEN CAST(SUBSTRING_INDEX(v.folio_ticket, 'PEDIDO-', -1) AS UNSIGNED)
-            ELSE NULL
-        END
-
     $condicion
-
     GROUP BY v.folio_ticket, v.correo_cliente, v.fecha_venta, v.ticket_pdf
     ORDER BY v.fecha_venta DESC
 ";
@@ -92,39 +86,17 @@ $data = [];
 
 if ($q) {
     while ($r = $q->fetch_assoc()) {
-
-        $productos  = explode("||", $r['productos']);
-        $cantidades = explode("||", $r['cantidades']);
-        $totales    = explode("||", $r['totales']);
-        $ids        = explode("||", $r['ids_productos']);
-
-        $items = [];
-
-        for ($i = 0; $i < count($productos); $i++) {
-            $items[] = [
-                'producto'     => $productos[$i],
-                'id_producto'  => intval($ids[$i]),
-                'cantidad'     => intval($cantidades[$i]),
-                'total'        => '$' . number_format($totales[$i], 2)
-            ];
-        }
-
         $data[] = [
             'folio_ticket'   => $r['folio_ticket'],
             'correo_cliente' => $r['correo_cliente'],
-
             'fecha_raw'      => $r['fecha_venta'],
             'fecha_venta'    => date('d/m/Y H:i', strtotime($r['fecha_venta'])),
-
             'ticket_pdf'     => $r['ticket_pdf'],
-            'total_general'  => '$' . number_format($r['total_general'], 2),
-
-            // 🔥 ESTE ES EL CAMPO IMPORTANTE
-            'estado_pedido'  => $r['estado_pedido'] ?? null,
-
-            'items'          => $items
+            'total_general'  => floatval($r['total_general']),
+            'estado_pedido'  => $r['estado_pedido'] ?? null
         ];
     }
 }
 
 echo json_encode(['data' => $data]);
+?>

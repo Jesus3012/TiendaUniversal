@@ -1,6 +1,4 @@
 <?php 
-// venta_admin.php (reemplaza tu archivo actual con este)
-// Requiere: includes/session.php, includes/db.php, includes/header.php, includes/navbar.php, includes/footer.php
 include 'includes/session.php';
 include 'includes/db.php';
 include 'includes/header.php';
@@ -17,9 +15,21 @@ if (isset($_POST['registrar_semanal_confirmado'])) {
     foreach ($cantidades as $id_producto => $cantidad) {
         $cantidad = intval($cantidad);
         if ($cantidad > 0) {
-            $q = $conn->query("SELECT cantidad FROM productos WHERE id = " . intval($id_producto));
+            // MODIFICADO: Verificar que sea producto antes de actualizar
+            $q = $conn->query("
+                SELECT cantidad, tipo_inventario 
+                FROM productos 
+                WHERE id = " . intval($id_producto)
+            );
             if (!$q) continue;
             $prod = $q->fetch_assoc();
+            
+            // Validar que sea producto
+            if($prod['tipo_inventario'] !== 'producto') {
+                $erroresStock[] = $id_producto;
+                continue;
+            }
+            
             if ($cantidad > $prod['cantidad']) {
                 $erroresStock[] = $id_producto;
             }
@@ -33,8 +43,8 @@ if (isset($_POST['registrar_semanal_confirmado'])) {
         <script>
         Swal.fire({
             icon: 'error',
-            title: 'Inventario insuficiente',
-            text: 'Uno o más productos quedarían con stock negativo. Ajusta las cantidades.',
+            title: 'Inventario insuficiente o producto inválido',
+            text: 'Verifica las cantidades y que solo estés vendiendo productos.',
             confirmButtonColor: '#d33'
         }).then(()=>{ window.location='venta_admin.php'; });
         </script>";
@@ -54,12 +64,13 @@ if (isset($_POST['registrar_semanal_confirmado'])) {
 
         if ($cantidad > 0) {
 
-            // Actualizar inventario
+            // Actualizar inventario (solo productos)
             $conn->query("
                 UPDATE productos 
                 SET cantidad = cantidad - $cantidad 
-                WHERE id = " . intval($id_producto)
-            );
+                WHERE id = " . intval($id_producto) . "
+                AND tipo_inventario = 'producto'
+            ");
 
             // Insertar en ventas con FOLIO
             $conn->query("
@@ -86,11 +97,15 @@ if (isset($_POST['registrar_semanal_confirmado'])) {
 
 
 // ---------- CONSULTA PRODUCTOS (para construir la tabla) ----------
+// MODIFICADO: Solo mostrar productos (no insumos)
 $productos = $conn->query("
     SELECT id, nombre, cantidad, precio_compra, precio_venta, proveedor
     FROM productos
+    WHERE tipo_inventario = 'producto'
     ORDER BY nombre ASC
 ");
+
+$total_productos = $productos->num_rows;
 ?>
 
 <!-- Styles (paleta naranja suave, minimalista) -->
@@ -140,6 +155,135 @@ $productos = $conn->query("
 .summary-table { width:100%; border-collapse:collapse; }
 .summary-table th, .summary-table td { padding:6px 8px; border-bottom:1px solid #eee; text-align:left; font-size:13px; }
 .summary-total { font-weight:700; color:#6a4a38; }
+
+/* Estilos para el buscador */
+.buscador-container {
+    position: relative;
+    min-width: 300px;
+}
+
+.clear-search {
+    position: absolute;
+    right: 45px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    cursor: pointer;
+    z-index: 10;
+    display: none;
+    font-size: 16px;
+}
+
+.clear-search:hover {
+    color: #e69138;
+}
+
+.buscador-container input:not(:placeholder-shown) + .clear-search,
+.buscador-container input:focus + .clear-search {
+    display: block;
+}
+
+/* Mensaje sin resultados */
+#noResultadosMensaje td {
+    background: #fff9f0;
+    color: #8a6d4f;
+    font-style: italic;
+    padding: 30px;
+}
+
+/* BUSCADOR FUSIONADO - BIEN A LA DERECHA */
+.buscador-container {
+    margin-left: auto;
+    min-width: 300px;
+}
+
+.buscador-fusionado {
+    background: white;
+    border-radius: 30px !important;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.buscador-fusionado:hover,
+.buscador-fusionado:focus-within {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: #fff;
+}
+
+.contador-prepend .input-group-text {
+    background: #f8f9fa !important;
+    color: #000000 !important;
+    font-weight: 600;
+    font-size: 13px;
+    padding-right: 12px;
+    border-radius: 30px 0 0 30px !important;
+}
+
+.contador-prepend .input-group-text i {
+    color: #e69138;
+}
+
+.search-prepend .input-group-text {
+    background: white !important;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+.search-prepend .input-group-text i {
+    color: #adb5bd;
+}
+
+.buscador-fusionado input.form-control {
+    padding-left: 5px;
+    font-size: 14px;
+}
+
+.buscador-fusionado input.form-control::placeholder {
+    color: #adb5bd;
+    font-style: italic;
+}
+
+.buscador-fusionado input.form-control:focus {
+    box-shadow: none;
+}
+
+.clear-search {
+    color: #adb5bd;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.clear-search:hover {
+    color: #e69138;
+    transform: scale(1.1);
+}
+
+/* Ocultar el clear cuando el input está vacío */
+.buscador-fusionado input:placeholder-shown ~ .input-group-append .clear-search {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .card-header.bg-primary {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 10px;
+    }
+    
+    .buscador-container {
+        margin-left: 0;
+        min-width: auto;
+    }
+}
 </style>
 
 <!-- Dependencias JS (SweetAlert2, Chart.js, html2canvas, jsPDF, SheetJS) -->
@@ -160,8 +304,38 @@ $productos = $conn->query("
 
     <section>
         <div class="card card-primary shadow">
-            <div class="card-header bg-primary">
-                <h3 class="card-title">Captura de cantidades vendidas</h3>
+            <div class="card-header bg-primary d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <h3 class="card-title mb-0">Captura de cantidades vendidas</h3>
+                </div>
+                
+                <!-- BUSCADOR Y CONTADOR FUSIONADO - BIEN A LA DERECHA -->
+                <div class="buscador-container">
+                    <div class="input-group input-group-sm buscador-fusionado">
+                        <div class="input-group-prepend contador-prepend">
+                            <span class="input-group-text bg-white border-0">
+                                <i class="fas fa-box text-muted mr-1"></i>
+                                <span id="contadorProductos"><?= $total_productos ?></span>
+                            </span>
+                        </div>
+                        <div class="input-group-prepend search-prepend">
+                            <span class="input-group-text bg-white border-0">
+                                <i class="fas fa-search text-muted"></i>
+                            </span>
+                        </div>
+                        <input type="text" 
+                            id="buscadorProductos" 
+                            class="form-control border-0" 
+                            placeholder="Buscar producto o proveedor...">
+                        <div class="input-group-append">
+                            <span class="input-group-text bg-white border-0 p-0">
+                                <span class="clear-search" onclick="limpiarBusqueda()" title="Limpiar búsqueda">
+                                    <i class="fas fa-times-circle"></i>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="card-body">
@@ -242,8 +416,6 @@ $productos = $conn->query("
    ------------------------------*/
 const qtyInputs = document.querySelectorAll('.qty-input');
 const previewBtn = document.getElementById('btnPreview');
-const exportExcelBtn = document.getElementById('btnExportExcel');
-const exportPDFBtn = document.getElementById('btnExportPDF');
 const submitFinalBtn = document.getElementById('btnSubmitFinal');
 const form = document.getElementById('formVentaAdmin');
 let currentChart = null;
@@ -293,10 +465,98 @@ qtyInputs.forEach(input => {
 });
 
 // ------------------------------
+// BUSCADOR DE PRODUCTOS
+// ------------------------------
+const buscador = document.getElementById('buscadorProductos');
+const contadorSpan = document.getElementById('contadorProductos');
+const filasProductos = document.querySelectorAll('#tablaProductos tbody tr');
+
+function filtrarProductos() {
+    const texto = buscador.value.toLowerCase().trim();
+    let visibles = 0;
+    
+    filasProductos.forEach(fila => {
+        // Obtener texto de búsqueda de la fila (producto + proveedor)
+        const producto = fila.children[0].textContent.toLowerCase();
+        const proveedor = fila.children[1].textContent.toLowerCase();
+        const textoCompleto = producto + ' ' + proveedor;
+        
+        if (texto === '' || textoCompleto.includes(texto)) {
+            fila.style.display = '';
+            visibles++;
+        } else {
+            fila.style.display = 'none';
+        }
+    });
+    
+    // Actualizar contador
+    contadorSpan.textContent = visibles;
+    
+    // Mostrar mensaje si no hay resultados
+    const tabla = document.getElementById('tablaProductos');
+    const tbody = tabla.querySelector('tbody');
+    let mensajeNoResultados = document.getElementById('noResultadosMensaje');
+    
+    if (visibles === 0 && texto !== '') {
+        if (!mensajeNoResultados) {
+            mensajeNoResultados = document.createElement('tr');
+            mensajeNoResultados.id = 'noResultadosMensaje';
+            mensajeNoResultados.innerHTML = `
+                <td colspan="8" class="text-center py-4">
+                    <div class="text-muted">
+                        <i class="fas fa-search fa-2x mb-2"></i><br>
+                        No se encontraron productos que coincidan con "<strong>${texto}</strong>"
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(mensajeNoResultados);
+        } else {
+            mensajeNoResultados.querySelector('td').innerHTML = `
+                <div class="text-muted">
+                    <i class="fas fa-search fa-2x mb-2"></i><br>
+                    No se encontraron productos que coincidan con "<strong>${texto}</strong>"
+                </div>
+            `;
+        }
+    } else {
+        if (mensajeNoResultados) {
+            mensajeNoResultados.remove();
+        }
+    }
+}
+
+// Función para limpiar búsqueda
+function limpiarBusqueda() {
+    const buscador = document.getElementById('buscadorProductos');
+    buscador.value = '';
+    filtrarProductos();
+    buscador.focus();
+}
+
+// Evento para el buscador (con debounce para mejor rendimiento)
+let timeoutId;
+buscador.addEventListener('input', function() {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(filtrarProductos, 300); // 300ms de delay
+});
+
+// También filtrar al presionar Enter
+buscador.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(timeoutId);
+        filtrarProductos();
+    }
+});
+
+// Inicializar contador
+contadorSpan.textContent = filasProductos.length;
+
+// ------------------------------
 // Generar resumen de preview
 // ------------------------------
 function gatherPreviewData() {
-    const rows = document.querySelectorAll('#tablaProductos tbody tr');
+    const rows = document.querySelectorAll('#tablaProductos tbody tr:not(#noResultadosMensaje)');
     const items = [];
     let totalVenta = 0;
     let totalUtilidad = 0;
@@ -304,6 +564,9 @@ function gatherPreviewData() {
     let hasNegative = false;
 
     rows.forEach(r => {
+        // Solo considerar filas visibles y que no sean el mensaje de no resultados
+        if (r.style.display === 'none' || r.id === 'noResultadosMensaje') return;
+        
         const id = r.dataset.id;
         const nombre = r.children[0].textContent.trim();
         const proveedor = r.children[1].textContent.trim();
@@ -464,10 +727,7 @@ function renderSwalChart(items) {
                 data: dataQty,
                 backgroundColor: function(context) {
                     const idx = context.dataIndex;
-                    const baseR = 255;
-                    const baseG = 150 - idx * 8;
-                    const baseB = 50 - idx * 4;
-                    return `rgba(${230}, ${145 - idx*6}, ${56 - idx*3}, 0.85)`;
+                    return `rgba(230, ${145 - idx*6}, ${56 - idx*3}, 0.85)`;
                 },
             }]
         },
@@ -526,5 +786,10 @@ submitFinalBtn.addEventListener('click', async function(e){
 
         form.submit();
     }
+});
+
+// Inicializar tooltips y demás
+document.addEventListener('DOMContentLoaded', function() {
+    // Cualquier inicialización adicional
 });
 </script>

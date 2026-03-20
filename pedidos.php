@@ -6,15 +6,26 @@ include('includes/navbar.php');
 
 date_default_timezone_set('America/Mexico_City');
 
-
-$res = $conn->query("SELECT id, nombre, cantidad FROM productos ORDER BY nombre");
+// MODIFICADO: Solo mostrar productos (no insumos)
+$res = $conn->query("SELECT id, nombre, cantidad FROM productos WHERE tipo_inventario = 'producto' ORDER BY nombre");
 if(!$res){
     die("Error SQL: " . $conn->error);
 }
 
-$solicitantes = $conn->query("SELECT DISTINCT solicitado_por FROM pedidos ORDER BY solicitado_por");
-$ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por FROM pedidos GROUP BY id_orden ORDER BY id_orden DESC
-");
+// MODIFICADO: Filtrar solicitantes solo de productos
+$solicitantes = $conn->query("SELECT DISTINCT p.solicitado_por 
+                              FROM pedidos p 
+                              INNER JOIN productos prod ON p.nombre_producto = prod.nombre 
+                              WHERE prod.tipo_inventario = 'producto' 
+                              ORDER BY p.solicitado_por");
+
+// MODIFICADO: Filtrar órdenes que contengan solo productos
+$ordenes = $conn->query("SELECT p.id_orden, MAX(p.solicitado_por) as solicitado_por 
+                         FROM pedidos p 
+                         INNER JOIN productos prod ON p.nombre_producto = prod.nombre 
+                         WHERE prod.tipo_inventario = 'producto' 
+                         GROUP BY p.id_orden 
+                         ORDER BY p.id_orden DESC");
 ?>
 
 <style>
@@ -46,17 +57,14 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
         justify-content:space-between;
         padding:6px 4px;
         font-size:14px;
+        border: none;
     }
 
     #tablaPedidos tbody td:before{
+        content: attr(data-label);
         font-weight:bold;
+        margin-right: 10px;
     }
-
-    #tablaPedidos tbody td:nth-child(1):before{ content:"Producto"; }
-    #tablaPedidos tbody td:nth-child(2):before{ content:"Stock"; }
-    #tablaPedidos tbody td:nth-child(3):before{ content:"Pedir"; }
-    #tablaPedidos tbody td:nth-child(4):before{ content:"Faltante"; }
-    #tablaPedidos tbody td:nth-child(5):before{ content:"Estado"; }
 
     .pedir{
         width:80px;
@@ -152,7 +160,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
             </div>
 
             <!-- FILTROS -->
-        <div class="row mb-3 align-items-end">
+            <div class="row mb-3 align-items-end">
                 <!-- Tipo de reporte -->
                 <div class="col-md-4">
                     <label class="font-weight-bold">Tipo de reporte</label>
@@ -169,8 +177,8 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                     <select id="filtroSolicitante" class="form-control w-100">
                         <option value="">Buscar quién hizo el pedido...</option>
                         <?php while($s = $solicitantes->fetch_assoc()): ?>
-                            <option value="<?= $s['solicitado_por'] ?>">
-                                <?= $s['solicitado_por'] ?>
+                            <option value="<?= htmlspecialchars($s['solicitado_por']) ?>">
+                                <?= htmlspecialchars($s['solicitado_por']) ?>
                             </option>
                         <?php endwhile; ?>
                     </select>
@@ -183,14 +191,14 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                         <option value="">Buscar folio...</option>
                         <?php while($o = $ordenes->fetch_assoc()): ?>
                             <option value="<?= $o['id_orden'] ?>">
-                                Folio #<?= $o['id_orden'] ?> — <?= $o['solicitado_por'] ?>
+                                Folio #<?= $o['id_orden'] ?> — <?= htmlspecialchars($o['solicitado_por']) ?>
                             </option>
                         <?php endwhile; ?>
                     </select>
                 </div>
             </div>
             
-            <!-- TABLA -->
+            <!-- TABLA DE PRODUCTOS -->
             <div class="card card-outline card-primary shadow">
                 <div class="card-header d-flex align-items-center">
                     <h5 class="mb-0">
@@ -223,25 +231,25 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                     <th>Producto</th>
                                     <th>Stock Actual</th>
                                     <th>Pedir</th>
-                                    <th>Articulos por hacer</th>
+                                    <th>Artículos por hacer</th>
                                     <th>Estado</th>
                                 </tr>
                             </thead>
                             <tbody>
                             <?php while($row = $res->fetch_assoc()): ?>
                                 <tr data-id="<?= $row['id'] ?>"
-                                    data-nombre="<?= $row['nombre'] ?>"
+                                    data-nombre="<?= htmlspecialchars($row['nombre']) ?>"
                                     data-stock="<?= $row['cantidad'] ?>">
 
-                                    <td class="text-left font-weight-bold"><?= $row['nombre'] ?></td>
-                                    <td><span class="badge badge-info p-2 stock"><?= $row['cantidad'] ?></span></td>
-                                    <td>
+                                    <td class="text-left font-weight-bold" data-label="Producto"><?= htmlspecialchars($row['nombre']) ?></td>
+                                    <td data-label="Stock"><span class="badge badge-info p-2 stock"><?= $row['cantidad'] ?></span></td>
+                                    <td data-label="Pedir">
                                         <input type="number" min="0"
                                             class="form-control form-control-sm pedir"
                                             oninput="calcular(this)">
                                     </td>
-                                    <td class="faltante font-weight-bold">0</td>
-                                    <td class="estado">
+                                    <td class="faltante font-weight-bold" data-label="Faltante">0</td>
+                                    <td class="estado" data-label="Estado">
                                         <span class="badge badge-secondary">Sin pedido</span>
                                     </td>
                                 </tr>
@@ -259,6 +267,8 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
             </div>
 
             <hr class="my-4">
+            
+            <!-- FILTRO DE ESTADOS -->
             <div class="d-flex justify-content-end mb-2">
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-primary filtro-estado active" data-estado="pendiente">Pendientes</button>
@@ -267,7 +277,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                 </div>
             </div>
 
-            <hr class="my-4">
+            <!-- LISTA DE PEDIDOS -->
             <div class="card card-outline card-warning shadow">
                 <div class="card-header d-flex align-items-center">
                     <h5 class="mb-0" id="tituloPedidos">
@@ -292,42 +302,52 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
 
                 <div class="card-body p-2">
                 <?php
+                // MODIFICADO: Filtrar pedidos pendientes solo de productos
                 $foliosPendientes = $conn->query("
                     SELECT 
                         p.id_orden,
                         MAX(p.solicitado_por) as solicitado_por,
                         MAX(p.fecha) as fecha
                     FROM pedidos p
-                    WHERE EXISTS (
+                    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+                    WHERE prod.tipo_inventario = 'producto'
+                    AND EXISTS (
                         SELECT 1 
                         FROM pedidos px
+                        INNER JOIN productos prod2 ON px.nombre_producto = prod2.nombre
                         WHERE px.id_orden = p.id_orden
+                        AND prod2.tipo_inventario = 'producto'
                         AND px.estado = 'pendiente'
                     )
                     GROUP BY p.id_orden
                     ORDER BY p.id_orden DESC
                 ");
 
+                // MODIFICADO: Filtrar pedidos completados solo de productos
                 $foliosCompletados = $conn->query("
                     SELECT 
                         p.id_orden,
                         MAX(p.solicitado_por) as solicitado_por,
                         MAX(p.fecha) as fecha
                     FROM pedidos p
-                    WHERE NOT EXISTS (
+                    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+                    WHERE prod.tipo_inventario = 'producto'
+                    AND NOT EXISTS (
                         SELECT 1 
                         FROM pedidos px
+                        INNER JOIN productos prod2 ON px.nombre_producto = prod2.nombre
                         WHERE px.id_orden = p.id_orden
+                        AND prod2.tipo_inventario = 'producto'
                         AND px.estado = 'pendiente'
                     )
                     GROUP BY p.id_orden
                     ORDER BY p.id_orden DESC
                 ");
 
-                if($foliosPendientes->num_rows == 0){
-                    echo '<div class="alert alert-success text-center m-2">
-                            <i class="fas fa-check-circle"></i>
-                            No hay pedidos pendientes
+                if($foliosPendientes->num_rows == 0 && $foliosCompletados->num_rows == 0){
+                    echo '<div class="alert alert-info text-center m-2">
+                            <i class="fas fa-info-circle"></i>
+                            No hay pedidos de productos registrados
                         </div>';
                 }
                 ?>
@@ -337,14 +357,15 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
 
 
                         <?php
-
                         // Construimos texto de búsqueda del pedido
                         $textoBusqueda = $f['id_orden'] . ' ' . $f['solicitado_por'];
 
                         $productosTxt = $conn->query("
-                            SELECT nombre_producto
-                            FROM pedidos
-                            WHERE id_orden = {$f['id_orden']}
+                            SELECT p.nombre_producto
+                            FROM pedidos p
+                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+                            WHERE p.id_orden = {$f['id_orden']}
+                            AND prod.tipo_inventario = 'producto'
                         ");
 
                         while($pt = $productosTxt->fetch_assoc()){
@@ -356,8 +377,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                             data-search="<?= strtolower($textoBusqueda) ?>"
                             data-estado="pendiente">
 
-
-                            <!-- ENCABEZADO BONITO -->
+                            <!-- ENCABEZADO -->
                             <div class="bg-warning p-2 d-flex justify-content-between align-items-center flex-wrap"
                                 data-toggle="collapse"
                                 data-target="#collapse<?= $i ?>"
@@ -369,7 +389,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                     <strong>Folio #<?= $f['id_orden'] ?></strong>
 
                                     <span class="ml-3">
-                                        <i class="fas fa-user"></i> <?= $f['solicitado_por'] ?>
+                                        <i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?>
                                     </span>
 
                                     <span class="ml-3">
@@ -405,7 +425,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                 </div>
                             </div>
 
-                            <!--COLLAPSE -->
+                            <!-- COLLAPSE -->
                             <div id="collapse<?= $i ?>" 
                                 class="collapse"
                                 data-parent="#accordionPedidos">
@@ -419,21 +439,23 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                                 <th>Pedido</th>
                                                 <th>Artículos por hacer</th>
                                                 <th>Completar articulo</th>
-
                                             </tr>
                                         </thead>
                                         <tbody>
                                         <?php
+                                        // MODIFICADO: Solo mostrar productos en el detalle
                                         $productos = $conn->query("
-                                            SELECT id, nombre_producto, cantidad_pedida, faltante
-                                            FROM pedidos
-                                            WHERE id_orden = {$f['id_orden']}
+                                            SELECT p.id, p.nombre_producto, p.cantidad_pedida, p.faltante
+                                            FROM pedidos p
+                                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+                                            WHERE p.id_orden = {$f['id_orden']}
+                                            AND prod.tipo_inventario = 'producto'
                                         ");
 
                                         while($p = $productos->fetch_assoc()):
                                         ?>
                                             <tr>
-                                                <td class="text-left"><?= $p['nombre_producto'] ?></td>
+                                                <td class="text-left"><?= htmlspecialchars($p['nombre_producto']) ?></td>
                                                 <td>
                                                     <span class="badge badge-info"><?= $p['cantidad_pedida'] ?></span>
                                                 </td>
@@ -452,8 +474,6 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                                 </td>
                                             </tr>
                                         <?php endwhile; ?>
-                                        
-                                        
                                         </tbody>
                                     </table>
                                 </div>
@@ -467,9 +487,11 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                         $textoBusqueda = $f['id_orden'] . ' ' . $f['solicitado_por'];
 
                         $productosTxt = $conn->query("
-                            SELECT nombre_producto
-                            FROM pedidos
-                            WHERE id_orden = {$f['id_orden']}
+                            SELECT p.nombre_producto
+                            FROM pedidos p
+                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+                            WHERE p.id_orden = {$f['id_orden']}
+                            AND prod.tipo_inventario = 'producto'
                         ");
 
                         while($pt = $productosTxt->fetch_assoc()){
@@ -492,7 +514,7 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                     <strong>Folio #<?= $f['id_orden'] ?></strong>
 
                                     <span class="ml-3">
-                                        <i class="fas fa-user"></i> <?= $f['solicitado_por'] ?>
+                                        <i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?>
                                     </span>
 
                                     <span class="ml-3">
@@ -520,10 +542,11 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                                 <th>Original</th>
                                                 <th>Solventado</th>
                                                 <th>Completado el</th>
-
                                             </tr>
                                         </thead>
+                                        <tbody>
                                         <?php
+                                        // MODIFICADO: Solo mostrar productos en completados
                                         $productos = $conn->query("
                                             SELECT 
                                                 p.nombre_producto,
@@ -535,13 +558,15 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                             LEFT JOIN pedidos_solventados ps 
                                                 ON ps.id_producto = p.id
                                                 AND ps.id_pedido = p.id_orden
+                                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
                                             WHERE p.id_orden = {$f['id_orden']}
+                                            AND prod.tipo_inventario = 'producto'
                                         ");
 
                                         while($p = $productos->fetch_assoc()):
                                         ?>
                                             <tr>
-                                                <td class="text-left"><?= $p['nombre_producto'] ?></td>
+                                                <td class="text-left"><?= htmlspecialchars($p['nombre_producto']) ?></td>
                                                 <td>
                                                     <span class="badge badge-info"> <?= $p['cantidad_original'] ?? 0 ?> </span>
                                                 </td>
@@ -558,18 +583,15 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
                                 </div>
                             </div>
                         </div>
-
                         <?php endwhile; ?>
-
                     </div>
                 </div>
             </div>
-
         </div>
     </section>
 </div>
 
-<!-- MODAL -->
+<!-- MODALES -->
 <div class="modal fade" id="modalSolicitante">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -604,15 +626,12 @@ $ordenes = $conn->query("SELECT id_orden, MAX(solicitado_por) as solicitado_por 
   </div>
 </div>
 
-
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
-
-
 
 <script>
 let pedidosTemp = [];
@@ -641,6 +660,12 @@ $(document).ready(function(){
         }
     });
 
+    // Forzar filtro al cargar
+    $('.filtro-estado.active').click();
+    
+    // Verificar stock crítico
+    verificarStockCritico();
+    setInterval(verificarStockCritico, 30000);
 });
 
 function calcular(input){
@@ -768,15 +793,6 @@ function exportarPDF(){
     });
 }
 
-
-$(document).ready(function(){
-
-    if(localStorage.getItem('ocultarAyudaReporte') !== 'true'){
-        $('#ayudaReporte').show();
-    }
-
-});
-
 function cerrarAyuda(){
     if($('#noMostrarAyuda').is(':checked')){
         localStorage.setItem('ocultarAyudaReporte', 'true');
@@ -832,7 +848,7 @@ document.addEventListener('click', function(e){
     if(!header) return;
 
     // buscamos la flecha más cercana aunque esté fuera
-    const flecha = header.parentElement.querySelector('.flecha');
+    const flecha = header.querySelector('.flecha');
     if(!flecha) return;
 
     setTimeout(()=>{
@@ -841,6 +857,7 @@ document.addEventListener('click', function(e){
 
 });
 
+// Buscador de pedidos
 document.getElementById('buscadorPedidos').addEventListener('input', function(){
     const texto = this.value.toLowerCase();
 
@@ -855,6 +872,7 @@ document.getElementById('buscadorPedidos').addEventListener('input', function(){
     });
 });
 
+// Buscador de productos
 const filasProductos = document.querySelectorAll('#tablaPedidos tbody tr');
 const contador = document.getElementById('contadorProductos');
 
@@ -884,6 +902,7 @@ document.getElementById('buscadorProductos').addEventListener('keyup', function(
 
 actualizarContador();
 
+// Filtro de estados
 $('.filtro-estado').click(function(){
     $('.filtro-estado').removeClass('active');
     $(this).addClass('active');
@@ -891,7 +910,7 @@ $('.filtro-estado').click(function(){
     const estado = $(this).data('estado');
     const titulo = document.getElementById('tituloPedidos');
 
-    // 🔹 Cambiar título dinámico
+    // Cambiar título dinámico
     if(estado === 'pendiente'){
         titulo.innerHTML = '<i class="fas fa-clipboard-list"></i> Pedidos pendientes por completar';
     }
@@ -902,7 +921,7 @@ $('.filtro-estado').click(function(){
         titulo.innerHTML = '<i class="fas fa-list"></i> Todos los pedidos';
     }
 
-    // 🔹 Filtrar tarjetas
+    // Filtrar tarjetas
     $('.pedido-card').each(function(){
         const e = $(this).data('estado');
 
@@ -912,10 +931,6 @@ $('.filtro-estado').click(function(){
             $(this).hide();
         }
     }); 
-});
-//  forzamos filtro al cargar la página para evitar que se mezclen pendientes y completados
-$(document).ready(function(){
-    $('.filtro-estado.active').click();
 });
 
 function verHistorial(idOrden){
@@ -990,7 +1005,6 @@ function verHistorial(idOrden){
     });
 }
 
-
 let ultimaCantidadCriticos = -1;
 
 toastr.options = {
@@ -1036,10 +1050,4 @@ function verificarStockCritico(){
         console.log("Error stock crítico:", err);
     });
 }
-
-$(document).ready(function(){
-    verificarStockCritico();
-    setInterval(verificarStockCritico, 30000);
-});
-
 </script>

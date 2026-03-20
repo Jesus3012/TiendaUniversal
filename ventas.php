@@ -77,20 +77,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $stmt = $conn->prepare("
                             INSERT INTO ventas (
                                 id_producto, cantidad_vendida, correo_cliente, folio_ticket, 
-                                id_vendedor, metodo_pago, referencia_pago
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                                id_vendedor, metodo_pago, referencia_pago, ticket_pdf
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         ");
                         
                         $referencia_safe = $referencia_pago ?? '';
+                        $nombre_ticket = 'ticket_' . $folio . '.pdf';  // Mismo nombre que generaste
+                        
+                        // Nota: son 8 parámetros ahora: i i s s s s s s
                         $stmt->bind_param(
-                            "iisssss",
+                            "iissssss",  // 8 parámetros: entero, entero, string, string, string, string, string, string
                             $item['id'],
                             $item['cantidad'],
                             $correo_cliente,
                             $folio,
                             $id_vendedor,
                             $metodo_pago,
-                            $referencia_safe
+                            $referencia_safe,
+                            $nombre_ticket
                         );
                         $stmt->execute();
                         $stmt->close();

@@ -4,6 +4,11 @@ session_start();
 
 header('Content-Type: application/json');
 
+// ======================= PRODUCTO ESPECIAL (PAGADO) =======================
+// Este producto NO debe aparecer en la deuda con proveedores
+define('PRODUCTO_ESPECIAL_NOMBRE', 'libretas');
+define('PROVEEDOR_ESPECIAL', 'Nevaris 3D');
+
 if (!isset($_POST['ventas'], $_POST['stock_final'])) {
     echo json_encode([
         'status' => 'error',
@@ -19,6 +24,12 @@ try {
     /* ================= FOLIO ================= */
     $folioTicket = 'VENTA_' . uniqid();
     $idVendedor = $_SESSION['id_usuario'] ?? null;
+    
+    // Variables para estadísticas (solo para la respuesta)
+    $totalVentas = 0;
+    $totalDeuda = 0;
+    $totalGanancia = 0;
+    $productosEspeciales = [];
 
     foreach ($_POST['ventas'] as $idProducto => $cantidadVendida) {
 
@@ -28,7 +39,7 @@ try {
 
         /* ===== PRODUCTO ===== */
         $q = $conn->prepare("
-            SELECT proveedor, cantidad 
+            SELECT proveedor, nombre, cantidad, precio_compra, precio_venta 
             FROM productos 
             WHERE id = ?
         ");
@@ -40,8 +51,18 @@ try {
             throw new Exception('Producto no encontrado');
         }
 
-        $proveedor    = $prod['proveedor'];
-        $stockInicial = (int)$prod['cantidad'];
+        $proveedor     = $prod['proveedor'];
+        $nombreProducto = $prod['nombre'];
+        $stockInicial  = (int)$prod['cantidad'];
+        $precioCompra  = (float)$prod['precio_compra'];
+        $precioVenta   = (float)$prod['precio_venta'];
+
+        // Verificar si es el producto especial (libretas de Nevaris 3D)
+        $esEspecial = false;
+        if (stripos($nombreProducto, PRODUCTO_ESPECIAL_NOMBRE) !== false && 
+            stripos($proveedor, PROVEEDOR_ESPECIAL) !== false) {
+            $esEspecial = true;
+        }
 
         /* ===== REGISTRAR VENTA ===== */
         if ($cantidadVendida > 0) {
@@ -61,9 +82,23 @@ try {
             );
 
             $stmt->execute();
+            
+            // Calcular montos (solo para la respuesta, no se guardan en BD)
+            $montoVenta = $cantidadVendida * $precioVenta;
+            $montoDeuda = $esEspecial ? 0 : ($cantidadVendida * $precioCompra);
+            $montoGanancia = $montoVenta - $montoDeuda;
+            
+            $totalVentas += $montoVenta;
+            $totalDeuda += $montoDeuda;
+            $totalGanancia += $montoGanancia;
+            
+            if ($esEspecial) {
+                $productosEspeciales[] = $nombreProducto;
+            }
         }
 
         /* ===== REPORTE POR PROVEEDOR (POR DÍA) ===== */
+        // NOTA: Solo guardamos cantidad de ventas, no montos
         $rep = $conn->prepare("
             INSERT INTO reporte_proveedor
             (proveedor, producto_id, stock_inicial, stock_contado, ventas, fecha_conteo)
@@ -97,9 +132,26 @@ try {
 
     $conn->commit();
 
+    // Preparar mensaje de respuesta
+    $mensaje = "Ventas guardadas correctamente.\n";
+    $mensaje .= "Total ventas: $" . number_format($totalVentas, 2) . "\n";
+    $mensaje .= "Total deuda: $" . number_format($totalDeuda, 2) . "\n";
+    $mensaje .= "Total ganancia: $" . number_format($totalGanancia, 2);
+    
+    if (!empty($productosEspeciales)) {
+        $mensaje .= "\n\n✅ Productos pagados (sin deuda): " . implode(', ', $productosEspeciales);
+    }
+
     echo json_encode([
         'status' => 'ok',
-        'folio'  => $folioTicket
+        'folio'  => $folioTicket,
+        'message' => $mensaje,
+        'totales' => [
+            'ventas' => $totalVentas,
+            'deuda' => $totalDeuda,
+            'ganancia' => $totalGanancia
+        ],
+        'productos_especiales' => $productosEspeciales
     ]);
 
 } catch (Exception $e) {
@@ -108,6 +160,7 @@ try {
 
     echo json_encode([
         'status' => 'error',
-        'msg' => $e->getMessage()
+        'msg' => 'Error al guardar: ' . $e->getMessage()
     ]);
 }
+?>

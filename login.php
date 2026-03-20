@@ -50,13 +50,13 @@ if (isset($_POST['login'])) {
         $email = trim($_POST['email']);
         $password = $_POST['password'];
 
-        $stmt = $conn->prepare("SELECT id, nombre, password, rol, activo FROM usuarios WHERE email = ?");
+        $stmt = $conn->prepare("SELECT id, nombre, password, rol, activo, debe_cambiar_password FROM usuarios WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $stmt->store_result();
 
         if ($stmt->num_rows > 0) {
-            $stmt->bind_result($id, $nombre, $hashed_password, $rol, $activo);
+            $stmt->bind_result($id, $nombre, $hashed_password, $rol, $activo, $debe_cambiar_password);
             $stmt->fetch();
 
             if (!$activo) {
@@ -78,17 +78,26 @@ if (isset($_POST['login'])) {
                 $_SESSION['nombre'] = $nombre;
                 $_SESSION['rol'] = $rol;
                 $_SESSION['last_activity'] = time();
+                
+                // Guardar en sesión si debe cambiar la contraseña
+                $_SESSION['debe_cambiar_password'] = $debe_cambiar_password;
 
-                $redirect = ($rol === 'administrador')
-                    ? 'dashboard_admin.php'
-                    : 'dashboard_vendedor.php';
+                // Determinar dashboard según rol
+                $dashboard = ($rol === 'administrador') ? 'dashboard_admin.php' : 'dashboard_vendedor.php';
+
+                // Mensaje personalizado según si debe cambiar contraseña
+                if ($debe_cambiar_password == 1) {
+                    $mensaje = '<br><small class="text-warning">Por seguridad, deberás cambiar tu contraseña</small>';
+                } else {
+                    $mensaje = '<br><small>Accediendo al sistema...</small>';
+                }
 
                 echo "<script>
                     Swal.fire({
                         title: '¡Bienvenido!',
-                        html: '<b>{$nombre}</b><br><small>Accediendo al sistema...</small>',
+                        html: '<b>{$nombre}</b>{$mensaje}',
                         icon: 'success',
-                        timer: 2200,
+                        timer: 2000,
                         timerProgressBar: true,
                         allowOutsideClick: false,
                         showConfirmButton: false,
@@ -96,7 +105,7 @@ if (isset($_POST['login'])) {
                             Swal.showLoading();
                         }
                     }).then(() => {
-                        window.location.href = '{$redirect}';
+                        window.location.href = '{$dashboard}';
                     });
                 </script>";
                 exit;
@@ -259,7 +268,7 @@ if (isset($_POST['login'])) {
 
             <div class="login-box">
                 <div class="login-logo logo-inline">
-                    <img src="includes/logo_login.png">
+                    <img src="includes/logo_login.png" alt="Logo">
                     <b>Pescadores</b> de la prehistoria
                 </div>
 
@@ -304,28 +313,27 @@ if (isset($_POST['login'])) {
                                     aria-hidden="true">
                                 </span>
                             </button>
-                            </form>
+                        </form>
 
-                            <!-- LINKS -->
-                            <div class="mt-4 text-center">
+                        <!-- LINKS -->
+                        <div class="mt-4 text-center">
 
-                                <a href="forgot_password.php"
-                                class="d-inline-block text-orange font-weight-semibold mb-2 hover-underline">
-                                    <i class="fas fa-unlock-alt mr-1"></i> ¿Olvidaste tu contraseña?
+                            <a href="forgot_password.php"
+                               class="d-inline-block text-orange font-weight-semibold mb-2 hover-underline">
+                                <i class="fas fa-unlock-alt mr-1"></i> ¿Olvidaste tu contraseña?
+                            </a>
+
+                            <hr class="my-3" style="max-width:220px; margin:auto;">
+
+                            <p class="mb-0">
+                                ¿No tienes cuenta?
+                                <a href="registrar.php"
+                                   class="text-orange font-weight-bold hover-underline">
+                                    Regístrate aquí
                                 </a>
+                            </p>
 
-                                <hr class="my-3" style="max-width:220px; margin:auto;">
-
-                                <p class="mb-0">
-                                    ¿No tienes cuenta?
-                                    <a href="registrar.php"
-                                    class="text-orange font-weight-bold hover-underline">
-                                        Regístrate aquí
-                                    </a>
-                                </p>
-
-                            </div>
-                        </p>
+                        </div>
 
                     </div>
                 </div>

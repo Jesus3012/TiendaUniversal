@@ -6,10 +6,12 @@ header('Content-Type: application/json');
 
 try {
 
+    // MODIFICADO: Agregado filtro para solo mostrar PRODUCTOS (no insumos)
     $res = $conn->query("
         SELECT id, nombre, cantidad
         FROM productos
-        WHERE cantidad <= 5
+        WHERE tipo_inventario = 'producto' 
+        AND cantidad <= 5
         ORDER BY cantidad ASC
     ");
 
@@ -28,3 +30,4 @@ try {
 }catch(Exception $e){
     echo json_encode(["error" => $e->getMessage()]);
 }
+?>
