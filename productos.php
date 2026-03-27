@@ -130,10 +130,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
             $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-            $imagen_name = time().'_'.uniqid().'.'.$extension;
-            $imagen_path = 'uploads/productos/'.$imagen_name;
             
-            if (!move_uploaded_file($_FILES['imagen']['tmp_name'], $imagen_path)) {
+            // Limpiar el nombre del producto para usarlo en el nombre del archivo
+            $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
+            $nombre_limpio = preg_replace('/[\s]+/', '_', $nombre_limpio);
+            $nombre_limpio = trim($nombre_limpio, '_');
+            
+            // Si el nombre queda vacío después de limpiar, usar un nombre genérico
+            if (empty($nombre_limpio)) {
+                $nombre_limpio = 'producto';
+            }
+            
+            // Generar nombre base sin números
+            $nombre_base = $nombre_limpio;
+            $imagen_name = $nombre_base . '.' . $extension;
+            $contador = 1;
+            
+            // Verificar si el archivo ya existe y agregar número incremental
+            while (file_exists($upload_dir . $imagen_name)) {
+                $imagen_name = $nombre_base . '_' . $contador . '.' . $extension;
+                $contador++;
+            }
+            
+            $imagen_path = 'uploads/productos/' . $imagen_name;
+            
+            if (!move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
                 $errors[] = "Error al subir la imagen.";
                 $imagen_path = '';
             }
@@ -557,10 +578,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
         $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-        $imagen_name = time().'_'.uniqid().'.'.$extension;
-        $nueva_imagen = 'uploads/productos/'.$imagen_name;
         
-        if (move_uploaded_file($_FILES['imagen']['tmp_name'], $nueva_imagen)) {
+        // Limpiar el nombre del producto para usarlo en el nombre del archivo
+        $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
+        $nombre_limpio = preg_replace('/[\s]+/', '_', $nombre_limpio);
+        $nombre_limpio = trim($nombre_limpio, '_');
+        
+        // Si el nombre queda vacío después de limpiar, usar un nombre genérico
+        if (empty($nombre_limpio)) {
+            $nombre_limpio = 'producto';
+        }
+        
+        // Generar nombre base sin números
+        $nombre_base = $nombre_limpio;
+        $imagen_name = $nombre_base . '.' . $extension;
+        $contador = 1;
+        
+        // Verificar si el archivo ya existe y agregar número incremental
+        while (file_exists($upload_dir . $imagen_name)) {
+            $imagen_name = $nombre_base . '_' . $contador . '.' . $extension;
+            $contador++;
+        }
+        
+        $nueva_imagen = 'uploads/productos/' . $imagen_name;
+        
+        if (move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
             if ($imagen_path && file_exists($imagen_path)) {
                 unlink($imagen_path);
             }
@@ -1214,6 +1256,13 @@ if (!empty($errors)) {
                                         </button>
                                     </div>
 
+                                    <button type="button" 
+                                            class="btn btn-danger btn-sm" 
+                                            onclick="generarReporteFiltrado()" 
+                                            title="Generar reporte con filtros aplicados">
+                                        <i class="fas fa-file-pdf mr-1"></i> Reporte PDF
+                                    </button>
+
                                     <div style="max-width:250px;">
                                         <div class="input-group input-group-sm">
                                             <div class="input-group-prepend">
@@ -1224,6 +1273,31 @@ if (!empty($errors)) {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Agrega estos filtros después de los botones de tipo -->
+                        <div class="d-flex gap-2 align-items-center">
+                            <select id="filtroProveedor" class="form-control form-control-sm" style="width: 180px;">
+                                <option value="">Todos los proveedores</option>
+                                <?php foreach ($proveedores as $prov): ?>
+                                    <option value="<?= htmlspecialchars($prov) ?>"><?= htmlspecialchars($prov) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            
+                            <select id="filtroCategoria" class="form-control form-control-sm" style="width: 150px;">
+                                <option value="">Todas las categorías</option>
+                                <?php foreach ($categorias as $cat): ?>
+                                    <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="aplicarFiltros()">
+                                <i class="fas fa-filter"></i> Filtrar
+                            </button>
+                            
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltros()">
+                                <i class="fas fa-undo"></i> Limpiar
+                            </button>
                         </div>
 
                         <div class="card-body p-0">
@@ -2207,6 +2281,184 @@ document.getElementById('searchProductos').addEventListener('keyup', function() 
         emptyRow.remove();
     }
 });
+
+// Función para generar reporte con filtros
+function generarReporteFiltrado() {
+    // Obtener todos los filtros aplicados
+    const tipo = filtroActual || 'todos';
+    const busqueda = document.getElementById('searchProductos').value;
+    const proveedor = document.getElementById('filtroProveedor').value;
+    const categoria = document.getElementById('filtroCategoria').value;
+    
+    // Construir URL con parámetros
+    let url = 'reporte_inventario_filtrado.php?';
+    const params = [];
+    
+    if (tipo && tipo !== 'todos') {
+        params.push('tipo=' + encodeURIComponent(tipo));
+    }
+    
+    if (busqueda && busqueda.trim() !== '') {
+        params.push('busqueda=' + encodeURIComponent(busqueda.trim()));
+    }
+    
+    if (proveedor && proveedor !== '') {
+        params.push('proveedor=' + encodeURIComponent(proveedor));
+    }
+    
+    if (categoria && categoria !== '') {
+        params.push('categoria=' + encodeURIComponent(categoria));
+    }
+    
+    // Si no hay filtros, generar reporte completo
+    if (params.length === 0) {
+        url = 'reporte_inventario_filtrado.php';
+    } else {
+        url += params.join('&');
+    }
+    
+    // Abrir en nueva ventana
+    window.open(url, '_blank');
+}
+
+// Función para aplicar filtros y actualizar tabla
+function aplicarFiltros() {
+    const proveedor = document.getElementById('filtroProveedor').value;
+    const categoria = document.getElementById('filtroCategoria').value;
+    const busqueda = document.getElementById('searchProductos').value;
+    const tipo = filtroActual || 'todos';
+    
+    // Construir URL con todos los filtros
+    let url = window.location.pathname + '?';
+    const params = [];
+    
+    if (tipo !== 'todos') {
+        params.push('tipo=' + encodeURIComponent(tipo));
+    }
+    
+    if (proveedor && proveedor !== '') {
+        params.push('proveedor=' + encodeURIComponent(proveedor));
+    }
+    
+    if (categoria && categoria !== '') {
+        params.push('categoria=' + encodeURIComponent(categoria));
+    }
+    
+    if (busqueda && busqueda.trim() !== '') {
+        params.push('busqueda=' + encodeURIComponent(busqueda.trim()));
+    }
+    
+    if (params.length > 0) {
+        url += params.join('&');
+    }
+    
+    window.location.href = url;
+}
+
+// Función para limpiar filtros
+function limpiarFiltros() {
+    document.getElementById('filtroProveedor').value = '';
+    document.getElementById('filtroCategoria').value = '';
+    document.getElementById('searchProductos').value = '';
+    
+    // Recargar sin filtros
+    let url = window.location.pathname;
+    if (filtroActual && filtroActual !== 'todos') {
+        url += '?tipo=' + encodeURIComponent(filtroActual);
+    }
+    window.location.href = url;
+}
+
+// Función para cargar filtros desde URL al cargar la página
+function cargarFiltrosDesdeURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const proveedor = urlParams.get('proveedor');
+    const categoria = urlParams.get('categoria');
+    const busqueda = urlParams.get('busqueda');
+    
+    if (proveedor) {
+        document.getElementById('filtroProveedor').value = proveedor;
+    }
+    
+    if (categoria) {
+        document.getElementById('filtroCategoria').value = categoria;
+    }
+    
+    if (busqueda) {
+        document.getElementById('searchProductos').value = busqueda;
+        // Disparar evento de búsqueda
+        const event = new Event('keyup');
+        document.getElementById('searchProductos').dispatchEvent(event);
+    }
+}
+
+// Modificar la búsqueda para que también filtre por proveedor y categoría
+const searchOriginal = document.getElementById('searchProductos').addEventListener('keyup', function() {
+    const filtro = this.value.toLowerCase();
+    const proveedorFiltro = document.getElementById('filtroProveedor').value.toLowerCase();
+    const categoriaFiltro = document.getElementById('filtroCategoria').value.toLowerCase();
+    const filas = document.querySelectorAll('#tablaBody tr:not(.empty-row)');
+    let visibles = 0;
+    
+    filas.forEach(fila => {
+        const textoNombre = fila.querySelector('td:nth-child(2)')?.innerText.toLowerCase() || '';
+        const textoProveedor = fila.querySelector('td:nth-child(4)')?.innerText.toLowerCase() || '';
+        const textoCategoria = fila.querySelector('td:nth-child(3)')?.innerText.toLowerCase() || '';
+        
+        let mostrar = true;
+        
+        if (filtro && !textoNombre.includes(filtro)) {
+            mostrar = false;
+        }
+        
+        if (proveedorFiltro && !textoProveedor.includes(proveedorFiltro)) {
+            mostrar = false;
+        }
+        
+        if (categoriaFiltro && !textoCategoria.includes(categoriaFiltro)) {
+            mostrar = false;
+        }
+        
+        if (mostrar) {
+            fila.style.display = '';
+            visibles++;
+        } else {
+            fila.style.display = 'none';
+        }
+    });
+    
+    const emptyRow = document.querySelector('#tablaBody tr.empty-row');
+    if (visibles === 0 && !emptyRow) {
+        const tablaBody = document.getElementById('tablaBody');
+        tablaBody.innerHTML += `
+            <tr class="empty-row">
+                <td colspan="10" class="text-center py-4">
+                    <i class="fas fa-search fa-2x text-muted mb-2"></i>
+                    <p class="text-muted">No se encontraron resultados con los filtros aplicados</p>
+                </td>
+            </tr>
+        `;
+    } else if (visibles > 0 && emptyRow) {
+        emptyRow.remove();
+    }
+});
+
+// Agregar eventos a los filtros
+document.getElementById('filtroProveedor')?.addEventListener('change', function() {
+    const event = new Event('keyup');
+    document.getElementById('searchProductos').dispatchEvent(event);
+});
+
+document.getElementById('filtroCategoria')?.addEventListener('change', function() {
+    const event = new Event('keyup');
+    document.getElementById('searchProductos').dispatchEvent(event);
+});
+
+// Cargar filtros al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    cargarFiltrosDesdeURL();
+});
+
 
 // Funciones para editar y eliminar
 function editarProducto(id) {
