@@ -2564,8 +2564,9 @@ function generarPDF(tipo) {
             // ============================================
             // STOCK RESTANTE POR PRODUCTO
             // ============================================
+
             if (provY > 220) { docProv.addPage(); provY = 25; provPageNum++; }
-            
+
             docProv.setFontSize(14);
             docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
             docProv.setFont("helvetica", "bold");
@@ -2585,15 +2586,15 @@ function generarPDF(tipo) {
                             break;
                         }
                     }
-                    $stockInicial = $producto['stock_actual'];
-                    $stockRestante = $stockInicial - $vendido;
+                    $stockActual = $producto['stock_actual'];  // Stock restante actual
+                    $stockInicial = $stockActual + $vendido;   // Calcular stock inicial
                 ?>
                 [
                     '<?= addslashes($producto['proveedor']) ?>',
                     '<?= addslashes($producto['nombre']) ?>',
                     <?= $stockInicial ?>,
                     <?= $vendido ?>,
-                    <?= $stockRestante ?>,
+                    <?= $stockActual ?>,  // Ahora es el stock restante correcto
                     '<?= $producto['es_producto_especial'] ? "PAGADO" : "" ?>'
                 ],
                 <?php endforeach; ?>
@@ -2608,7 +2609,7 @@ function generarPDF(tipo) {
                 styles: { fontSize: 7, cellPadding: 3 },
                 columnStyles: {
                     0: { cellWidth: 35, fontStyle: 'bold' },
-                    1: { cellWidth: 50 },
+                    1: { cellWidth: 45 },
                     2: { cellWidth: 22, halign: 'center' },
                     3: { cellWidth: 20, halign: 'center' },
                     4: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },

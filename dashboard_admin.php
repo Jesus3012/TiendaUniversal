@@ -469,12 +469,16 @@ if ($totalVentasSemana <= 0) {
     background: #ffffff !important;
     border-bottom: none !important;
     padding: 18px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .card-title {
     font-size: 18px;
     font-weight: 600;
     color: #333;
+    margin: 0;
 }
 
 /* ============================
@@ -552,56 +556,25 @@ canvas {
     max-height: 100% !important;
 }
 
-/* Estilo general de los ítems */
-.quick-config .config-item {
-    padding: 6px 12px;
-    background: #f4f6f9;
-    border-radius: 12px;
-    border: 1px solid #dcdfe3;
-    margin: 4px;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
+/* Estilos para botones de colapso en cards */
+.btn-card-collapse {
+    background: none;
+    border: none;
+    color: #6c757d;
     cursor: pointer;
-    transition: 0.25s;
-    white-space: nowrap;
+    padding: 0 8px;
+    font-size: 14px;
+    transition: all 0.2s;
+    border-radius: 4px;
 }
 
-/* Checkbox separado */
-.quick-config .config-item input {
-    margin-right: 6px;
+.btn-card-collapse:hover {
+    color: #ff7b00;
+    background: #f8f9fa;
 }
 
-/* Hover suave */
-.quick-config .config-item:hover {
-    background: #e8ebee;
-}
-
-/* Título con mejor apariencia */
-.config-title {
-    margin-right: 12px;
-    white-space: nowrap;
-}
-
-/* Estilo especial SOLO para pantallas pequeñas */
-@media (max-width: 768px) {
-    .quick-config {
-        gap: 6px;
-    }
-
-    .quick-config .config-item {
-        font-size: 13px;
-        padding: 8px 14px;
-        width: calc(50% - 12px);
-        text-align: left;
-    }
-
-    .config-title {
-        width: 100%;
-        margin-bottom: 6px;
-        font-size: 15px;
-        color: #3c8dbc;
-    }
+.card-body.collapsed {
+    display: none !important;
 }
 
 /* Estilos mínimos pero efectivos */
@@ -737,7 +710,7 @@ canvas {
 }
 
 .small-box {
-    min-height: 200px; /* Ajusta según necesites */
+    min-height: 200px;
 }
 .small-box .inner {
     padding-bottom: 0.5rem;
@@ -762,6 +735,7 @@ canvas {
     z-index: 1000;
     white-space: nowrap;
 }
+
 .bg-warning,
 .bg-warning h3,
 .bg-warning p,
@@ -951,6 +925,29 @@ canvas {
 /* SweetAlert por encima de todo */
 .swal2-container {
     z-index: 30000 !important;
+}
+
+
+.card-header .card-title {
+    margin: 0;
+    flex: 1;
+}
+
+.btn-card-collapse {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    margin-left: auto;
+}
+
+.btn-card-collapse:hover {
+    background: rgba(0,0,0,0.05);
+    color: #ff7b00;
 }
 </style>
 
@@ -1395,66 +1392,40 @@ canvas {
                 </div>
             </div>
 
-            <!-- CONFIGURACIÓN RÁPIDA -->
-            <div class="card mb-3">
-                <div class="card-body quick-config d-flex flex-wrap flex-lg-nowrap align-items-center">
-                    <div class="config-title"><strong>Configuración:</strong></div>
-                    <label class="config-item">
-                        <input type="checkbox" class="chk-widget" data-id="grafica"> Gráfica Semanal
-                    </label>
-                    <label class="config-item">
-                        <input type="checkbox" class="chk-widget" data-id="donut"> Gráfica Circular
-                    </label>
-                    <label class="config-item">
-                        <input type="checkbox" class="chk-widget" data-id="indicadores"> Indicadores
-                    </label>
-                    <label class="config-item">
-                        <input type="checkbox" class="chk-widget" data-id="venta/ticket"> Ventas / Tickets
-                    </label>
-                    <label class="config-item">
-                        <input type="checkbox" class="chk-widget" data-id="producto/resumen"> Productos / Resumen
-                    </label>
-                </div>
-            </div>
-
-            <!-- EXPORT CSV -->
-            <button id="exportCSV" class="btn btn-primary mb-3">
-                <i class="fas fa-file-csv"></i> Exportar CSV
-            </button>
-
             <!-- FILA 1: Gráfica semanal + Donut -->
             <div class="row">
                 <!-- GRÁFICA SEMANAL -->
-                <div class="col-lg-8 col-md-12 mb-4" data-widget="grafica">
+                <div class="col-lg-8 col-md-12 mb-4">
                     <div class="card card-primary card-outline shadow-sm h-100">
                         <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex justify-content-between align-items-center w-100">
                                 <h5 class="card-title text-bold">
                                     <i class="fas fa-chart-line mr-2 text-primary"></i> 
                                     Ventas - Últimos 7 días
                                 </h5>
-                                <span class="badge badge-success px-3 py-2">
-                                    <i class="fas fa-calendar-week mr-1"></i>
-                                    Total semana: $<?= number_format($totalVentasSemana,2) ?>
-                                </span>
+                                <div>
+                                    <span class="badge badge-success px-3 py-2 mr-2">
+                                        <i class="fas fa-calendar-week mr-1"></i>
+                                        Total semana: $<?= number_format($totalVentasSemana,2) ?>
+                                    </span>
+                                    <button class="btn-card-collapse" onclick="toggleCard(this)">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         
                         <div class="card-body pt-3">
-                            <!-- Leyenda interactiva -->
                             <div class="d-flex justify-content-end mb-2">
                                 <small class="text-muted mr-3">
                                     <i class="fas fa-circle text-primary mr-1"></i> Ventas diarias
                                 </small>
                             </div>
-                            
-                            <!-- Gráfica -->
                             <div class="chart" style="height: 220px;">
                                 <canvas id="chartVentasSemana" style="min-height: 200px; height: 200px; max-height: 200px; max-width: 100%;"></canvas>
                             </div>
                         </div>
                         
-                        <!-- Footer con métricas mejorado -->
                         <div class="card-footer bg-light border-top-0">
                             <div class="row">
                                 <div class="col-6">
@@ -1463,7 +1434,7 @@ canvas {
                                             <i class="fas fa-receipt fa-2x text-info opacity-50"></i>
                                         </div>
                                         <div>
-                                            <span class="text-muted text-sm">Venta total</span>
+                                            <span class="text-muted text-sm">Ticket promedio</span>
                                             <h6 class="mb-0 text-bold">$<?= number_format($ticketPromedio,2) ?></h6>
                                         </div>
                                     </div>
@@ -1484,11 +1455,14 @@ canvas {
                     </div>
                 </div>
 
-                <!-- DONUT -->
-                <div class="col-lg-4 col-md-12 mb-3" data-widget="donut">
+                <!-- DONUT - Distribución de Ventas -->
+                <div class="col-lg-4 col-md-12 mb-3">
                     <div class="card h-100">
                         <div class="card-header">
-                            <h3 class="card-title"><i class="fas fa-chart-pie mr-2 text-danger"></i> Documentos</h3>
+                            <h3 class="card-title"><i class="fas fa-chart-pie mr-2 text-danger"></i> Distribución de Ventas</h3>
+                            <button class="btn-card-collapse" onclick="toggleCard(this)">
+                                <i class="fas fa-minus"></i>
+                            </button>
                         </div>
                         <div class="card-body">
                             <div class="chart-box-sm">
@@ -1499,47 +1473,37 @@ canvas {
                 </div>
             </div>
 
-            <!-- FILA 2: KPI Horizontales -->
+            <!-- FILA 2: Ventas + Tickets (Mix) -->
             <div class="row">
-                <div class="col-lg-12 mb-3" data-widget="indicadores">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title"><i class="fas fa-chart-bar mr-2 text-primary"></i> Indicadores</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="chart-box-lg">
-                                <canvas id="kpiHorizontales"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- FILA 3: Mix -->
-            <div class="row">
-                <div class="col-lg-12 mb-3" data-widget="venta/ticket">
+                <div class="col-lg-12 mb-3">
                     <div class="card">
                         <div class="card-header">
                             <h3 class="card-title"><i class="fas fa-chart-line mr-2 text-info"></i> Ventas + Tickets</h3>
+                            <button class="btn-card-collapse" onclick="toggleCard(this)">
+                                <i class="fas fa-minus"></i>
+                            </button>
                         </div>
                         <div class="card-body">
-                            <div class="chart-box">
-                                <canvas id="chartMix"></canvas>
+                            <div class="chart-box" style="height: 200px;">
+                                <canvas id="chartMix" style="height: 100%; width: 100%;"></canvas>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FILA 4: Top Productos + Resumen -->
+            <!-- FILA 3: Top Productos + Resumen -->
             <div class="row">
                 <!-- TOP PRODUCTOS -->
-                <div class="col-md-6 mb-3" data-widget="producto/top">
+                <div class="col-md-6 mb-3">
                     <div class="card card-warning card-outline h-100">
                         <div class="card-header border-0">
                             <h3 class="card-title">
                                 <i class="fas fa-star text-warning mr-2"></i> Destacados del Mes
                             </h3>
+                            <button class="btn-card-collapse" onclick="toggleCard(this)">
+                                <i class="fas fa-minus"></i>
+                            </button>
                         </div>
                         <div class="card-body pt-0">
                             <?php if(count($topProductos) > 0): ?>
@@ -1550,11 +1514,10 @@ canvas {
                                         $icons = ['crown', 'star', 'thumbs-up', 'fire', 'bolt'];
                                         $color = $colors[$index % count($colors)];
                                         $icon = $icons[$index % count($icons)];
-                                        $numero = $index + 1; // Números del 1 al 5
+                                        $numero = $index + 1;
                                         ?>
                                         <div class="col-12 mb-3">
                                             <div class="info-box bg-light shadow-sm position-relative">
-                                                <!-- Número destacado -->
                                                 <div class="position-absolute" style="top: -5px; left: -5px;">
                                                     <span class="badge badge-<?= $color ?> rounded-circle p-2" style="width: 30px; height: 30px; font-size: 1rem;">
                                                         <?= $numero ?>
@@ -1599,18 +1562,21 @@ canvas {
                     </div>
                 </div>
 
-                <!-- RESUMEN -->
-                <div class="col-md-6 mb-3" data-widget="producto/resumen">
+                <!-- RESUMEN EJECUTIVO -->
+                <div class="col-md-6 mb-3">
                     <div class="card shadow-lg border-0 h-100">
                         <div class="card-header bg-<?= $estadoColor ?> text-white">
                             <h3 class="card-title">
                                 <i class="fas <?= $estadoIcon ?> mr-2"></i>
                                 Resumen Ejecutivo
                             </h3>
+                            <button class="btn-card-collapse" onclick="toggleCard(this)">
+                                <i class="fas fa-minus"></i>
+                            </button>
                         </div>
 
                         <div class="card-body">
-                            <!-- ESTADO GENERAL - Más claro y directo -->
+                            <!-- ESTADO GENERAL -->
                             <div class="alert alert-<?= $estadoColor === 'success' ? 'success' : ($estadoColor === 'warning' ? 'warning' : 'danger') ?> mb-4">
                                 <div class="d-flex align-items-center">
                                     <div class="mr-3">
@@ -1623,58 +1589,42 @@ canvas {
                                 </div>
                             </div>
 
-                            <!-- MÉTRICAS INTERPRETADAS - Más visuales -->
+                            <!-- MÉTRICAS INTERPRETADAS -->
                             <div class="row mb-4">
                                 <div class="col-6 mb-3">
                                     <div class="bg-light p-3 rounded border-left border-info">
-                                        <div class="small text-muted text-uppercase">
-                                            <i class="mr-1 text-info"></i> Ritmo diario
-                                        </div>
-                                        <div class="h4 font-weight-bold mb-0">
-                                            $<?= number_format($totalVentasDia,2) ?>
-                                        </div>
+                                        <div class="small text-muted text-uppercase">Ritmo diario</div>
+                                        <div class="h4 font-weight-bold mb-0">$<?= number_format($totalVentasDia,2) ?></div>
                                         <small class="text-muted">Ventas hoy</small>
                                     </div>
                                 </div>
 
                                 <div class="col-6 mb-3">
                                     <div class="bg-light p-3 rounded border-left border-success">
-                                        <div class="small text-muted text-uppercase">
-                                            <i class="mr-1 text-success"></i> Proyección mensual
-                                        </div>
-                                        <div class="h4 font-weight-bold mb-0">
-                                            $<?= number_format($totalVentasMes * 1.1,2) ?>
-                                        </div>
+                                        <div class="small text-muted text-uppercase">Proyección mensual</div>
+                                        <div class="h4 font-weight-bold mb-0">$<?= number_format($totalVentasMes * 1.1,2) ?></div>
                                         <small class="text-muted">Estimado fin de mes</small>
                                     </div>
                                 </div>
 
                                 <div class="col-6 mb-3">
                                     <div class="bg-light p-3 rounded border-left border-warning">
-                                        <div class="small text-muted text-uppercase">
-                                            <i class="mr-1 text-warning"></i> Ticket promedio
-                                        </div>
-                                        <div class="h4 font-weight-bold mb-0">
-                                            $<?= $ticketsHoy > 0 ? round($ingresosHoy / $ticketsHoy,2) : 0 ?>
-                                        </div>
+                                        <div class="small text-muted text-uppercase">Ticket promedio</div>
+                                        <div class="h4 font-weight-bold mb-0">$<?= $ticketsHoy > 0 ? round($ingresosHoy / $ticketsHoy,2) : 0 ?></div>
                                         <small class="text-muted">Por cada venta</small>
                                     </div>
                                 </div>
 
                                 <div class="col-6 mb-3">
                                     <div class="bg-light p-3 rounded border-left border-danger">
-                                        <div class="small text-muted text-uppercase">
-                                            <i class="mr-1 text-danger"></i> Utilidad del día
-                                        </div>
-                                        <div class="h4 font-weight-bold text-success mb-0">
-                                            $<?= number_format($utilidadHoy,2) ?>
-                                        </div>
+                                        <div class="small text-muted text-uppercase">Utilidad del día</div>
+                                        <div class="h4 font-weight-bold text-success mb-0">$<?= number_format($utilidadHoy,2) ?></div>
                                         <small class="text-muted">Ganancia neta</small>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- ALERTAS INTELIGENTES - Más organizadas -->
+                            <!-- ALERTAS INTELIGENTES -->
                             <div class="mb-4">
                                 <h6 class="text-muted mb-3">
                                     <i class="fas fa-exclamation-triangle mr-2"></i>
@@ -1710,7 +1660,7 @@ canvas {
                                 <?php endif; ?>
                             </div>
 
-                            <!-- ACCIÓN EJECUTIVA - Más destacada -->
+                            <!-- ACCIÓN EJECUTIVA -->
                             <div class="card bg-light border-0">
                                 <div class="card-body p-3">
                                     <div class="d-flex">
@@ -1736,69 +1686,32 @@ canvas {
     </section>
 </div>
 
-<!-- MODALES -->
-
-<!-- Modal Ventas Día - SIMPLE Y FUNCIONAL -->
+<!-- MODALES (todos tus modales originales) -->
+<!-- Modal Ventas Día -->
 <div class="modal fade" id="modalVentasHoy" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-calendar-day mr-2"></i> 
-                    Ventas del Día - <?= date('d/m/Y') ?>
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title"><i class="fas fa-calendar-day mr-2"></i> Ventas del Día - <?= date('d/m/Y') ?></h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
-                <!-- Mini resumen -->
                 <div class="sales-mini-summary primary d-flex justify-content-between align-items-center">
                     <span class="text-muted">Total ventas hoy:</span>
                     <span class="h5 mb-0 font-weight-bold text-primary">$<?= number_format($totalVentasDia, 2) ?></span>
                 </div>
-
                 <div class="table-responsive">
                     <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th class="text-center">Cantidad</th>
-                                <th class="text-right">Total</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Producto</th><th class="text-center">Cantidad</th><th class="text-right">Total</th></tr></thead>
                         <tbody>
                         <?php 
-                        $res = $conn->query("
-                            SELECT p.nombre, v.cantidad_vendida, 
-                                   (v.cantidad_vendida * p.precio_venta) AS total,
-                                   p.tipo_inventario
-                            FROM ventas v
-                            JOIN productos p ON v.id_producto = p.id
-                            WHERE DATE(v.fecha_venta) = '$hoy'
-                            ORDER BY v.fecha_venta DESC
-                        ");
+                        $res = $conn->query("SELECT p.nombre, v.cantidad_vendida, (v.cantidad_vendida * p.precio_venta) AS total, p.tipo_inventario FROM ventas v JOIN productos p ON v.id_producto = p.id WHERE DATE(v.fecha_venta) = '$hoy' ORDER BY v.fecha_venta DESC");
                         if($res && $res->num_rows > 0):
                             while($v = $res->fetch_assoc()): 
                         ?>
-                            <tr>
-                                <td>
-                                    <span class="badge-type <?= $v['tipo_inventario'] ?>"></span>
-                                    <?= htmlspecialchars($v['nombre']) ?>
-                                </td>
-                                <td class="text-center"><?= $v['cantidad_vendida'] ?></td>
-                                <td class="text-right">$<?= number_format($v['total'], 2) ?></td>
-                            </tr>
-                        <?php 
-                            endwhile; 
-                        else:
-                        ?>
-                            <tr>
-                                <td colspan="3" class="no-data-message">
-                                    <i class="fas fa-shopping-cart"></i>
-                                    <p class="mb-0">No hay ventas registradas hoy</p>
-                                </td>
-                            </tr>
+                            <tr><td><span class="badge-type <?= $v['tipo_inventario'] ?>"></span><?= htmlspecialchars($v['nombre']) ?></td><td class="text-center"><?= $v['cantidad_vendida'] ?></td><td class="text-right">$<?= number_format($v['total'], 2) ?></td></tr>
+                        <?php endwhile; else: ?>
+                            <tr><td colspan="3" class="no-data-message"><i class="fas fa-shopping-cart"></i><p>No hay ventas registradas hoy</p></td></tr>
                         <?php endif; ?>
                         </tbody>
                     </table>
@@ -1808,244 +1721,86 @@ canvas {
     </div>
 </div>
 
-<!-- Modal Usuarios - Versión Profesional con Búsqueda -->
-<div class="modal fade" id="modalUsuarios" tabindex="-1" role="dialog" aria-labelledby="modalUsuariosTitle">
+<!-- Modal Usuarios -->
+<div class="modal fade" id="modalUsuarios" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-gradient-success text-white py-3">
-                <h5 class="modal-title" id="modalUsuariosTitle">
-                    <i class="fas fa-users-cog mr-2"></i>
-                    Gestión de Usuarios del Sistema
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <h5 class="modal-title"><i class="fas fa-users-cog mr-2"></i>Gestión de Usuarios</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
-            
             <div class="modal-body p-0">
-                <!-- Barra de herramientas fija -->
                 <div class="bg-light p-3 border-bottom sticky-top">
                     <div class="row align-items-center">
-                        <!-- Buscador en tiempo real -->
                         <div class="col-md-5">
                             <div class="input-group">
-                                <div class="input-group-prepend">
-                                    <span class="input-group-text bg-white border-right-0">
-                                        <i class="fas fa-search text-success"></i>
-                                    </span>
-                                </div>
-                                <input type="text" 
-                                       class="form-control border-left-0 pl-0" 
-                                       id="buscadorUsuarios" 
-                                       placeholder="Buscar por nombre, email o rol..."
-                                       autocomplete="off">
-                                <div class="input-group-append">
-                                    <button class="btn btn-outline-success" type="button" id="limpiarBusqueda">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
+                                <div class="input-group-prepend"><span class="input-group-text bg-white border-right-0"><i class="fas fa-search text-success"></i></span></div>
+                                <input type="text" class="form-control border-left-0 pl-0" id="buscadorUsuarios" placeholder="Buscar por nombre, email o rol...">
+                                <div class="input-group-append"><button class="btn btn-outline-success" id="limpiarBusqueda"><i class="fas fa-times"></i></button></div>
                             </div>
                         </div>
-                        
-                        <!-- Resumen Estadístico Compacto -->
                         <div class="col-md-7">
                             <div class="d-flex justify-content-end align-items-center">
-                                <div class="mr-4 text-center px-3">
-                                    <span class="d-block text-muted small">Total</span>
-                                    <span class="h5 mb-0 font-weight-bold text-success">
-                                        <i class="fas fa-users mr-1"></i><span id="totalUsuarios"><?= $totalUsuarios ?></span>
-                                    </span>
-                                </div>
-                                <div class="mr-4 text-center px-3">
-                                    <span class="d-block text-muted small">Admins</span>
-                                    <span class="h5 mb-0 font-weight-bold text-warning">
-                                        <i class="fas fa-crown mr-1"></i>
-                                        <?php 
-                                        $admins = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol='administrador' AND activo=1")->fetch_assoc();
-                                        echo $admins['total'];
-                                        ?>
-                                    </span>
-                                </div>
-                                <div class="text-center px-3">
-                                    <span class="d-block text-muted small">Vendedores</span>
-                                    <span class="h5 mb-0 font-weight-bold text-info">
-                                        <i class="fas fa-user-tie mr-1"></i>
-                                        <?php 
-                                        $vendedores = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol='vendedor' AND activo=1")->fetch_assoc();
-                                        echo $vendedores['total'];
-                                        ?>
-                                    </span>
-                                </div>
+                                <div class="mr-4 text-center px-3"><span class="d-block text-muted small">Total</span><span class="h5 mb-0 font-weight-bold text-success"><i class="fas fa-users mr-1"></i><span id="totalUsuarios"><?= $totalUsuarios ?></span></span></div>
+                                <div class="mr-4 text-center px-3"><span class="d-block text-muted small">Admins</span><span class="h5 mb-0 font-weight-bold text-warning"><i class="fas fa-crown mr-1"></i><?php $admins = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol='administrador' AND activo=1")->fetch_assoc(); echo $admins['total']; ?></span></div>
+                                <div class="text-center px-3"><span class="d-block text-muted small">Vendedores</span><span class="h5 mb-0 font-weight-bold text-info"><i class="fas fa-user-tie mr-1"></i><?php $vendedores = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol='vendedor' AND activo=1")->fetch_assoc(); echo $vendedores['total']; ?></span></div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Contenedor de tabla con altura fija y scroll -->
-                <div style="height: 300px; overflow-y: auto;" id="tablaContainer">
+                <div style="height: 300px; overflow-y: auto;">
                     <table class="table table-hover table-sm mb-0" id="tablaUsuarios">
-                        <thead class="thead-light sticky-top" style="top: 0; z-index: 10;">
-                            <tr>
-                                <th>Usuario</th>
-                                <th>Email</th>
-                                <th>Rol</th>
-                                <th>Estado</th>
-                                <th>Registro</th>
-                                <th>Creado por</th>
-                            </tr>
+                        <thead class="thead-light sticky-top">
+                            <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Registro</th><th>Creado por</th></tr>
                         </thead>
-                        <tbody id="cuerpoTabla">
+                        <tbody>
                             <?php 
-                            $resUsuarios = $conn->query("
-                                SELECT u.*, c.nombre as creador_nombre 
-                                FROM usuarios u 
-                                LEFT JOIN usuarios c ON u.created_by = c.id 
-                                ORDER BY u.activo DESC, u.rol, u.nombre
-                            ");
+                            $resUsuarios = $conn->query("SELECT u.*, c.nombre as creador_nombre FROM usuarios u LEFT JOIN usuarios c ON u.created_by = c.id ORDER BY u.activo DESC, u.rol, u.nombre");
                             while($u = $resUsuarios->fetch_assoc()): 
                                 $iconColor = ($u['rol'] == 'administrador') ? 'text-warning' : 'text-info';
                                 $estadoColor = ($u['activo'] == 1) ? 'success' : 'secondary';
                                 $estadoTexto = ($u['activo'] == 1) ? 'Activo' : 'Inactivo';
                             ?>
-                            <tr class="fila-usuario" 
-                                data-nombre="<?= strtolower(htmlspecialchars($u['nombre'])) ?>"
-                                data-email="<?= strtolower(htmlspecialchars($u['email'])) ?>"
-                                data-rol="<?= strtolower($u['rol']) ?>"
-                                data-estado="<?= $estadoTexto ?>">
-                                <td class="pl-4">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-user-circle fa-lg <?= $iconColor ?> mr-2"></i>
-                                        <div class="text-truncate">
-                                            <strong><?= htmlspecialchars($u['nombre']) ?></strong>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="text-truncate">
-                                        <a href="mailto:<?= htmlspecialchars($u['email']) ?>" class="text-dark">
-                                            <i class="fas fa-envelope mr-1 text-muted small"></i>
-                                            <?= htmlspecialchars($u['email']) ?>
-                                        </a>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge badge-<?= ($u['rol'] == 'administrador') ? 'warning' : 'info' ?> badge-pill px-2 py-1" style="font-size: 0.75rem;">
-                                        <i class="fas fa-<?= ($u['rol'] == 'administrador') ? 'crown' : 'user-tie' ?> mr-1"></i>
-                                        <?= ucfirst($u['rol']) ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="badge badge-<?= $estadoColor ?> badge-pill px-2 py-1" style="font-size: 0.75rem; min-width: 50px;">
-                                        <i class="fas fa-<?= ($u['activo'] == 1) ? 'check-circle' : 'circle' ?> mr-1"></i>
-                                        <?= $estadoTexto ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar-alt mr-1 small"></i>
-                                        <?= date('d/m/Y', strtotime($u['fecha_registro'])) ?>
-                                    </small>
-                                </td>
-                                <td>
-                                    <?php if($u['creador_nombre']): ?>
-                                        <small class="text-muted text-truncate d-inline-block" style="max-width: 500px;">
-                                            <i class="fas fa-user-plus mr-1 small"></i>
-                                            <?= htmlspecialchars($u['creador_nombre']) ?>
-                                        </small>
-                                    <?php else: ?>
-                                        <small class="text-muted">-</small>
-                                    <?php endif; ?>
-                                </td>
+                            <tr class="fila-usuario" data-nombre="<?= strtolower(htmlspecialchars($u['nombre'])) ?>" data-email="<?= strtolower(htmlspecialchars($u['email'])) ?>" data-rol="<?= strtolower($u['rol']) ?>" data-estado="<?= $estadoTexto ?>">
+                                <td class="pl-4"><div class="d-flex align-items-center"><i class="fas fa-user-circle fa-lg <?= $iconColor ?> mr-2"></i><strong><?= htmlspecialchars($u['nombre']) ?></strong></div></td>
+                                <td><a href="mailto:<?= htmlspecialchars($u['email']) ?>"><?= htmlspecialchars($u['email']) ?></a></td>
+                                <td><span class="badge badge-<?= ($u['rol'] == 'administrador') ? 'warning' : 'info' ?>"><?= ucfirst($u['rol']) ?></span></td>
+                                <td><span class="badge badge-<?= $estadoColor ?>"><?= $estadoTexto ?></span></td>
+                                <td><small><?= date('d/m/Y', strtotime($u['fecha_registro'])) ?></small></td>
+                                <td><small><?= htmlspecialchars($u['creador_nombre'] ?? '-') ?></small></td>
                             </tr>
                             <?php endwhile; ?>
                         </tbody>
                     </table>
                 </div>
-
-                <!-- Barra de paginación y resultados -->
-                <div class="bg-light p-2 border-top">
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <small class="text-muted">
-                                <i class="fas fa-filter mr-1"></i>
-                                Mostrando <span id="resultadosMostrados">0</span> de <span id="totalRegistros"><?= $totalUsuarios ?></span> usuarios
-                            </small>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="d-flex justify-content-end align-items-center">
-                                <small class="text-muted mr-3" id="infoSeleccion"></small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="bg-light p-2 border-top"><small class="text-muted">Mostrando <span id="resultadosMostrados">0</span> de <span id="totalRegistros"><?= $totalUsuarios ?></span> usuarios</small></div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Ventas Semana - SIMPLE Y FUNCIONAL -->
+<!-- Modal Ventas Semana -->
 <div class="modal fade" id="modalVentasSemana" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-calendar-week mr-2"></i>
-                    Ventas de la Semana
-                    <small class="ml-2">(<?= date('d/m', strtotime($inicioSemana)) ?> - <?= date('d/m/Y', strtotime($finSemana)) ?>)</small>
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title"><i class="fas fa-calendar-week mr-2"></i>Ventas de la Semana <small>(<?= date('d/m', strtotime($inicioSemana)) ?> - <?= date('d/m/Y', strtotime($finSemana)) ?>)</small></h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
-                <!-- Mini resumen -->
-                <div class="sales-mini-summary info d-flex justify-content-between align-items-center">
-                    <span class="text-muted">Total ventas semana:</span>
-                    <span class="h5 mb-0 font-weight-bold text-info">$<?= number_format($totalVentasSemana, 2) ?></span>
-                </div>
-
+                <div class="sales-mini-summary info d-flex justify-content-between align-items-center"><span class="text-muted">Total ventas semana:</span><span class="h5 mb-0 font-weight-bold text-info">$<?= number_format($totalVentasSemana, 2) ?></span></div>
                 <div class="table-responsive">
                     <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th class="text-center">Cantidad</th>
-                                <th class="text-right">Total</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Producto</th><th class="text-center">Cantidad</th><th class="text-right">Total</th></tr></thead>
                         <tbody>
                         <?php
-                        $res = $conn->query("
-                            SELECT p.nombre, SUM(v.cantidad_vendida) AS cantidad, 
-                                   SUM(v.cantidad_vendida * p.precio_venta) AS total,
-                                   p.tipo_inventario
-                            FROM ventas v
-                            JOIN productos p ON v.id_producto = p.id
-                            WHERE DATE(v.fecha_venta) BETWEEN '$inicioSemana' AND '$finSemana'
-                            GROUP BY p.id
-                            ORDER BY total DESC
-                        ");
+                        $res = $conn->query("SELECT p.nombre, SUM(v.cantidad_vendida) AS cantidad, SUM(v.cantidad_vendida * p.precio_venta) AS total, p.tipo_inventario FROM ventas v JOIN productos p ON v.id_producto = p.id WHERE DATE(v.fecha_venta) BETWEEN '$inicioSemana' AND '$finSemana' GROUP BY p.id ORDER BY total DESC");
                         if($res && $res->num_rows > 0):
                             while($r = $res->fetch_assoc()): 
                         ?>
-                            <tr>
-                                <td>
-                                    <span class="badge-type <?= $r['tipo_inventario'] ?>"></span>
-                                    <?= htmlspecialchars($r['nombre']) ?>
-                                </td>
-                                <td class="text-center"><?= $r['cantidad'] ?></td>
-                                <td class="text-right">$<?= number_format($r['total'], 2) ?></td>
-                            </tr>
-                        <?php 
-                            endwhile; 
-                        else:
-                        ?>
-                            <tr>
-                                <td colspan="3" class="no-data-message">
-                                    <i class="fas fa-calendar-week"></i>
-                                    <p class="mb-0">No hay ventas registradas esta semana</p>
-                                </td>
-                            </tr>
+                            <tr><td><span class="badge-type <?= $r['tipo_inventario'] ?>"></span><?= htmlspecialchars($r['nombre']) ?></td><td class="text-center"><?= $r['cantidad'] ?></td><td class="text-right">$<?= number_format($r['total'], 2) ?></td></tr>
+                        <?php endwhile; else: ?>
+                            <tr><td colspan="3" class="no-data-message"><i class="fas fa-calendar-week"></i><p>No hay ventas registradas esta semana</p></td></tr>
                         <?php endif; ?>
                         </tbody>
                     </table>
@@ -2055,69 +1810,28 @@ canvas {
     </div>
 </div>
 
-<!-- Modal Ventas Mes - SIMPLE Y FUNCIONAL -->
+<!-- Modal Ventas Mes -->
 <div class="modal fade" id="modalVentasMes" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-calendar-alt mr-2"></i>
-                    Ventas del Mes - <?= date('F Y') ?>
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title"><i class="fas fa-calendar-alt mr-2"></i>Ventas del Mes - <?= date('F Y') ?></h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
-                <!-- Mini resumen -->
-                <div class="sales-mini-summary primary d-flex justify-content-between align-items-center">
-                    <span class="text-muted">Total ventas mes:</span>
-                    <span class="h5 mb-0 font-weight-bold text-primary">$<?= number_format($totalVentasMes, 2) ?></span>
-                </div>
-
+                <div class="sales-mini-summary primary d-flex justify-content-between align-items-center"><span class="text-muted">Total ventas mes:</span><span class="h5 mb-0 font-weight-bold text-primary">$<?= number_format($totalVentasMes, 2) ?></span></div>
                 <div class="table-responsive">
                     <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th class="text-center">Cantidad</th>
-                                <th class="text-right">Total</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Producto</th><th class="text-center">Cantidad</th><th class="text-right">Total</th></tr></thead>
                         <tbody>
                         <?php
-                        $res = $conn->query("
-                            SELECT p.nombre, SUM(v.cantidad_vendida) AS cantidad, 
-                                   SUM(v.cantidad_vendida * p.precio_venta) AS total,
-                                   p.tipo_inventario
-                            FROM ventas v
-                            JOIN productos p ON v.id_producto = p.id
-                            WHERE MONTH(v.fecha_venta) = MONTH(CURDATE()) 
-                              AND YEAR(v.fecha_venta) = YEAR(CURDATE())
-                            GROUP BY p.id
-                            ORDER BY total DESC
-                        ");
+                        $res = $conn->query("SELECT p.nombre, SUM(v.cantidad_vendida) AS cantidad, SUM(v.cantidad_vendida * p.precio_venta) AS total, p.tipo_inventario FROM ventas v JOIN productos p ON v.id_producto = p.id WHERE MONTH(v.fecha_venta) = MONTH(CURDATE()) AND YEAR(v.fecha_venta) = YEAR(CURDATE()) GROUP BY p.id ORDER BY total DESC");
                         if($res && $res->num_rows > 0):
                             while($r = $res->fetch_assoc()): 
                         ?>
-                            <tr>
-                                <td>
-                                    <span class="badge-type <?= $r['tipo_inventario'] ?>"></span>
-                                    <?= htmlspecialchars($r['nombre']) ?>
-                                </td>
-                                <td class="text-center"><?= $r['cantidad'] ?></td>
-                                <td class="text-right">$<?= number_format($r['total'], 2) ?></td>
-                            </tr>
-                        <?php 
-                            endwhile; 
-                        else:
-                        ?>
-                            <tr>
-                                <td colspan="3" class="no-data-message">
-                                    <i class="fas fa-calendar-alt"></i>
-                                    <p class="mb-0">No hay ventas registradas este mes</p>
-                                </td>
-                            </tr>
+                            <tr><td><span class="badge-type <?= $r['tipo_inventario'] ?>"></span><?= htmlspecialchars($r['nombre']) ?></td><td class="text-center"><?= $r['cantidad'] ?></td><td class="text-right">$<?= number_format($r['total'], 2) ?></td></tr>
+                        <?php endwhile; else: ?>
+                            <tr><td colspan="3" class="no-data-message"><i class="fas fa-calendar-alt"></i><p>No hay ventas registradas este mes</p></td></tr>
                         <?php endif; ?>
                         </tbody>
                     </table>
@@ -2127,131 +1841,30 @@ canvas {
     </div>
 </div>
 
-<!-- Modal General de Stock -->
+<!-- Modal Stock General -->
 <div class="modal fade" id="modalStockGeneral" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-boxes mr-2"></i>
-                    Inventario General
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title"><i class="fas fa-boxes mr-2"></i>Inventario General</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body" style="max-height: 500px; overflow-y: auto;">
-                <!-- Mini resumen de stock -->
                 <div class="d-flex justify-content-between mb-3">
-                    <span class="badge badge-primary p-2">
-                        <i class="fas fa-box mr-1"></i> Productos: <?= count($productosStockBajo) + count($productosStockSuficiente) ?>
-                    </span>
-                    <span class="badge badge-info p-2">
-                        <i class="fas fa-tint mr-1"></i> Insumos: <?= count($insumosStockBajo) + count($insumosStockSuficiente) ?>
-                    </span>
-                    <?php if($totalStockBajo > 0): ?>
-                    <span class="badge badge-danger p-2">
-                        <i class="fas fa-exclamation-triangle mr-1"></i> Stock bajo: <?= $totalStockBajo ?>
-                    </span>
-                    <?php endif; ?>
+                    <span class="badge badge-primary p-2"><i class="fas fa-box mr-1"></i> Productos: <?= count($productosStockBajo) + count($productosStockSuficiente) ?></span>
+                    <span class="badge badge-info p-2"><i class="fas fa-tint mr-1"></i> Insumos: <?= count($insumosStockBajo) + count($insumosStockSuficiente) ?></span>
+                    <?php if($totalStockBajo > 0): ?><span class="badge badge-danger p-2"><i class="fas fa-exclamation-triangle mr-1"></i> Stock bajo: <?= $totalStockBajo ?></span><?php endif; ?>
                 </div>
-
-                <!-- Productos -->
-                <div class="card mb-3">
-                    <div class="card-header bg-light py-2">
-                        <h5 class="mb-0 text-primary"><i class="fas fa-box mr-2"></i> Productos</h5>
-                    </div>
-                    <div class="card-body p-3">
-                        <?php if(count($productosStockBajo) > 0): ?>
-                            <div class="mb-3">
-                                <h6 class="text-danger mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Stock Bajo:</h6>
-                                <div class="row">
-                                    <?php foreach($productosStockBajo as $p): ?>
-                                    <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
-                                            <span><?= htmlspecialchars($p['nombre']) ?></span>
-                                            <span class="badge badge-danger"><?= $p['cantidad'] ?> uds</span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <?php if(count($productosStockSuficiente) > 0): ?>
-                            <div>
-                                <h6 class="text-success mb-2"><i class="fas fa-check-circle mr-1"></i> Stock Suficiente:</h6>
-                                <div class="row">
-                                    <?php foreach(array_slice($productosStockSuficiente, 0, 8) as $p): ?>
-                                    <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom">
-                                            <span><?= htmlspecialchars($p['nombre']) ?></span>
-                                            <span class="badge badge-success"><?= $p['cantidad'] ?> uds</span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                    <?php if(count($productosStockSuficiente) > 8): ?>
-                                    <div class="col-12 text-center text-muted small mt-2">
-                                        ... y <?= count($productosStockSuficiente) - 8 ?> productos más
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Insumos -->
-                <div class="card">
-                    <div class="card-header bg-light py-2">
-                        <h5 class="mb-0 text-info"><i class="fas fa-tint mr-2"></i> Insumos</h5>
-                    </div>
-                    <div class="card-body p-3">
-                        <?php if(count($insumosStockBajo) > 0): ?>
-                            <div class="mb-3">
-                                <h6 class="text-danger mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Stock Bajo:</h6>
-                                <div class="row">
-                                    <?php foreach($insumosStockBajo as $i): ?>
-                                    <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
-                                            <span><?= htmlspecialchars($i['nombre']) ?></span>
-                                            <span class="badge badge-danger"><?= $i['cantidad'] ?></span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <?php if(count($insumosStockSuficiente) > 0): ?>
-                            <div>
-                                <h6 class="text-success mb-2"><i class="fas fa-check-circle mr-1"></i> Stock Suficiente:</h6>
-                                <div class="row">
-                                    <?php foreach(array_slice($insumosStockSuficiente, 0, 8) as $i): ?>
-                                    <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom">
-                                            <span><?= htmlspecialchars($i['nombre']) ?></span>
-                                            <span class="badge badge-success"><?= $i['cantidad'] ?></span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                    <?php if(count($insumosStockSuficiente) > 8): ?>
-                                    <div class="col-12 text-center text-muted small mt-2">
-                                        ... y <?= count($insumosStockSuficiente) - 8 ?> insumos más
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <?php if($totalStockBajo == 0 && count($productosStockSuficiente) == 0 && count($insumosStockSuficiente) == 0): ?>
-                    <div class="text-center text-muted py-4">
-                        <i class="fas fa-box-open fa-3x mb-3"></i>
-                        <p class="mb-0">No hay items en el inventario</p>
-                    </div>
-                <?php endif; ?>
+                <div class="card mb-3"><div class="card-header bg-light py-2"><h5 class="mb-0 text-primary"><i class="fas fa-box mr-2"></i> Productos</h5></div>
+                <div class="card-body p-3">
+                    <?php if(count($productosStockBajo) > 0): ?><div class="mb-3"><h6 class="text-danger mb-2">Stock Bajo:</h6><div class="row"><?php foreach($productosStockBajo as $p): ?><div class="col-md-6"><div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded"><span><?= htmlspecialchars($p['nombre']) ?></span><span class="badge badge-danger"><?= $p['cantidad'] ?> uds</span></div></div><?php endforeach; ?></div></div><?php endif; ?>
+                    <?php if(count($productosStockSuficiente) > 0): ?><div><h6 class="text-success mb-2">Stock Suficiente:</h6><div class="row"><?php foreach(array_slice($productosStockSuficiente, 0, 8) as $p): ?><div class="col-md-6"><div class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"><span><?= htmlspecialchars($p['nombre']) ?></span><span class="badge badge-success"><?= $p['cantidad'] ?> uds</span></div></div><?php endforeach; if(count($productosStockSuficiente) > 8): ?><div class="col-12 text-center text-muted small mt-2">... y <?= count($productosStockSuficiente) - 8 ?> productos más</div><?php endif; ?></div></div><?php endif; ?>
+                </div></div>
+                <div class="card"><div class="card-header bg-light py-2"><h5 class="mb-0 text-info"><i class="fas fa-tint mr-2"></i> Insumos</h5></div>
+                <div class="card-body p-3">
+                    <?php if(count($insumosStockBajo) > 0): ?><div class="mb-3"><h6 class="text-danger mb-2">Stock Bajo:</h6><div class="row"><?php foreach($insumosStockBajo as $i): ?><div class="col-md-6"><div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded"><span><?= htmlspecialchars($i['nombre']) ?></span><span class="badge badge-danger"><?= $i['cantidad'] ?></span></div></div><?php endforeach; ?></div></div><?php endif; ?>
+                    <?php if(count($insumosStockSuficiente) > 0): ?><div><h6 class="text-success mb-2">Stock Suficiente:</h6><div class="row"><?php foreach(array_slice($insumosStockSuficiente, 0, 8) as $i): ?><div class="col-md-6"><div class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"><span><?= htmlspecialchars($i['nombre']) ?></span><span class="badge badge-success"><?= $i['cantidad'] ?></span></div></div><?php endforeach; if(count($insumosStockSuficiente) > 8): ?><div class="col-12 text-center text-muted small mt-2">... y <?= count($insumosStockSuficiente) - 8 ?> insumos más</div><?php endif; ?></div></div><?php endif; ?>
+                </div></div>
             </div>
         </div>
     </div>
@@ -2265,28 +1878,24 @@ canvas {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-// Guardas para widgets (persistencia)
-document.querySelectorAll(".chk-widget").forEach(chk => {
-    const id = chk.dataset.id;
-    const stored = localStorage.getItem("widget_" + id);
-    chk.checked = stored !== "0";
-    document.querySelectorAll("[data-widget='" + id + "']").forEach(el => el.style.display = chk.checked ? "" : "none");
-
-    chk.addEventListener("change", () => {
-        localStorage.setItem("widget_" + id, chk.checked ? "1" : "0");
-        document.querySelectorAll("[data-widget='" + id + "']").forEach(el => el.style.display = chk.checked ? "" : "none");
-    });
-});
-
-// Export CSV
-document.getElementById("exportCSV").addEventListener("click", () => {
-    window.location = "export_ultimas_ventas.php";
-});
-
-// Tooltips Bootstrap
-$(function () {
-    $('[data-toggle="tooltip"]').tooltip();
-});
+// Función para colapsar/expandir cards
+function toggleCard(btn) {
+    const card = btn.closest('.card');
+    const cardBody = card.querySelector('.card-body');
+    const icon = btn.querySelector('i');
+    
+    if (cardBody.classList.contains('collapsed')) {
+        cardBody.classList.remove('collapsed');
+        cardBody.style.display = '';
+        icon.classList.remove('fa-plus');
+        icon.classList.add('fa-minus');
+    } else {
+        cardBody.classList.add('collapsed');
+        cardBody.style.display = 'none';
+        icon.classList.remove('fa-minus');
+        icon.classList.add('fa-plus');
+    }
+}
 
 // Chart: Ventas - últimos 7 días
 const ventasSemana = <?= json_encode(array_map('floatval', $ventasPorDia)) ?>;
@@ -2302,7 +1911,9 @@ new Chart(ctx, {
             borderWidth: 2,
             fill: false,
             tension: 0.2,
-            pointRadius: 3
+            pointRadius: 3,
+            borderColor: "#3b82f6",
+            backgroundColor: "transparent"
         }]
     },
     options: {
@@ -2310,7 +1921,7 @@ new Chart(ctx, {
         maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            tooltip: { mode: 'index', intersect: false }
+            tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => '$' + ctx.raw.toLocaleString() } }
         },
         scales: {
             y: {
@@ -2318,30 +1929,6 @@ new Chart(ctx, {
                 ticks: { callback: function(value){ return '$' + value; } }
             }
         }
-    }
-});
-
-// Chart: KPI Horizontales
-const kpi = document.getElementById("kpiHorizontales");
-
-new Chart(kpi, {
-    type: "bar",
-    data: {
-        labels: ["Ingresos Hoy", "Tickets", "Utilidad"],
-        datasets: [{
-            label: "Valores",
-            data: [
-                <?= $totalVentasDia ?>,
-                <?= $ticketsHoy ?>,
-                <?= $utilidadHoy ?>
-            ],
-            backgroundColor: ["#3B82F6", "#8B5CF6", "#F59E0B"]
-        }]
-    },
-    options: {
-        indexAxis: 'y',
-        scales: { x: { beginAtZero: true } },
-        plugins: { legend: { display: false } }
     }
 });
 
@@ -2354,10 +1941,7 @@ if (!isset($diasSemana)) {
 
 document.addEventListener("DOMContentLoaded", function () {
     const canvas = document.getElementById("chartMix");
-    if (!canvas) {
-        console.error("No se encontró el canvas chartMix.");
-        return;
-    }
+    if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     const labels = <?= json_encode($diasSemana, JSON_UNESCAPED_UNICODE) ?>;
@@ -2370,7 +1954,7 @@ document.addEventListener("DOMContentLoaded", function () {
             datasets: [
                 {
                     type: "line",
-                    label: "Ventas",
+                    label: "Ventas ($)",
                     data: ventas,
                     borderColor: "#3B82F6",
                     borderWidth: 3,
@@ -2391,28 +1975,15 @@ document.addEventListener("DOMContentLoaded", function () {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: {
-                    display: true,
-                    position: "bottom"
-                }
+                legend: { position: "bottom" },
+                tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': ' + (ctx.dataset.label.includes('Ventas') ? '$' + ctx.raw.toLocaleString() : ctx.raw) } }
             },
             scales: {
-                yVentas: {
-                    beginAtZero: true,
-                    type: "linear",
-                    position: "left"
-                },
-                yTickets: {
-                    beginAtZero: true,
-                    type: "linear",
-                    position: "right",
-                    grid: {
-                        drawOnChartArea: false
-                    }
-                }
+                yVentas: { beginAtZero: true, position: "left", ticks: { callback: (v) => '$' + v } },
+                yTickets: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false } }
             }
         }
     });
@@ -2423,7 +1994,7 @@ const centerTextPlugin = {
     id: 'centerText',
     afterDraw(chart) {
         const { ctx, chartArea } = chart;
-        const data = chart.options.plugins.centerText;
+        const data = chart.options.plugins?.centerText;
         if (!data) return;
 
         const x = chartArea.left + chartArea.width / 2;
@@ -2432,74 +2003,40 @@ const centerTextPlugin = {
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-
         ctx.font = 'bold 18px Arial';
         ctx.fillStyle = data.color;
         ctx.fillText(data.title, x, y - 10);
-
         ctx.font = '16px Arial';
         ctx.fillText(data.value, x, y + 14);
-
         ctx.restore();
     }
 };
 
-// Donut Documentos
+// Donut - Distribución de Ventas
 document.addEventListener("DOMContentLoaded", function () {
     const ctx = document.getElementById("donutDocumentos");
     if (!ctx) return;
 
-    const valores = [
-        <?= $totalVentasDia ?>,
-        <?= $totalVentasSemana ?>,
-        <?= $totalVentasMes ?>
-    ];
-
-    const labels = [
-        "Ventas del Día",
-        "Ventas de Semana",
-        "Ventas del Mes"
-    ];
-
-    const colores = ["#38BDF8", "#A78BFA", "#eba459ff"];
+    const valores = [<?= $totalVentasDia ?>, <?= $totalVentasSemana ?>, <?= $totalVentasMes ?>];
+    const labels = ["Ventas del Día", "Ventas de Semana", "Ventas del Mes"];
+    const colores = ["#38BDF8", "#A78BFA", "#F59E0B"];
 
     const donut = new Chart(ctx, {
         type: "doughnut",
         plugins: [centerTextPlugin],
-        data: {
-            labels: labels,
-            datasets: [{
-                data: valores,
-                backgroundColor: colores,
-                hoverOffset: 8
-            }]
-        },
+        data: { labels, datasets: [{ data: valores, backgroundColor: colores, hoverOffset: 8 }] },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: "72%",
+            cutout: "65%",
             plugins: {
-                legend: {
-                    position: "bottom",
-                    labels: {
-                        boxWidth: 12
-                    }
-                },
-                centerText: {
-                    title: "Ventas del Mes",
-                    value: "$" + valores[2].toLocaleString(),
-                    color: colores[2]
-                }
+                legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                centerText: { title: "Total Mes", value: "$" + valores[2].toLocaleString(), color: colores[2] }
             },
             onClick: (evt, elements) => {
                 if (!elements.length) return;
-
                 const i = elements[0].index;
-                donut.options.plugins.centerText = {
-                    title: labels[i],
-                    value: "$" + valores[i].toLocaleString(),
-                    color: colores[i]
-                };
+                donut.options.plugins.centerText = { title: labels[i], value: "$" + valores[i].toLocaleString(), color: colores[i] };
                 donut.update();
             }
         }
@@ -2507,9 +2044,9 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 // ⏰ 30 MINUTOS DE INACTIVIDAD
-const TIEMPO_EXPIRACION = 30 * 60 * 1000; // 30 minutos en milisegundos
-const TIEMPO_ADVERTENCIA = 29 * 60 * 1000; // 29 minutos (1 minuto antes)
-const TIEMPO_ALERTA = 1 * 60 * 1000; // 1 minuto para la alerta
+const TIEMPO_EXPIRACION = 30 * 60 * 1000;
+const TIEMPO_ADVERTENCIA = 29 * 60 * 1000;
+const TIEMPO_ALERTA = 1 * 60 * 1000;
 
 let tiempoInactivo = 0;
 let advertenciaMostrada = false;
@@ -2517,17 +2054,13 @@ let advertenciaMostrada = false;
 function reiniciarContador() {
     tiempoInactivo = 0;
     advertenciaMostrada = false;
-    console.log('Contador reiniciado por actividad');
 }
 
-// Verificar inactividad cada segundo
 setInterval(() => {
     tiempoInactivo += 1000;
     
-    // Mostrar advertencia a los 29 minutos (falta 1 minuto)
     if (tiempoInactivo >= TIEMPO_ADVERTENCIA && !advertenciaMostrada) {
         advertenciaMostrada = true;
-        console.log('Mostrando advertencia de expiración');
         
         Swal.fire({
             icon: 'warning',
@@ -2543,21 +2076,12 @@ setInterval(() => {
             allowOutsideClick: false
         }).then((result) => {
             if (result.isConfirmed) {
-                // Mantener sesión activa
                 fetch('mantener_sesion.php')
                     .then(() => {
                         reiniciarContador();
-                        Swal.fire({
-                            icon: 'success',
-                            title: '¡Sesión renovada!',
-                            text: 'Puedes continuar trabajando',
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
+                        Swal.fire({ icon: 'success', title: '¡Sesión renovada!', text: 'Puedes continuar trabajando', timer: 1500, showConfirmButton: false });
                     })
-                    .catch(() => {
-                        window.location.href = 'login.php?expired=1';
-                    });
+                    .catch(() => { window.location.href = 'login.php?expired=1'; });
             } else if (result.dismiss === Swal.DismissReason.timer) {
                 window.location.href = 'logout.php';
             } else {
@@ -2566,23 +2090,12 @@ setInterval(() => {
         });
     }
     
-    // EXPIRAR a los 30 minutos
     if (tiempoInactivo >= TIEMPO_EXPIRACION) {
-        console.log('Sesión expirada por inactividad');
-        Swal.fire({
-            icon: 'info',
-            title: 'Sesión expirada',
-            text: 'Redirigiendo al login...',
-            timer: 2000,
-            showConfirmButton: false,
-            allowOutsideClick: false
-        }).then(() => {
-            window.location.href = 'login.php?expired=inactivity';
-        });
+        Swal.fire({ icon: 'info', title: 'Sesión expirada', text: 'Redirigiendo al login...', timer: 2000, showConfirmButton: false, allowOutsideClick: false })
+            .then(() => { window.location.href = 'login.php?expired=inactivity'; });
     }
 }, 1000);
 
-// Eventos que reinician el contador
 ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(event => {
     document.addEventListener(event, reiniciarContador);
 });
@@ -2595,70 +2108,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultadosSpan = document.getElementById('resultadosMostrados');
     const totalRegistros = filas.length;
     
-    // Actualizar contador inicial
     document.getElementById('totalRegistros').textContent = totalRegistros;
     actualizarContador();
     
-    // Función de búsqueda
     function buscarUsuarios() {
         const texto = buscador.value.toLowerCase().trim();
-        
-        if(texto === '') {
-            // Mostrar todas las filas
-            filas.forEach(fila => {
-                fila.style.display = '';
-            });
-        } else {
-            // Filtrar filas
+        if(texto === '') { filas.forEach(fila => { fila.style.display = ''; }); }
+        else {
             filas.forEach(fila => {
                 const nombre = fila.dataset.nombre || '';
                 const email = fila.dataset.email || '';
                 const rol = fila.dataset.rol || '';
                 const estado = fila.dataset.estado || '';
-                
-                if(nombre.includes(texto) || email.includes(texto) || rol.includes(texto) || estado.includes(texto)) {
-                    fila.style.display = '';
-                } else {
-                    fila.style.display = 'none';
-                }
+                if(nombre.includes(texto) || email.includes(texto) || rol.includes(texto) || estado.includes(texto)) { fila.style.display = ''; }
+                else { fila.style.display = 'none'; }
             });
         }
-        
         actualizarContador();
     }
     
-    // Actualizar contador de resultados
     function actualizarContador() {
         const visibles = document.querySelectorAll('.fila-usuario:not([style*="display: none"])').length;
         resultadosSpan.textContent = visibles;
-        
-        // Resaltar si no hay resultados
-        if(visibles === 0) {
-            tabla.classList.add('table-danger');
-        } else {
-            tabla.classList.remove('table-danger');
-        }
+        if(visibles === 0) { tabla.classList.add('table-danger'); }
+        else { tabla.classList.remove('table-danger'); }
     }
     
-    // Event listeners
     buscador.addEventListener('keyup', buscarUsuarios);
-    
-    // Botón limpiar búsqueda
-    document.getElementById('limpiarBusqueda').addEventListener('click', function() {
-        buscador.value = '';
-        buscarUsuarios();
-        buscador.focus();
-    });
-    
-    // Atajo de teclado (Ctrl+F para buscar)
-    document.addEventListener('keydown', function(e) {
-        if(e.ctrlKey && e.key === 'f' && document.getElementById('modalUsuarios').classList.contains('show')) {
-            e.preventDefault();
-            buscador.focus();
-        }
-    });
-    
-    // Inicializar
+    document.getElementById('limpiarBusqueda').addEventListener('click', function() { buscador.value = ''; buscarUsuarios(); buscador.focus(); });
+    document.addEventListener('keydown', function(e) { if(e.ctrlKey && e.key === 'f' && document.getElementById('modalUsuarios').classList.contains('show')) { e.preventDefault(); buscador.focus(); } });
     buscarUsuarios();
 });
 </script>
