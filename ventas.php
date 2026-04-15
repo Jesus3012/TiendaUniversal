@@ -8,7 +8,7 @@ require_once('includes/csrf.php');
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-if ($_SESSION['rol'] !== 'vendedor') {
+if ($_SESSION['rol'] !== 'administrador' && $_SESSION['rol'] !== 'vendedor') {
     header("Location: index.php");
     exit;
 }
