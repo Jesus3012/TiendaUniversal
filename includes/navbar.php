@@ -131,7 +131,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
       <div class="mobile-nav-links">
         <?php if ($rol === 'administrador'): ?>
           <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i> Inicio</a>
-          <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+          <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
           <a href="historial_reportes.php"><i class="fas fa-history"></i> Historial reportes</a>
           <a href="registrar_usuario.php"><i class="fas fa-user-plus"></i> Registrar Usuario</a>
           
@@ -197,8 +197,8 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
 
     <div class="nav-links">
       <?php if ($rol === 'administrador'): ?>
-        <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i><span>Inicio</span></a>
-        <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+        <a href="dashboard_admin.php"><i class="fas fa-home"></i><span>Inicio</span></a>
+        <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="historial_reportes.php"><i class="fas fa-history"></i><span>Historial reportes</span></a>
         <a href="registrar_usuario.php"><i class="fas fa-user-plus"></i><span>Registrar Usuario</span></a>
 
