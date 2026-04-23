@@ -13,6 +13,11 @@ if ($_SESSION['rol'] !== 'administrador' && $_SESSION['rol'] !== 'vendedor') {
     exit;
 }
 
+// Inicializar carrito en sesión si no existe
+if (!isset($_SESSION['carrito'])) {
+    $_SESSION['carrito'] = [];
+}
+
 // Verificar si hay una alerta guardada en sesión
 $alerta = null;
 if (isset($_SESSION['alerta'])) {
@@ -24,6 +29,8 @@ $venta_exitosa = false;
 // Verificar si viene de una venta exitosa para limpiar
 if (isset($_GET['venta_exitosa'])) {
     $venta_exitosa = true;
+    // Limpiar carrito de sesión
+    $_SESSION['carrito'] = [];
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
@@ -283,10 +290,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
 include('includes/header.php');
 include('includes/navbar.php');
 
-// Limpiar el parámetro GET después de mostrar la alerta
-if ($venta_exitosa) {
-    echo '<script>localStorage.removeItem("carrito");</script>';
-}
+// Pasar el carrito de sesión a JavaScript
+$carrito_json = json_encode($_SESSION['carrito']);
 ?>
 
 <!-- ESTILOS EXTERNOS -->
@@ -305,7 +310,7 @@ if ($venta_exitosa) {
                         </a>
                     </li>
                     <li class="breadcrumb-item">
-                        <a href="ventas.php">
+                        <a href="dashboard_ventas.php">
                             <i class="fas fa-cash-register"></i> Registrar Venta
                         </a>
                     </li>
@@ -423,16 +428,10 @@ if ($venta_exitosa) {
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
-let carrito = [];
-
-// Limpiar carrito si viene de venta exitosa
-<?php if($venta_exitosa): ?>
-localStorage.removeItem('carrito');
-carrito = [];
-<?php endif; ?>
+let carrito = <?php echo $carrito_json; ?>;
 
 document.addEventListener('DOMContentLoaded', function() {
-    cargarCarrito();
+    renderCarrito();
     mostrarCamposPago();
     document.getElementById('codigo').focus();
 });
@@ -449,7 +448,6 @@ Swal.fire({
 }).then(() => { 
     <?php if($alerta['tipo'] === 'success'): ?>
     // Limpiar todo después de la venta
-    localStorage.removeItem('carrito'); 
     carrito = []; 
     renderCarrito(); 
     document.getElementById('monto_pagado').value = ''; 
@@ -497,27 +495,23 @@ async function agregarProducto() {
             if (nuevaCantidad <= producto.stock) {
                 existente.cantidad++;
                 Swal.fire({ icon: 'success', title: 'Producto agregado', text: `${producto.nombre} x${existente.cantidad}`, toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+                guardarCarrito();
+                renderCarrito();
             } else {
                 Swal.fire({ icon: 'warning', title: 'Stock insuficiente', text: `Solo hay ${producto.stock} unidades disponibles.`, toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                document.getElementById('codigo').value = '';
-                document.getElementById('codigo').focus();
-                return;
             }
         } else {
             if (producto.cantidad <= producto.stock) {
                 carrito.push(producto);
                 Swal.fire({ icon: 'success', title: 'Producto agregado', text: `${producto.nombre} agregado al carrito`, toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+                guardarCarrito();
+                renderCarrito();
             } else {
                 Swal.fire({ icon: 'warning', title: 'Sin stock', text: `No hay stock disponible de ${producto.nombre}.`, toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                document.getElementById('codigo').value = '';
-                document.getElementById('codigo').focus();
-                return;
             }
         }
 
         document.getElementById('codigo').value = '';
-        guardarCarrito();
-        renderCarrito();
         document.getElementById('codigo').focus();
         
     } catch (error) {
@@ -529,7 +523,7 @@ async function agregarProducto() {
 function renderCarrito() {
     const body = document.getElementById('carritoBody');
     if (carrito.length === 0) { 
-        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></tr>'; 
+        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></td>'; 
         document.getElementById('total').value = '0.00'; 
         document.getElementById('cambio').value = '0.00'; 
         return; 
@@ -582,31 +576,51 @@ function renderCarrito() {
     calcularCambio();
 }
 
-function guardarCarrito() { localStorage.setItem('carrito', JSON.stringify(carrito)); }
-function cargarCarrito() { 
-    // Si ya hay una venta exitosa, no cargar el carrito
-    <?php if($venta_exitosa): ?>
-    carrito = [];
-    localStorage.removeItem('carrito');
-    renderCarrito();
-    <?php else: ?>
-    const saved = localStorage.getItem('carrito'); 
-    if (saved) { 
-        try { 
-            carrito = JSON.parse(saved); 
-            renderCarrito(); 
-        } catch(e) { 
-            carrito = []; 
-        } 
-    } 
-    <?php endif; ?>
+function guardarCarrito() { 
+    $.ajax({
+        url: 'ajax/guardar_carrito.php',
+        method: 'POST',
+        data: { carrito: JSON.stringify(carrito) },
+        async: false
+    });
 }
-function actualizarCantidad(index, valor) { const cantidad = parseInt(valor); if (isNaN(cantidad) || cantidad < 1) { renderCarrito(); return; } if (cantidad > carrito[index].stock) { renderCarrito(); return; } carrito[index].cantidad = cantidad; guardarCarrito(); renderCarrito(); }
-function eliminarProducto(index) { Swal.fire({ title: '¿Eliminar producto?', text: `¿Quitar ${carrito[index].nombre} del carrito?`, icon: 'question', showCancelButton: true, confirmButtonColor: '#f97316', cancelButtonColor: '#6c757d', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' }).then(result => { if (result.isConfirmed) { carrito.splice(index, 1); guardarCarrito(); renderCarrito(); Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Producto eliminado del carrito', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 }); } }); }
 
-function calcularCambio() { const total = parseFloat(document.getElementById('total').value) || 0; const pago = parseFloat(document.getElementById('monto_pagado').value) || 0; const cambio = pago - total; const cambioInput = document.getElementById('cambio'); cambioInput.value = cambio.toFixed(2); cambioInput.style.color = cambio < 0 ? '#ef4444' : '#16a34a'; cambioInput.style.fontWeight = 'bold'; }
+function actualizarCantidad(index, valor) { 
+    const cantidad = parseInt(valor); 
+    if (isNaN(cantidad) || cantidad < 1) { renderCarrito(); return; } 
+    if (cantidad > carrito[index].stock) { renderCarrito(); return; } 
+    carrito[index].cantidad = cantidad; 
+    guardarCarrito(); 
+    renderCarrito(); 
+}
 
-function seleccionarMetodo(elemento) { document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('selected')); elemento.classList.add('selected'); elemento.querySelector('input[type="radio"]').checked = true; mostrarCamposPago(); }
+function eliminarProducto(index) { 
+    Swal.fire({ title: '¿Eliminar producto?', text: `¿Quitar ${carrito[index].nombre} del carrito?`, icon: 'question', showCancelButton: true, confirmButtonColor: '#f97316', cancelButtonColor: '#6c757d', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' }).then(result => { 
+        if (result.isConfirmed) { 
+            carrito.splice(index, 1); 
+            guardarCarrito(); 
+            renderCarrito(); 
+            Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Producto eliminado del carrito', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 }); 
+        } 
+    }); 
+}
+
+function calcularCambio() { 
+    const total = parseFloat(document.getElementById('total').value) || 0; 
+    const pago = parseFloat(document.getElementById('monto_pagado').value) || 0; 
+    const cambio = pago - total; 
+    const cambioInput = document.getElementById('cambio'); 
+    cambioInput.value = cambio.toFixed(2); 
+    cambioInput.style.color = cambio < 0 ? '#ef4444' : '#16a34a'; 
+    cambioInput.style.fontWeight = 'bold'; 
+}
+
+function seleccionarMetodo(elemento) { 
+    document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('selected')); 
+    elemento.classList.add('selected'); 
+    elemento.querySelector('input[type="radio"]').checked = true; 
+    mostrarCamposPago(); 
+}
 
 function mostrarCamposPago() {
     const metodo = document.querySelector('input[name="metodo_pago"]:checked').value;

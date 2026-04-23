@@ -1,7 +1,7 @@
 <?php
+include 'includes/db.php';
 include('includes/header.php');
 include('includes/navbar.php');
-include 'includes/db.php';
 
 // ======================= PRODUCTO ESPECIAL (PAGADO) =======================
 // Este producto NO debe aparecer en la deuda con proveedores
@@ -709,6 +709,113 @@ table {
     opacity: 1 !important;
 }
 
+/* =====================================================
+   ESTILOS PARA PAGINACIÓN Y ORDENAMIENTO
+   ===================================================== */
+/* Controles de paginación */
+.pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.records-per-page {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.records-per-page label {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.records-per-page select {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    background: white;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.pagination {
+    margin: 0;
+}
+
+.pagination .page-link {
+    color: #f97316;
+    border-radius: 8px;
+    margin: 0 3px;
+    padding: 6px 12px;
+    transition: all 0.2s ease;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #f97316;
+    border-color: #f97316;
+    color: white;
+}
+
+.pagination .page-link:hover {
+    background-color: #ffedd5;
+    color: #ea580c;
+    transform: translateY(-1px);
+}
+
+.pagination-info {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 10px;
+}
+
+/* Estilos para ordenamiento de columnas */
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+    position: relative;
+    padding-right: 25px !important;
+}
+
+
+th.sortable::after {
+    content: "⇅";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    opacity: 0.7;
+    color: white;
+}
+
+th.sortable.asc::after {
+    content: "↑";
+    opacity: 1;
+}
+
+th.sortable.desc::after {
+    content: "↓";
+    opacity: 1;
+}
+
+/* Animación de filas al cargar */
+.table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.table tbody tr:hover {
+    background-color: #fff3e0 !important;
+}
+
 </style>
 
 <div class="content-wrapper">
@@ -800,48 +907,6 @@ table {
     <section class="content">
         <div class="container-fluid">
 
-            <!-- FILTROS -->
-            <div class="card card-outline card-primary shadow-sm mb-4">
-                <div class="card-header">
-                    <h3 class="card-title font-weight-bold">
-                        <i class="fas fa-filter mr-2"></i>Filtros de búsqueda
-                    </h3>
-                </div>
-
-                <div class="card-body">
-                    <form method="GET" class="row">
-
-                        <div class="col-12 col-md-4 mb-2">
-                            <label class="text-muted">Proveedor</label>
-                            <select name="proveedor" class="form-control">
-                                <option value="">Todos los proveedores</option>
-                                <?php while ($p = $listaProveedores->fetch_assoc()): ?>
-                                    <option value="<?= htmlspecialchars($p['proveedor']) ?>" <?= $filtroProveedor == $p['proveedor'] ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($p['proveedor']) ?>
-                                    </option>
-                                <?php endwhile; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-6 col-md-3 mb-2">
-                            <label class="text-muted">Fecha inicio</label>
-                            <input type="date" name="fecha_inicio" value="<?= htmlspecialchars($filtroInicio) ?>" class="form-control">
-                        </div>
-
-                        <div class="col-6 col-md-3 mb-2">
-                            <label class="text-muted">Fecha fin</label>
-                            <input type="date" name="fecha_fin" value="<?= htmlspecialchars($filtroFin) ?>" class="form-control">
-                        </div>
-
-                        <div class="col-12 col-md-2">
-                            <button class="btn btn-success btn-block">
-                                <i class="fas fa-search mr-1"></i> Aplicar
-                            </button>
-                        </div>
-
-                    </form>
-                </div>
-            </div>
 
             <!-- KPIs con información adicional -->
             <!-- KPIs con información CORREGIDA -->
@@ -931,7 +996,50 @@ table {
         </div>
     </div>
 </div>
-            
+           
+            <!-- FILTROS -->
+            <div class="card card-outline card-primary shadow-sm mb-4">
+                <div class="card-header">
+                    <h3 class="card-title font-weight-bold">
+                        <i class="fas fa-filter mr-2"></i>Filtros de búsqueda
+                    </h3>
+                </div>
+
+                <div class="card-body">
+                    <form method="GET" class="row">
+
+                        <div class="col-12 col-md-4 mb-2">
+                            <label class="text-muted">Proveedor</label>
+                            <select name="proveedor" class="form-control">
+                                <option value="">Todos los proveedores</option>
+                                <?php while ($p = $listaProveedores->fetch_assoc()): ?>
+                                    <option value="<?= htmlspecialchars($p['proveedor']) ?>" <?= $filtroProveedor == $p['proveedor'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($p['proveedor']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-6 col-md-3 mb-2">
+                            <label class="text-muted">Fecha inicio</label>
+                            <input type="date" name="fecha_inicio" value="<?= htmlspecialchars($filtroInicio) ?>" class="form-control">
+                        </div>
+
+                        <div class="col-6 col-md-3 mb-2">
+                            <label class="text-muted">Fecha fin</label>
+                            <input type="date" name="fecha_fin" value="<?= htmlspecialchars($filtroFin) ?>" class="form-control">
+                        </div>
+
+                        <div class="col-12 col-md-2">
+                            <button class="btn btn-success btn-block">
+                                <i class="fas fa-search mr-1"></i> Aplicar
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+
             <!-- Mensaje si no hay ventas -->
             <?php if (empty($productos)): ?>
             <div class="alert alert-info text-center mt-3">
@@ -943,139 +1051,163 @@ table {
             </div>
             <?php endif; ?>
             
-            <!-- TABLA PRODUCTOS -->
-            <div class="card card-outline card-warning shadow-sm mt-4">
-                <div class="card-header">
-                    <h3 class="card-title font-weight-bold">
-                        <i class="fas fa-boxes mr-2"></i>Productos y Ventas
-                    </h3>
-                    <div class="card-tools">
-                        <span class="badge badge-warning p-2">
-                            Total ganancias: $<?= number_format(array_sum(array_column($productos, 'ganancia')), 2) ?>
+<!-- TABLA PRODUCTOS CON PAGINACIÓN Y ORDENAMIENTO -->
+<div class="card card-outline card-warning shadow-sm mt-4">
+    <div class="card-header">
+        <h3 class="card-title font-weight-bold">
+            <i class="fas fa-boxes mr-2"></i>Productos y Ventas
+        </h3>
+        <div class="card-tools">
+            <span class="badge badge-warning p-2">
+                Total ganancias: $<?= number_format(array_sum(array_column($productos, 'ganancia')), 2) ?>
+            </span>
+        </div>
+    </div>
+    <div class="card-body table-responsive p-0">
+        <table class="table table-hover table-sm mb-0" id="tablaProductos">
+            <thead class="thead-dark">
+                <tr>
+                    <th class="sortable" data-column="0">Producto</th>
+                    <th class="sortable" data-column="1">Proveedor</th>
+                    <th class="sortable text-center" data-column="2">Vendidos</th>
+                    <th class="sortable text-center" data-column="3">Stock Restante</th>
+                    <th class="sortable text-right" data-column="4">Compra</th>
+                    <th class="sortable text-right" data-column="5">Venta</th>
+                    <th class="sortable text-right" data-column="6">Ganancia</th>
+                </tr>
+            </thead>
+            <tbody id="tablaProductosBody">
+                <?php foreach ($productos as $p): ?>
+                <tr class="<?= $p['es_especial'] ? 'table-success' : '' ?>">
+                    <td><?= $p['nombre'] ?>
+                        <?php if ($p['es_especial']): ?>
+                            <span class="badge badge-success ml-1"><i class="fas fa-check-circle"></i> Pagado</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?= $p['proveedor'] ?></td>
+                    <td class="text-center"><?= $p['vendidos'] ?></td>
+                    <td class="text-center">
+                        <span class="badge <?= $p['stock'] <= 0 ? 'badge-danger' : ($p['stock'] <= 5 ? 'badge-warning' : 'badge-success') ?>">
+                            <?= $p['stock'] ?>
                         </span>
-                    </div>
-                </div>
-                <div class="card-body table-responsive p-0">
-                    <table class="table table-hover table-sm mb-0 text-nowrap">
-                        <thead class="thead-dark">
-                            <tr>
-                                <th>Producto</th>
-                                <th>Proveedor</th>
-                                <th class="text-center">Vendidos</th>
-                                <th class="text-center">Stock Restante</th>
-                                <th class="text-right">Compra</th>
-                                <th class="text-right">Venta</th>
-                                <th class="text-right">Ganancia</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($productos as $p): ?>
-                            <tr class="<?= $p['es_especial'] ? 'table-success' : '' ?>">
-                                <td><?= $p['nombre'] ?>
-                                    <?php if ($p['es_especial']): ?>
-                                        <span class="badge badge-success ml-1"><i class="fas fa-check-circle"></i> Pagado</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= $p['proveedor'] ?></td>
-                                <td class="text-center"><?= $p['vendidos'] ?></td>
-                                <td class="text-center">
-                                    <span class="badge <?= $p['stock'] <= 0 ? 'badge-danger' : ($p['stock'] <= 5 ? 'badge-warning' : 'badge-success') ?>">
-                                        <?= $p['stock'] ?>
-                                    </span>
-                                </td>
-                                <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
-                                <td class="text-right">$<?= number_format($p['precio_venta'], 2) ?></td>
-                                <td class="text-right font-weight-bold text-success">
-                                    $<?= number_format($p['ganancia'], 2) ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                    </td>
+                    <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
+                    <td class="text-right">$<?= number_format($p['precio_venta'], 2) ?></td>
+                    <td class="text-right font-weight-bold text-success">
+                        $<?= number_format($p['ganancia'], 2) ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination-controls">
+            <div class="records-per-page">
+                <label>Mostrar:</label>
+                <select id="productosPorPagina">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
             </div>
+            <div id="paginacionProductos"></div>
+        </div>
+        <div class="pagination-info" id="productosInfo">
+            Mostrando <span id="productosDesde">0</span> a <span id="productosHasta">0</span> de <span id="productosTotal"><?= count($productos) ?></span> productos
+        </div>
+    </div>
+</div>
 
-            <!-- DEUDA CON PROVEEDORES - MODIFICADA PARA MOSTRAR EL PRODUCTO ESPECIAL -->
-            <div class="card card-outline card-danger shadow-sm mt-4">
-                <div class="card-header d-flex flex-column flex-md-row align-items-md-center">
-                    <h3 class="card-title font-weight-bold mb-2 mb-md-0">
-                        <i class="fas fa-hand-holding-usd mr-2"></i>
-                        Deuda con Proveedores
-                    </h3>
+<!-- DEUDA CON PROVEEDORES CON PAGINACIÓN Y ORDENAMIENTO -->
+<div class="card card-outline card-danger shadow-sm mt-4">
+    <div class="card-header d-flex flex-column flex-md-row align-items-md-center">
+        <h3 class="card-title font-weight-bold mb-2 mb-md-0">
+            <i class="fas fa-hand-holding-usd mr-2"></i>
+            Deuda con Proveedores
+        </h3>
+        <span class="badge badge-danger p-2 ml-md-auto">
+            Total adeudo: $<?= number_format($totalProveedor, 2) ?>
+        </span>
+    </div>
+    <div class="card-body">
+        <!-- ALERTA PARA EL PRODUCTO ESPECIAL -->
+        <div class="alert alert-success alert-dismissible fade show" id="alertaProductoEspecial">
+            <button type="button" class="close" onclick="ocultarAlertaProductoEspecial()" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            <h5><i class="icon fas fa-check-circle"></i> Producto pagado por adelantado</h5>
+            <p>
+                Las <strong>libretas del proveedor Nevaris 3D</strong> están excluidas de esta deuda porque se pagaron por adelantado. 
+                Sin embargo, su ganancia SÍ está incluida en el reporte de ventas.
+            </p>
+        </div>
+        <!-- BOTÓN PARA MOSTRAR LA ALERTA (OCULTO POR DEFECTO) -->
+<div class="text-center mb-3" id="btnMostrarAlertaEspecial" style="display: none;">
+    <button type="button" class="btn btn-sm btn-outline-success" id="mostrarAlertaBtn">
+        <i class="fas fa-info-circle mr-1"></i> Ver información sobre productos pagados
+    </button>
+</div>
 
-                    <span class="badge badge-danger p-2 ml-md-auto">
-                        Total adeudo: $<?= number_format($totalProveedor, 2) ?>
-                    </span>
-                </div>
-
-                <div class="card-body">
-                    <!-- ALERTA PARA EL PRODUCTO ESPECIAL -->
-                    <div class="alert alert-success alert-dismissible fade show" id="alertaProductoEspecial">
-                        <button type="button" class="close" onclick="ocultarAlertaProductoEspecial()" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                        <h5><i class="icon fas fa-check-circle"></i> Producto pagado por adelantado</h5>
-                        <p>
-                            Las <strong>libretas del proveedor Nevaris 3D</strong> están excluidas de esta deuda porque se pagaron por adelantado. 
-                            Sin embargo, su ganancia SÍ está incluida en el reporte de ventas.
-                        </p>
-                    </div>
-
-                    <!-- BOTÓN PARA MOSTRAR LA ALERTA (OCULTO POR DEFECTO) -->
-                    <div class="text-center mb-3" id="btnMostrarAlertaEspecial" style="display: none;">
-                        <button type="button" class="btn btn-sm btn-outline-success" onclick="mostrarAlertaProductoEspecial()">
-                            <i class="fas fa-info-circle mr-1"></i> Ver información sobre productos pagados
-                        </button>
-                    </div>
-
-                    <div class="table-responsive p-0">
-                        <table class="table table-hover table-sm mb-0 text-nowrap">
-                            <thead class="thead-dark">
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Proveedor</th>
-                                    <th class="text-center">Vendidos</th>
-                                    <th class="text-right">Costo unitario</th>
-                                    <th class="text-right">Deuda total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            <?php foreach ($ventasAgrupadas as $p): ?>
-                                <?php 
-                                $deuda = $p['deuda_total']; // Esto ya es 0 para el producto especial
-                                $esEspecial = $p['es_producto_especial'];
-                                
-                                // Solo mostrar productos con deuda > 0 O el producto especial (para mostrarlo como pagado)
-                                if ($deuda > 0 || $esEspecial):
-                                ?>
-                                <tr class="<?= $esEspecial ? 'table-success' : '' ?>">
-                                    <td><?= $p['producto'] ?></td>
-                                    <td><?= $p['proveedor'] ?></td>
-                                    <td class="text-center"><?= $p['total_vendido'] ?></td>
-                                    <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
-                                    <td class="text-right font-weight-bold <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
-                                        <?php if ($esEspecial): ?>
-                                            <span class="badge badge-success">PAGADO</span>
-                                        <?php else: ?>
-                                            $<?= number_format($deuda, 2) ?>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                                <?php endif; ?>
-                            <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="card-footer text-right">
-                    <small class="text-muted">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        Este monto representa el total pendiente de pago a proveedores. 
-                        Las <strong>libretas de Nevaris 3D</strong> están excluidas (ya pagadas).
-                    </small>
-                </div>
+        <div class="table-responsive p-0">
+            <table class="table table-hover table-sm mb-0" id="tablaDeuda">
+                <thead class="thead-dark">
+                    <tr>
+                        <th class="sortable" data-column="0">Producto</th>
+                        <th class="sortable" data-column="1">Proveedor</th>
+                        <th class="sortable text-center" data-column="2">Vendidos</th>
+                        <th class="sortable text-right" data-column="3">Costo unitario</th>
+                        <th class="sortable text-right" data-column="4">Deuda total</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaDeudaBody">
+                    <?php foreach ($ventasAgrupadas as $p): 
+                        $deuda = $p['deuda_total'];
+                        $esEspecial = $p['es_producto_especial'];
+                        if ($deuda > 0 || $esEspecial):
+                    ?>
+                    <tr class="<?= $esEspecial ? 'table-success' : '' ?>">
+                        <td><?= $p['producto'] ?></td>
+                        <td><?= $p['proveedor'] ?></td>
+                        <td class="text-center"><?= $p['total_vendido'] ?></td>
+                        <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
+                        <td class="text-right font-weight-bold <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
+                            <?php if ($esEspecial): ?>
+                                <span class="badge badge-success">PAGADO</span>
+                            <?php else: ?>
+                                $<?= number_format($deuda, 2) ?>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endif; endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination-controls">
+            <div class="records-per-page">
+                <label>Mostrar:</label>
+                <select id="deudaPorPagina">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
             </div>
+            <div id="paginacionDeuda"></div>
+        </div>
+        <div class="pagination-info" id="deudaInfo">
+            Mostrando <span id="deudaDesde">0</span> a <span id="deudaHasta">0</span> de <span id="deudaTotal"><?= count($ventasAgrupadas) ?></span> registros
+        </div>
+    </div>
+    <div class="card-footer text-right">
+        <small class="text-muted">
+            <i class="fas fa-info-circle mr-1"></i>
+            Este monto representa el total pendiente de pago a proveedores. 
+            Las <strong>libretas de Nevaris 3D</strong> están excluidas (ya pagadas).
+        </small>
+    </div>
+</div>
 
             <!-- CALENDARIO DE ACTIVIDAD -->
             <div class="card card-outline card-info shadow-sm mt-4">
@@ -1250,44 +1382,81 @@ let fechasVentasPHP = <?= json_encode($fechasVentas) ?>;
 // ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
 const STORAGE_KEY_ESPECIAL = 'ocultarAlertaProductoEspecial';
 
+// ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
 function ocultarAlertaProductoEspecial() {
-    const alerta = document.getElementById('alertaProductoEspecial');
-    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    console.log('Cerrando alerta...'); // Para depuración
+    var alerta = document.getElementById('alertaProductoEspecial');
+    var btnContainer = document.getElementById('btnMostrarAlertaEspecial');
     
-    if (alerta && btnContainer) {
+    if (alerta) {
         alerta.style.display = 'none';
-        btnContainer.style.display = 'block';
-        localStorage.setItem(STORAGE_KEY_ESPECIAL, 'true');
+        console.log('Alerta oculta');
     }
+    if (btnContainer) {
+        btnContainer.style.display = 'block';
+        console.log('Botón mostrar visible');
+    }
+    // Guardar en localStorage que la alerta está oculta
+    localStorage.setItem('alertaEspecialOculta', 'true');
 }
 
 function mostrarAlertaProductoEspecial() {
-    const alerta = document.getElementById('alertaProductoEspecial');
-    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    console.log('Mostrando alerta...'); // Para depuración
+    var alerta = document.getElementById('alertaProductoEspecial');
+    var btnContainer = document.getElementById('btnMostrarAlertaEspecial');
     
-    if (alerta && btnContainer) {
+    if (alerta) {
         alerta.style.display = 'block';
-        btnContainer.style.display = 'none';
-        localStorage.removeItem(STORAGE_KEY_ESPECIAL);
+        console.log('Alerta visible');
     }
+    if (btnContainer) {
+        btnContainer.style.display = 'none';
+        console.log('Botón mostrar oculto');
+    }
+    localStorage.removeItem('alertaEspecialOculta');
 }
 
-function verificarEstadoAlertaEspecial() {
-    const alerta = document.getElementById('alertaProductoEspecial');
-    const btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+// ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
+document.addEventListener('DOMContentLoaded', function() {
+    var alerta = document.getElementById('alertaProductoEspecial');
+    var btnMostrar = document.getElementById('mostrarAlertaBtn');
+    var btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    var btnCerrar = document.getElementById('cerrarAlertaEspecial');
     
-    if (!alerta || !btnContainer) return;
-    
-    const alertaOculta = localStorage.getItem(STORAGE_KEY_ESPECIAL);
-    
-    if (alertaOculta === 'true') {
-        alerta.style.display = 'none';
-        btnContainer.style.display = 'block';
-    } else {
-        alerta.style.display = 'block';
-        btnContainer.style.display = 'none';
+    // Función para cerrar alerta
+    function cerrarAlerta() {
+        if (alerta) alerta.style.display = 'none';
+        if (btnContainer) btnContainer.style.display = 'block';
+        localStorage.setItem('alertaEspecialOculta', 'true');
     }
-}
+    
+    // Función para mostrar alerta
+    function mostrarAlerta() {
+        if (alerta) alerta.style.display = 'block';
+        if (btnContainer) btnContainer.style.display = 'none';
+        localStorage.removeItem('alertaEspecialOculta');
+    }
+    
+    // Evento para el botón de cerrar (X)
+    if (btnCerrar) {
+        btnCerrar.addEventListener('click', cerrarAlerta);
+    }
+    
+    // Evento para el botón de mostrar
+    if (btnMostrar) {
+        btnMostrar.addEventListener('click', mostrarAlerta);
+    }
+    
+    // Verificar estado guardado
+    var alertaOculta = localStorage.getItem('alertaEspecialOculta');
+    if (alertaOculta === 'true') {
+        if (alerta) alerta.style.display = 'none';
+        if (btnContainer) btnContainer.style.display = 'block';
+    } else {
+        if (alerta) alerta.style.display = 'block';
+        if (btnContainer) btnContainer.style.display = 'none';
+    }
+});
 
 // Función para abrir el dropdown
 function openDropdown() {
@@ -2740,6 +2909,192 @@ document.querySelectorAll('.pdf-dropdown-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
     });
+});
+
+// ==================== PAGINACIÓN Y ORDENAMIENTO PARA TABLAS ====================
+class TablaDinamica {
+    constructor(tablaId, tbodyId, itemsPorPaginaId, paginacionId, infoIds) {
+        this.tabla = document.getElementById(tablaId);
+        this.tbody = document.getElementById(tbodyId);
+        this.itemsPorPaginaSelect = document.getElementById(itemsPorPaginaId);
+        this.paginacionDiv = document.getElementById(paginacionId);
+        this.infoDesde = document.getElementById(infoIds.desde);
+        this.infoHasta = document.getElementById(infoIds.hasta);
+        this.infoTotal = document.getElementById(infoIds.total);
+        
+        this.datos = [];
+        this.paginaActual = 1;
+        this.itemsPorPagina = 10;
+        this.columnaOrden = 0;
+        this.direccionOrden = 'asc';
+        
+        this.init();
+    }
+    
+    init() {
+        this.cargarDatos();
+        
+        if (this.itemsPorPaginaSelect) {
+            this.itemsPorPaginaSelect.addEventListener('change', (e) => {
+                this.itemsPorPagina = parseInt(e.target.value);
+                this.paginaActual = 1;
+                this.renderizar();
+            });
+        }
+        
+        this.tabla.querySelectorAll('.sortable').forEach((th, index) => {
+            th.addEventListener('click', () => this.ordenarPor(index));
+        });
+        
+        this.renderizar();
+    }
+    
+    cargarDatos() {
+        const filas = this.tbody.querySelectorAll('tr');
+        this.datos = Array.from(filas).map(fila => {
+            return Array.from(fila.querySelectorAll('td')).map(celda => celda.innerText.trim());
+        });
+    }
+    
+    ordenarPor(columna) {
+        if (this.columnaOrden === columna) {
+            this.direccionOrden = this.direccionOrden === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.columnaOrden = columna;
+            this.direccionOrden = 'asc';
+        }
+        
+        this.tabla.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('asc', 'desc');
+        });
+        const thActual = this.tabla.querySelector(`.sortable[data-column="${columna}"]`);
+        thActual.classList.add(this.direccionOrden);
+        
+        this.ordenarDatos();
+        this.paginaActual = 1;
+        this.renderizar();
+    }
+    
+    ordenarDatos() {
+        const columna = this.columnaOrden;
+        const direccion = this.direccionOrden;
+        const esNumero = (valor) => {
+            const limpio = valor.replace(/[$,]/g, '');
+            return !isNaN(parseFloat(limpio)) && isFinite(limpio);
+        };
+        
+        this.datos.sort((a, b) => {
+            let valA = a[columna];
+            let valB = b[columna];
+            
+            if (esNumero(valA) && esNumero(valB)) {
+                valA = parseFloat(valA.replace(/[$,]/g, ''));
+                valB = parseFloat(valB.replace(/[$,]/g, ''));
+            }
+            
+            if (valA < valB) return direccion === 'asc' ? -1 : 1;
+            if (valA > valB) return direccion === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+    
+    renderizar() {
+        const inicio = (this.paginaActual - 1) * this.itemsPorPagina;
+        const fin = inicio + this.itemsPorPagina;
+        const paginaDatos = this.datos.slice(inicio, fin);
+        const totalPaginas = Math.ceil(this.datos.length / this.itemsPorPagina);
+        
+        this.tbody.innerHTML = '';
+        paginaDatos.forEach(filaData => {
+            const fila = document.createElement('tr');
+            filaData.forEach(celdaData => {
+                const celda = document.createElement('td');
+                if (celdaData.match(/^\$?[\d,]+\.\d{2}$/)) celda.className = 'text-right';
+                else if (celdaData.match(/^\d+$/)) celda.className = 'text-center';
+                celda.innerHTML = celdaData;
+                fila.appendChild(celda);
+            });
+            this.tbody.appendChild(fila);
+        });
+        
+        const desde = this.datos.length > 0 ? inicio + 1 : 0;
+        const hasta = Math.min(fin, this.datos.length);
+        this.infoDesde.textContent = desde;
+        this.infoHasta.textContent = hasta;
+        this.infoTotal.textContent = this.datos.length;
+        
+        this.renderizarPaginacion(totalPaginas);
+    }
+    
+    renderizarPaginacion(totalPaginas) {
+        if (totalPaginas <= 1) {
+            this.paginacionDiv.innerHTML = '';
+            return;
+        }
+        
+        let html = '<ul class="pagination mb-0">';
+        
+        if (this.paginaActual > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-pagina="${this.paginaActual - 1}">«</a></li>`;
+        } else {
+            html += `<li class="page-item disabled"><span class="page-link">«</span></li>`;
+        }
+        
+        const inicio = Math.max(1, this.paginaActual - 2);
+        const fin = Math.min(totalPaginas, this.paginaActual + 2);
+        
+        if (inicio > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-pagina="1">1</a></li>`;
+            if (inicio > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        
+        for (let i = inicio; i <= fin; i++) {
+            const active = i === this.paginaActual ? 'active' : '';
+            html += `<li class="page-item ${active}"><a class="page-link" href="#" data-pagina="${i}">${i}</a></li>`;
+        }
+        
+        if (fin < totalPaginas) {
+            if (fin < totalPaginas - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            html += `<li class="page-item"><a class="page-link" href="#" data-pagina="${totalPaginas}">${totalPaginas}</a></li>`;
+        }
+        
+        if (this.paginaActual < totalPaginas) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-pagina="${this.paginaActual + 1}">»</a></li>`;
+        } else {
+            html += `<li class="page-item disabled"><span class="page-link">»</span></li>`;
+        }
+        
+        html += '</ul>';
+        this.paginacionDiv.innerHTML = html;
+        
+        this.paginacionDiv.querySelectorAll('.page-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const pagina = parseInt(link.getAttribute('data-pagina'));
+                if (!isNaN(pagina) && pagina !== this.paginaActual) {
+                    this.paginaActual = pagina;
+                    this.renderizar();
+                }
+            });
+        });
+    }
+}
+
+// Inicializar tablas
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('tablaProductos') && document.getElementById('tablaProductosBody').children.length > 0) {
+        new TablaDinamica(
+            'tablaProductos', 'tablaProductosBody', 'productosPorPagina', 'paginacionProductos',
+            { desde: 'productosDesde', hasta: 'productosHasta', total: 'productosTotal' }
+        );
+    }
+    
+    if (document.getElementById('tablaDeuda') && document.getElementById('tablaDeudaBody').children.length > 0) {
+        new TablaDinamica(
+            'tablaDeuda', 'tablaDeudaBody', 'deudaPorPagina', 'paginacionDeuda',
+            { desde: 'deudaDesde', hasta: 'deudaHasta', total: 'deudaTotal' }
+        );
+    }
 });
 </script>
 

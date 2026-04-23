@@ -19,7 +19,18 @@ if (!isset($_SESSION['usuario_id'])) {
 $proveedorSeleccionado = $_GET['proveedor'] ?? '';
 $fechaHoy = date('d/m/Y');
 
-// Obtener proveedores (solo los que tienen productos, excluyendo insumos)
+// Función para quitar acentos
+function quitarAcentos($texto) {
+    $acentos = array(
+        'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
+        'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+        'Ñ' => 'N', 'ñ' => 'n',
+        'Ü' => 'U', 'ü' => 'u'
+    );
+    return strtr($texto, $acentos);
+}
+
+// Obtener proveedores
 $proveedores = [];
 $provQuery = "SELECT DISTINCT p.proveedor 
               FROM productos p 
@@ -34,444 +45,228 @@ while ($p = $provResult->fetch_assoc()) {
 }
 ?>
 
-<!-- Select2 CSS para el buscador mejorado -->
+<!-- Select2 CSS -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<style>
-/* Mejoras visuales sutiles - manteniendo la esencia */
-.content-wrapper {
-    background-color: #f4f6f9;
-}
 
-/* Selector de proveedor */
-.proveedor-card {
-    border-left: 4px solid #007bff;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    position: relative;
-}
-
-/* Botón de reinicio en la esquina superior derecha */
-.btn-reset-corner {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    background-color: #6c757d;
-    color: white;
-    border: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    z-index: 10;
-}
-
-.btn-reset-corner:hover:not(:disabled) {
-    background-color: #5a6268;
-    transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-.btn-reset-corner:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* Tabla más legible */
-.table thead th {
-    background-color: #e9ecef;
-    font-weight: 600;
-    font-size: 0.9rem;
-    vertical-align: middle;
-    white-space: nowrap;
-}
-
-.table tbody td {
-    vertical-align: middle;
-    padding: 0.75rem 0.5rem;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* Input de conteo más visible */
-.stock-conteo {
-    border: 2px solid #dee2e6;
-    border-radius: 4px;
-    padding: 0.375rem 0.75rem;
-    transition: border-color 0.15s ease-in-out;
-    width: 100px;
-    margin: 0 auto;
-    text-align: center;
-}
-
-.stock-conteo:focus {
-    border-color: #80bdff;
-    outline: 0;
-    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
-}
-
-/* Badge para stock bajo */
-.stock-bajo {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeeba;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-/* Totales en footer */
-tfoot tr {
-    background-color: #f8f9fa;
-    border-top: 2px solid #dee2e6;
-}
-
-tfoot td {
-    font-weight: 700;
-}
-
-/* Info boxes - manteniendo el estilo original pero más compactos */
-.info-box {
-    min-height: 80px;
-    border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.info-box-icon {
-    width: 70px;
-    height: 70px;
-    font-size: 1.8rem;
-    line-height: 70px;
-}
-
-.info-box-content {
-    padding: 10px 15px;
-}
-
-.info-box-text {
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    font-weight: 600;
-}
-
-.info-box-number {
-    font-size: 1.3rem;
-    font-weight: 700;
-}
-
-/* Gráficas */
-.card {
-    border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    border: none;
-}
-
-.card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-    font-weight: 600;
-}
-
-/* Mensaje de stock final positivo/negativo */
-.stock-final-positivo {
-    color: #28a745;
-    font-weight: 600;
-}
-
-.stock-final-negativo {
-    color: #dc3545;
-    font-weight: 600;
-}
-
-/* Separador sutil */
-hr.separador {
-    border-top: 1px dashed #dee2e6;
-    margin: 1rem 0;
-}
-
-/* Tooltip personalizado */
-.custom-tooltip {
-    cursor: help;
-    border-bottom: 1px dotted #6c757d;
-}
-
-/* Estilos para Select2 - buscador elegante */
-.select2-container--default .select2-selection--single {
-    height: 38px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-}
-
-.select2-container--default .select2-selection--single .select2-selection__rendered {
-    line-height: 36px;
-    padding-left: 12px;
-}
-
-.select2-container--default .select2-selection--single .select2-selection__arrow {
-    height: 36px;
-}
-
-.select2-container--default .select2-results__option--highlighted[aria-selected] {
-    background-color: #007bff;
-}
-
-.select2-search--dropdown .select2-search__field {
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    padding: 6px;
-}
-
-.select2-container--default .select2-results__option {
-    padding: 8px 12px;
-}
-
-/* Barra de búsqueda en tabla */
-.search-container {
-    padding: 10px 15px;
-    background-color: white;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.search-input {
-    border: 1px solid #ced4da;
-    border-radius: 20px;
-    padding: 8px 15px;
-    width: 300px;
-    transition: all 0.3s;
-}
-
-.search-input:focus {
-    border-color: #007bff;
-    outline: none;
-    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
-    width: 350px;
-}
-
-.search-icon {
-    position: absolute;
-    right: 25px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #6c757d;
-}
-
-/* Indicador de resultados de búsqueda */
-.search-stats {
-    font-size: 0.85rem;
-    color: #6c757d;
-    margin-left: 10px;
-}
-
-/* Animación para filas filtradas */
-.table tbody tr {
-    transition: all 0.2s ease;
-}
-
-.table tbody tr.hidden-row {
-    display: none;
-}
-
-/* Mensaje sin resultados */
-.no-results {
-    text-align: center;
-    padding: 30px;
-    color: #6c757d;
-    font-style: italic;
-}
-
-.no-results i {
-    font-size: 2rem;
-    margin-bottom: 10px;
-    color: #adb5bd;
-}
-
-/* Input modificado */
-.stock-conteo.modificado {
-    border-color: #28a745;
-    background-color: #f0fff0;
-}
-</style>
+<!-- Estilos del Dashboard -->
+<link rel="stylesheet" href="css/ventas_proveedor.css">
 
 <div class="content-wrapper">
-    <section class="content pt-3">
-        <div class="container-fluid">
+    <div class="container-fluid">
+        
+        <!-- BREADCRUMB BLANCO -->
+        <div class="custom-breadcrumb">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                            <i class="fas fa-home"></i> Inicio
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="dashboard_ventas.php">
+                            <i class="fas fa-cash-register"></i> Registrar Venta
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active">
+                        <i class="fas fa-handshake"></i> Venta por Proveedor
+                    </li>
+                </ol>
+            </nav>
+        </div>
 
-            <!-- =================== SELECT PROVEEDOR CON BUSCADOR =================== -->
-            <div class="card card-outline card-primary proveedor-card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-industry mr-2"></i> Venta por proveedor
-                        <?php if ($proveedorSeleccionado): ?>
-                            <small class="ml-2 text-muted">(Mostrando solo productos)</small>
-                        <?php endif; ?>
-                    </h5>
-                </div>
-                <button type="button" id="btnResetProveedor" class="btn-reset-corner" 
-                        <?= !$proveedorSeleccionado ? 'disabled' : '' ?>>
-                    <i class="fas fa-undo-alt"></i>
-                </button>
-                <div class="card-body">
-                    <form method="GET" id="proveedorForm">
-                        <div class="row">
-                            <div class="col-md-8 col-12">
-                                <label class="font-weight-bold">Seleccionar proveedor</label>
-                                <select name="proveedor" id="proveedorSelect" class="form-control" style="width: 100%;">
-                                    <option value="">— Seleccione un proveedor —</option>
-                                    <?php foreach ($proveedores as $prov): ?>
-                                        <option value="<?= htmlspecialchars($prov) ?>" <?= $proveedorSeleccionado === $prov ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($prov) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <small class="text-muted">
-                                    <i class="fas fa-info-circle"></i> Puedes buscar escribiendo en el campo
-                                </small>
-                            </div>
-                        </div>
-                    </form>
-                </div>
+        <!-- SELECTOR DE PROVEEDOR -->
+        <div class="card proveedor-card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-industry mr-2"></i> Venta por Proveedor
+                    <?php if ($proveedorSeleccionado): ?>
+                        <small class="ml-2" style="color: rgba(255,255,255,0.8);">(Mostrando solo productos)</small>
+                    <?php endif; ?>
+                </h5>
             </div>
+            <button type="button" id="btnResetProveedor" class="btn-reset-corner" 
+                    <?= !$proveedorSeleccionado ? 'disabled' : '' ?>>
+                <i class="fas fa-undo-alt"></i>
+            </button>
+            <div class="card-body">
+                <form method="GET" id="proveedorForm">
+                    <div class="row">
+                        <div class="col-md-8 col-12">
+                            <label class="font-weight-bold text-muted mb-2">
+                                <i class="fas fa-search mr-1"></i> Seleccionar proveedor
+                            </label>
+                            <select name="proveedor" id="proveedorSelect" style="width: 100%;">
+                                <option value="">— Seleccione un proveedor —</option>
+                                <?php foreach ($proveedores as $prov): ?>
+                                    <option value="<?= htmlspecialchars($prov) ?>" <?= $proveedorSeleccionado === $prov ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($prov) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="text-muted mt-1 d-block">
+                                <i class="fas fa-info-circle"></i> Puedes buscar escribiendo en el campo
+                            </small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
 
-            <?php if ($proveedorSeleccionado):
+        <?php if ($proveedorSeleccionado):
 
-                // Obtener productos SOLO de tipo producto, identificando el producto especial
-                $productos = [];
-                $q = $conn->prepare("SELECT id, nombre, cantidad, precio_compra, precio_venta, fecha_registro,
-                                    CASE 
-                                        WHEN LOWER(nombre) LIKE LOWER(?) 
-                                            AND LOWER(proveedor) LIKE LOWER(?) 
-                                        THEN 1
-                                        ELSE 0
-                                    END AS es_producto_especial
-                                    FROM productos 
-                                    WHERE proveedor = ? AND activo = 1 AND tipo_inventario = 'producto'
-                                    ORDER BY nombre ASC");
+            // ========== CONSULTA SIMPLIFICADA - SIN COLLATE ==========
+            $productos = [];
+            
+            // Consulta simple sin CASE
+            $sql = "SELECT id, nombre, cantidad, precio_compra, precio_venta, fecha_registro, proveedor
+                    FROM productos 
+                    WHERE activo = 1 
+                    AND tipo_inventario = 'producto'
+                    ORDER BY nombre ASC";
+            
+            $result = $conn->query($sql);
+            
+            // Normalizar el proveedor seleccionado para comparación
+            $proveedorNormalizado = quitarAcentos(strtolower(trim($proveedorSeleccionado)));
+            
+            while ($row = $result->fetch_assoc()) {
+                // Normalizar el proveedor de la BD
+                $provBD = $row['proveedor'] ?? '';
+                $provBDNormalizado = quitarAcentos(strtolower(trim($provBD)));
                 
-                $likeNombre = '%' . PRODUCTO_ESPECIAL_NOMBRE . '%';
-                $likeProveedor = '%' . PROVEEDOR_ESPECIAL . '%';
-                $q->bind_param("sss", $likeNombre, $likeProveedor, $proveedorSeleccionado);
-                $q->execute();
-                $r = $q->get_result();
-
-                while ($row = $r->fetch_assoc()) {
+                // Comparar ignorando acentos
+                if ($provBDNormalizado == $proveedorNormalizado) {
+                    // Verificar si es producto especial
+                    $nombreNormalizado = quitarAcentos(strtolower(trim($row['nombre'])));
+                    $esEspecial = 0;
+                    
+                    if ($nombreNormalizado == quitarAcentos(strtolower(PRODUCTO_ESPECIAL_NOMBRE)) && 
+                        $provBDNormalizado == quitarAcentos(strtolower(PROVEEDOR_ESPECIAL))) {
+                        $esEspecial = 1;
+                    }
+                    
+                    $row['es_producto_especial'] = $esEspecial;
                     $productos[] = $row;
                 }
-            ?>
+            }
+        ?>
 
-                <?php if (empty($productos)): ?>
-                    <!-- Mensaje cuando no hay productos -->
-                    <div class="alert alert-info mt-4">
-                        <i class="fas fa-info-circle mr-2"></i>
-                        <strong>Información:</strong> Este proveedor no tiene productos registrados o solo tiene insumos.
-                    </div>
-                <?php else: ?>
+            <?php if (empty($productos)): ?>
+                <div class="alert alert-info mt-4" style="border-radius: 16px; border-left: 4px solid #3b82f6;">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>Información:</strong> Este proveedor no tiene productos registrados o solo tiene insumos.
+                </div>
+            <?php else: ?>
 
-                    <!-- =================== TABLA CON BUSCADOR =================== -->
-                    <div class="card card-outline card-success mt-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="fas fa-boxes mr-2"></i> 
-                                Control de stock – <strong><?= htmlspecialchars($proveedorSeleccionado) ?></strong>
-                                <span class="badge badge-primary ml-2" id="totalProductos"><?= count($productos) ?> productos</span>
-                            </h5>
+                <!-- TABLA PRINCIPAL -->
+                <div class="card shadow-sm mt-4" style="border-radius: 20px; border: none; overflow: hidden;">
+                    <div class="card-header" style="background: white; border-bottom: 2px solid #f97316; padding: 15px 20px;">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                            <!-- Título izquierda -->
+                            <div class="d-flex align-items-center flex-wrap gap-2">
+                                <i class="fas fa-boxes" style="color: #f97316; font-size: 1.2rem;"></i>
+                                <h5 class="mb-0 fw-bold" style="color: #1e293b;">
+                                    Control de Stock – 
+                                    <strong style="color: #f97316;"><?= htmlspecialchars($proveedorSeleccionado) ?></strong>
+                                </h5>
+                                <span class="badge" style="background: #f97316; color: white; padding: 5px 12px; border-radius: 20px;">
+                                    <i class="fas fa-box me-1"></i> <?= count($productos) ?> productos
+                                </span>
+                            </div>
 
-                            <!-- Reemplaza los botones actuales con estos -->
-                            <div class="d-flex align-items-center">
-                                <!-- BUSCADOR EN TIEMPO REAL -->
-                                <div class="position-relative mr-3">
-                                    <input type="text" id="buscarProducto" class="search-input" placeholder="Buscar producto...">
-                                    <i class="fas fa-search search-icon"></i>
+                            <!-- Acciones derecha -->
+                            <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
+                                <!-- Buscador -->
+                                <div class="position-relative" style="min-width: 220px;">
+                                    <input type="text" id="buscarProducto" class="search-input" placeholder="Buscar producto..." style="width: 100%; padding-right: 35px;">
+                                    <i class="fas fa-search search-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8;"></i>
                                 </div>
                                 
-                                <!-- BOTONES DE EXPORTACIÓN CON FECHAS - VERSIÓN CORREGIDA -->
-                                <div class="btn-group mr-2" role="group">
-                                    <button type="button" class="btn btn-success btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <i class="fas fa-file-excel"></i> Excel
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end p-3" style="min-width: 250px;">
-                                        <li>
-                                            <form id="excelForm" action="reporte_excel.php" method="GET" target="_blank">
-                                                <input type="hidden" name="proveedor" value="<?= htmlspecialchars($proveedorSeleccionado) ?>">
-                                                <div class="mb-2">
-                                                    <label class="small fw-bold">Fecha inicio:</label>
-                                                    <input type="date" name="fecha_inicio" class="form-control form-control-sm" required>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="small fw-bold">Fecha fin:</label>
-                                                    <input type="date" name="fecha_fin" class="form-control form-control-sm" required>
-                                                </div>
-                                                <button type="submit" class="btn btn-success btn-sm w-100">
-                                                    <i class="fas fa-download"></i> Exportar Excel
-                                                </button>
-                                            </form>
-                                        </li>
-                                    </ul>
-                                </div>
+                                <!-- Grupo de botones de exportación -->
+                                <div class="d-flex gap-2">
+                                    <!-- Botón Excel -->
+                                    <div class="dropdown">
+                                        <button class="btn btn-excel dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #22c55e; border: none; color: white; border-radius: 40px; padding: 8px 18px; font-size: 0.75rem; font-weight: 600; transition: all 0.3s;">
+                                            <i class="fas fa-file-excel me-1"></i> Excel
+                                        </button>
+                                        <ul class="dropdown-menu p-3" style="min-width: 280px; border-radius: 16px; border: none; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+                                            <li>
+                                                <form id="excelForm" action="reporte_excel.php" method="GET" target="_blank">
+                                                    <input type="hidden" name="proveedor" value="<?= htmlspecialchars($proveedorSeleccionado) ?>">
+                                                    <div class="mb-3">
+                                                        <label class="small fw-bold text-muted mb-1">Fecha inicio</label>
+                                                        <input type="date" name="fecha_inicio" class="form-control form-control-sm" required style="border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="small fw-bold text-muted mb-1">Fecha fin</label>
+                                                        <input type="date" name="fecha_fin" class="form-control form-control-sm" required style="border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    </div>
+                                                    <button type="submit" class="btn w-100 mt-2" style="background: #22c55e; color: white; border-radius: 40px; padding: 8px; font-size: 0.75rem; font-weight: 600;">
+                                                        <i class="fas fa-download me-1"></i> Exportar a Excel
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
 
-                                <div class="btn-group" role="group">
-                                    <button type="button" class="btn btn-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <i class="fas fa-file-pdf"></i> PDF
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end p-3" style="min-width: 250px;">
-                                        <li>
-                                            <form id="pdfForm" action="reporte_pdf.php" method="GET" target="_blank">
-                                                <input type="hidden" name="proveedor" value="<?= htmlspecialchars($proveedorSeleccionado) ?>">
-                                                <div class="mb-2">
-                                                    <label class="small fw-bold">Fecha inicio:</label>
-                                                    <input type="date" name="fecha_inicio" class="form-control form-control-sm" required>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="small fw-bold">Fecha fin:</label>
-                                                    <input type="date" name="fecha_fin" class="form-control form-control-sm" required>
-                                                </div>
-                                                <button type="submit" class="btn btn-danger btn-sm w-100">
-                                                    <i class="fas fa-download"></i> Exportar PDF
-                                                </button>
-                                            </form>
-                                        </li>
-                                    </ul>
+                                    <!-- Botón PDF -->
+                                    <div class="dropdown">
+                                        <button class="btn btn-pdf dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #ef4444; border: none; color: white; border-radius: 40px; padding: 8px 18px; font-size: 0.75rem; font-weight: 600; transition: all 0.3s;">
+                                            <i class="fas fa-file-pdf me-1"></i> PDF
+                                        </button>
+                                        <ul class="dropdown-menu p-3" style="min-width: 280px; border-radius: 16px; border: none; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+                                            <li>
+                                                <form id="pdfForm" action="reporte_pdf.php" method="GET" target="_blank">
+                                                    <input type="hidden" name="proveedor" value="<?= htmlspecialchars($proveedorSeleccionado) ?>">
+                                                    <div class="mb-3">
+                                                        <label class="small fw-bold text-muted mb-1">Fecha inicio</label>
+                                                        <input type="date" name="fecha_inicio" class="form-control form-control-sm" required style="border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="small fw-bold text-muted mb-1">Fecha fin</label>
+                                                        <input type="date" name="fecha_fin" class="form-control form-control-sm" required style="border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    </div>
+                                                    <button type="submit" class="btn w-100 mt-2" style="background: #ef4444; color: white; border-radius: 40px; padding: 8px; font-size: 0.75rem; font-weight: 600;">
+                                                        <i class="fas fa-download me-1"></i> Exportar a PDF
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="card-body table-responsive p-0">
-                            <!-- Estadísticas de búsqueda -->
-                            <div class="search-stats px-3 py-2 bg-light" id="searchStats" style="display: none;">
-                                <span id="resultadosVisibles"></span>
-                            </div>
+                    <div class="card-body p-0">
+                        <div class="search-stats px-3 py-2" id="searchStats" style="display: none; background: #f8fafc; border-bottom: 1px solid #eef2f6;">
+                            <span id="resultadosVisibles" class="small text-muted"></span>
+                        </div>
 
-                            <form id="formStockFinal">
-                                <table class="table table-bordered table-sm table-hover mb-0" id="tablaProductos">
-                                    <thead class="bg-light">
+                        <form id="formStockFinal">
+                            <div class="table-wrapper">
+                                <table class="productos-table" id="tablaProductos">
+                                    <thead>
                                         <tr>
                                             <th>Producto</th>
-                                            <th class="text-center" style="width: 120px;">
+                                            <th class="col-stock">
                                                 Stock Inicial
-                                                <br><small class="text-muted">Hoy: <?= $fechaHoy ?></small>
+                                                <br><span style="font-size: 0.65rem;"><?= $fechaHoy ?></span>
                                             </th>
-                                            <th class="text-center" style="width: 140px;">
-                                                Stock después de contar
-                                                <br><small class="text-muted"><?= $fechaHoy ?></small>
+                                            <th class="col-conteo">
+                                                Stock Contado
+                                                <br><span style="font-size: 0.65rem;"><?= $fechaHoy ?></span>
                                             </th>
-                                            <th class="text-center" style="width: 80px;">Ventas</th>
-                                            <th class="text-center" style="width: 100px;">Stock Final</th>
-                                            <th class="text-right" style="width: 100px;">Venta $</th>
-                                            <th class="text-right" style="width: 100px;">Deuda $</th>
-                                            <th class="text-right" style="width: 100px;">Ganancia $</th>
+                                            <th class="col-ventas">Ventas</th>
+                                            <th class="col-final">Stock Final</th>
+                                            <th class="col-monto">Venta $</th>
+                                            <th class="col-monto">Deuda $</th>
+                                            <th class="col-monto">Ganancia $</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php 
-                                        $totalVentas = 0;
-                                        $totalDeuda = 0;
-                                        $totalGanancia = 0;
-                                        foreach ($productos as $p):
+                                        <?php foreach ($productos as $p):
                                             $stockInicial = (int)$p['cantidad'];
                                             $fechaRegistro = date('d/m/Y', strtotime($p['fecha_registro']));
                                             $esEspecial = $p['es_producto_especial'];
@@ -481,173 +276,155 @@ hr.separador {
                                             data-precio-venta="<?= $p['precio_venta'] ?>"
                                             data-precio-compra="<?= $p['precio_compra'] ?>"
                                             data-nombre="<?= strtolower(htmlspecialchars($p['nombre'])) ?>"
-                                            data-es-especial="<?= $esEspecial ?>"
-                                            class="<?= $esEspecial ? 'table-success' : '' ?>">
+                                            data-es-especial="<?= $esEspecial ?>">
                                             
-                                            <td class="font-weight-bold nombre-producto">
-                                                <?= htmlspecialchars($p['nombre']) ?>
+                                            <td class="nombre-producto">
+                                                <strong><?= htmlspecialchars($p['nombre']) ?></strong>
                                                 <?php if ($esEspecial): ?>
-                                                    <span class="badge badge-success ml-1">
+                                                    <span class="badge-pagado">
                                                         <i class="fas fa-check-circle"></i> Pagado
                                                     </span>
                                                 <?php endif; ?>
                                                 <br><small class="text-muted">Reg: <?= $fechaRegistro ?></small>
                                             </td>
 
-                                            <td class="text-center align-middle">
-                                                <strong><?= $stockInicial ?></strong>
+                                            <td class="text-center">
+                                                <strong class="text-primary"><?= number_format($stockInicial) ?></strong>
                                             </td>
 
                                             <td class="text-center">
                                                 <input type="number" 
-                                                    class="form-control form-control-sm stock-conteo text-center" 
+                                                    class="stock-conteo" 
                                                     value="<?= $stockInicial ?>" 
                                                     min="0" 
                                                     max="<?= $stockInicial ?>"
                                                     data-original="<?= $stockInicial ?>"
                                                     data-es-especial="<?= $esEspecial ?>"
-                                                    style="width: 90px; margin: 0 auto;">
+                                                    style="width: 90px;">
                                                 <input type="hidden" name="ventas[<?= $p['id'] ?>]" class="ventas-input" value="0">
                                                 <input type="hidden" name="stock_final[<?= $p['id'] ?>]" class="stock-final-input" value="<?= $stockInicial ?>">
                                                 <input type="hidden" name="es_especial[<?= $p['id'] ?>]" class="es-especial-input" value="<?= $esEspecial ?>">
                                             </td>
 
-                                            <td class="text-center align-middle font-weight-bold ventasCalculadas">0</td>
-                                            <td class="text-center align-middle font-weight-bold stockFinal"><?= $stockInicial ?></td>
-                                            <td class="text-right align-middle ventaMonto">$0.00</td>
-                                            <td class="text-right align-middle deudaMonto <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
-                                                <?= $esEspecial ? '<span class="badge badge-success">PAGADO</span>' : '$0.00' ?>
+                                            <td class="text-center ventasCalculadas fw-bold">0</td>
+                                            <td class="text-center stockFinal fw-bold"><?= number_format($stockInicial) ?></td>
+                                            <td class="text-right ventaMonto text-success fw-bold">$0.00</td>
+                                            <td class="text-right deudaMonto <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
+                                                <?= $esEspecial ? '<span class="badge-pagado">PAGADO</span>' : '$0.00' ?>
                                             </td>
-                                            <td class="text-right align-middle gananciaMonto text-success">$0.00</td>
+                                            <td class="text-right gananciaMonto text-success fw-bold">$0.00</td>
                                         </tr>
                                         <?php endforeach; ?>
                                     </tbody>
-                                    <tfoot class="bg-light font-weight-bold">
-                                        <tr>
+                                    <tfoot style="background: #f8fafc; border-top: 2px solid #f97316;">
+                                        <tr class="fw-bold">
                                             <td colspan="5" class="text-right">TOTALES</td>
-                                            <td class="text-right" id="totalVentas">$0.00</td>
-                                            <td class="text-right" id="totalDeuda">$0.00</td>
-                                            <td class="text-right" id="totalGanancia">$0.00</td>
+                                            <td class="text-right text-success" id="totalVentas">$0.00</td>
+                                            <td class="text-right text-danger" id="totalDeuda">$0.00</td>
+                                            <td class="text-right text-success" id="totalGanancia">$0.00</td>
                                         </tr>
                                     </tfoot>
                                 </table>
+                            </div>
 
-                                <div class="text-right p-3">
-                                    <button type="submit" class="btn btn-success">
-                                        <i class="fas fa-save mr-1"></i> Guardar Conteo
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                            <div class="text-right p-4">
+                                <button type="submit" class="btn btn-guardar">
+                                    <i class="fas fa-save mr-2"></i> Guardar Conteo
+                                </button>
+                            </div>
+                        </form>
                     </div>
+                </div>
 
-                    <!-- =================== INFO BOXES MEJORADOS =================== -->
-                    <div class="row mt-4">
-                        <div class="col-md-4 col-12 mb-3">
-                            <div class="info-box bg-info">
-                                <span class="info-box-icon"><i class="fas fa-cash-register"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Ventas</span>
-                                    <span class="info-box-number" id="infoVentas">$0.00</span>
-                                    <small>Total vendido</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4 col-12 mb-3">
-                            <div class="info-box bg-danger">
-                                <span class="info-box-icon"><i class="fas fa-file-invoice-dollar"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Deuda</span>
-                                    <span class="info-box-number" id="infoDeuda">$0.00</span>
-                                    <small>Costo de ventas</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4 col-12 mb-3">
-                            <div class="info-box bg-success">
-                                <span class="info-box-icon"><i class="fas fa-chart-line"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Ganancia</span>
-                                    <span class="info-box-number" id="infoGanancia">$0.00</span>
-                                    <small>Margen bruto</small>
-                                </div>
+                <!-- INFO BOXES -->
+                <div class="row mt-4">
+                    <div class="col-md-4 col-12 mb-3">
+                        <div class="info-box" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white;">
+                            <div class="info-box-icon"><i class="fas fa-cash-register"></i></div>
+                            <div class="info-box-content">
+                                <div class="info-box-text">Ventas</div>
+                                <div class="info-box-number" id="infoVentas">$0.00</div>
+                                <small>Total vendido</small>
                             </div>
                         </div>
                     </div>
 
-                    <!-- =================== GRÁFICAS =================== -->
-                    <div class="row mt-4">
-                        <div class="col-md-6 col-12 mb-3">
-                            <div class="card" style="height: 350px;">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-chart-bar mr-2"></i> Resumen de Ventas</h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="graficaVentas"></canvas>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6 col-12 mb-3">
-                            <div class="card" style="height: 350px;">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-chart-line mr-2"></i> Comparación de Stock</h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="graficaStock"></canvas>
-                                </div>
+                    <div class="col-md-4 col-12 mb-3">
+                        <div class="info-box" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white;">
+                            <div class="info-box-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                            <div class="info-box-content">
+                                <div class="info-box-text">Deuda</div>
+                                <div class="info-box-number" id="infoDeuda">$0.00</div>
+                                <small>Costo de ventas</small>
                             </div>
                         </div>
                     </div>
 
-                <?php endif; ?>
+                    <div class="col-md-4 col-12 mb-3">
+                        <div class="info-box" style="background: linear-gradient(135deg, #22c55e, #16a34a); color: white;">
+                            <div class="info-box-icon"><i class="fas fa-chart-line"></i></div>
+                            <div class="info-box-content">
+                                <div class="info-box-text">Ganancia</div>
+                                <div class="info-box-number" id="infoGanancia">$0.00</div>
+                                <small>Margen bruto</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRÁFICAS -->
+                <div class="row mt-4">
+                    <div class="col-md-6 col-12 mb-4">
+                        <div class="chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-bar mr-2"></i> Resumen de Ventas</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="graficaVentas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-12 mb-4">
+                        <div class="chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-line mr-2"></i> Comparación de Stock</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="graficaStock"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             <?php endif; ?>
+        <?php endif; ?>
 
-        </div>
-    </section>
+    </div>
 </div>
 
 <!-- Scripts -->
-<!-- jQuery PRIMERO -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<!-- Bootstrap 5 Bundle (incluye Popper) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Select2 -->
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
-
-<!-- SweetAlert2 -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     
-    // ================= INICIALIZAR SELECT2 =================
+    // Inicializar Select2
     $('#proveedorSelect').select2({
         placeholder: 'Buscar proveedor...',
         allowClear: true,
-        width: '100%',
-        language: {
-            noResults: function() {
-                return "No se encontraron proveedores";
-            },
-            searching: function() {
-                return "Buscando...";
-            }
-        }
+        width: '100%'
     }).on('change', function() {
         if (this.value) {
             document.getElementById('proveedorForm').submit();
         }
     });
 
-    // ================= BOTÓN REINICIAR =================
+    // Botón reiniciar
     const btnReset = document.getElementById('btnResetProveedor');
     if (btnReset) {
         btnReset.addEventListener('click', function() {
@@ -656,8 +433,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 text: 'Se quitará el proveedor seleccionado',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
+                confirmButtonColor: '#f97316',
+                cancelButtonColor: '#6c757d',
                 confirmButtonText: 'Sí, reiniciar',
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
@@ -669,30 +446,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ================= INICIALIZAR DROPDOWNS DE BOOTSTRAP 5 =================
-    // Bootstrap 5 inicializa automáticamente, pero podemos forzar si es necesario
-    var dropdownElementList = [].slice.call(document.querySelectorAll('.dropdown-toggle'))
-    var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
-        return new bootstrap.Dropdown(dropdownToggleEl)
-    });
-
     <?php if ($proveedorSeleccionado && !empty($productos)): ?>
 
-    // ================= VARIABLES PARA CONTROL DE MODIFICACIONES =================
     const inputsConteo = document.querySelectorAll('.stock-conteo');
     let hayModificaciones = false;
-
-    function todasLasVentasSonCero() {
-        let todasCero = true;
-        inputsConteo.forEach(input => {
-            const original = parseInt(input.dataset.original);
-            const actual = parseInt(input.value) || 0;
-            if (actual !== original) {
-                todasCero = false;
-            }
-        });
-        return todasCero;
-    }
 
     inputsConteo.forEach(input => {
         input.addEventListener('input', function() {
@@ -709,71 +466,72 @@ document.addEventListener('DOMContentLoaded', function() {
                 );
             }
             recalcular();
-            
-            if (todasLasVentasSonCero() && hayModificaciones === false) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Ventas en cero',
-                    text: 'Todos los artículos tienen ventas en cero. No podrás guardar hasta que modifiques al menos un artículo.',
-                    showConfirmButton: true,
-                    confirmButtonText: 'Entendido',
-                    timer: 3000,
-                    timerProgressBar: true
-                });
-            }
         });
     });
 
-    // ================= BUSCADOR =================
+    // Buscador mejorado con mensaje "No hay artículos"
     const buscarInput = document.getElementById('buscarProducto');
-    const tablaBody = document.querySelector('#tablaProductos tbody');
-    const filas = document.querySelectorAll('#tablaProductos tbody tr');
     const searchStats = document.getElementById('searchStats');
     const resultadosVisibles = document.getElementById('resultadosVisibles');
-    const totalOriginal = filas.length;
+    const totalOriginal = document.querySelectorAll('#tablaProductos tbody tr:not(.no-results-row)').length;
+
+    function eliminarFilaNoResultados() {
+        const filaNoResultados = document.querySelector('.no-results-row');
+        if (filaNoResultados) {
+            filaNoResultados.remove();
+        }
+    }
+
+    function crearFilaNoResultados(termino) {
+        eliminarFilaNoResultados();
+        const noResultsRow = document.createElement('tr');
+        noResultsRow.className = 'no-results-row';
+        noResultsRow.innerHTML = `
+            <td colspan="8" class="text-center py-5">
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+                    <i class="fas fa-search fa-3x" style="color: #cbd5e1;"></i>
+                    <p class="text-muted mb-0" style="font-size: 0.9rem;">
+                        No se encontraron productos con "<strong style="color: #f97316;">${escapeHtml(termino)}</strong>"
+                    </p>
+                    <small class="text-muted">Prueba con otro término de búsqueda</small>
+                </div>
+            </td>
+        `;
+        return noResultsRow;
+    }
 
     function buscarProductos() {
         const termino = buscarInput.value.toLowerCase().trim();
         let contadorVisibles = 0;
-
-        filas.forEach(fila => {
+        
+        const filasProductos = document.querySelectorAll('#tablaProductos tbody tr:not(.no-results-row)');
+        
+        filasProductos.forEach(fila => {
             const nombreProducto = fila.querySelector('.nombre-producto').innerText.toLowerCase();
-            if (nombreProducto.includes(termino)) {
+            if (termino === '' || nombreProducto.includes(termino)) {
                 fila.classList.remove('hidden-row');
                 contadorVisibles++;
             } else {
                 fila.classList.add('hidden-row');
             }
         });
-
+        
         if (termino.length > 0) {
             searchStats.style.display = 'block';
-            resultadosVisibles.innerHTML = `Mostrando ${contadorVisibles} de ${totalOriginal} productos`;
+            resultadosVisibles.innerHTML = `<i class="fas fa-filter me-1"></i> Mostrando ${contadorVisibles} de ${totalOriginal} productos`;
             
             if (contadorVisibles === 0) {
-                const noResultsRow = document.createElement('tr');
-                noResultsRow.className = 'no-results-row';
-                noResultsRow.innerHTML = `
-                    <td colspan="8" class="text-center no-results">
-                        <i class="fas fa-search"></i>
-                        <p>No se encontraron productos con "<strong>${termino}</strong>"</p>
-                    </td>
-                `;
-                
-                const existingNoResults = document.querySelector('.no-results-row');
-                if (existingNoResults) existingNoResults.remove();
-                tablaBody.appendChild(noResultsRow);
+                const noResultsRow = crearFilaNoResultados(termino);
+                document.querySelector('#tablaProductos tbody').appendChild(noResultsRow);
             } else {
-                const existingNoResults = document.querySelector('.no-results-row');
-                if (existingNoResults) existingNoResults.remove();
+                eliminarFilaNoResultados();
             }
         } else {
             searchStats.style.display = 'none';
-            filas.forEach(fila => fila.classList.remove('hidden-row'));
-            const existingNoResults = document.querySelector('.no-results-row');
-            if (existingNoResults) existingNoResults.remove();
+            filasProductos.forEach(fila => fila.classList.remove('hidden-row'));
+            eliminarFilaNoResultados();
         }
-
+        
         recalcular();
     }
 
@@ -790,40 +548,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // ================= GRÁFICAS =================
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Gráficas
     let chartVentas = new Chart(document.getElementById('graficaVentas'), {
         type: 'bar',
         data: {
             labels: ['Ventas', 'Deuda', 'Ganancia'],
             datasets: [{
                 data: [0, 0, 0],
-                backgroundColor: ['#17a2b8', '#dc3545', '#28a745'],
-                borderRadius: 4
+                backgroundColor: ['#3b82f6', '#ef4444', '#22c55e'],
+                borderRadius: 8
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return '$' + context.raw.toFixed(2);
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return '$' + value;
-                        }
-                    }
-                }
-            }
+            maintainAspectRatio: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return '$' + v.toLocaleString(); } } } }
         }
     });
 
@@ -831,8 +577,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const stockInicialArr = [];
     const stockFinalArr = [];
 
-    document.querySelectorAll('tbody tr:not(.no-results-row)').forEach(tr => {
-        nombres.push(tr.querySelector('.nombre-producto').innerText.split('\n')[0].trim());
+    document.querySelectorAll('#tablaProductos tbody tr').forEach(tr => {
+        let nombre = tr.querySelector('.nombre-producto').innerText.split('\n')[0].trim();
+        if (nombre.length > 20) nombre = nombre.substring(0, 18) + '...';
+        nombres.push(nombre);
         stockInicialArr.push(parseInt(tr.dataset.stockInicial));
         stockFinalArr.push(parseInt(tr.dataset.stockInicial));
     });
@@ -842,48 +590,23 @@ document.addEventListener('DOMContentLoaded', function() {
         data: {
             labels: nombres,
             datasets: [
-                {
-                    label: 'Stock Inicial',
-                    data: stockInicialArr,
-                    backgroundColor: '#007bff',
-                    borderRadius: 4
-                },
-                {
-                    label: 'Stock Final',
-                    data: stockFinalArr,
-                    backgroundColor: '#28a745',
-                    borderRadius: 4
-                }
+                { label: 'Stock Inicial', data: stockInicialArr, backgroundColor: '#3b82f6', borderRadius: 8 },
+                { label: 'Stock Final', data: stockFinalArr, backgroundColor: '#22c55e', borderRadius: 8 }
             ]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + context.raw;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            }
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
         }
     });
 
-    // ================= RECALCULO =================
     function recalcular() {
         let tv = 0, td = 0, tg = 0;
+        let index = 0;
 
-        document.querySelectorAll('tbody tr:not(.hidden-row):not(.no-results-row)').forEach((tr, index) => {
+        document.querySelectorAll('#tablaProductos tbody tr:not(.hidden-row)').forEach(tr => {
             let si = parseInt(tr.dataset.stockInicial);
             let pv = parseFloat(tr.dataset.precioVenta);
             let pc = parseFloat(tr.dataset.precioCompra);
@@ -891,102 +614,60 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let input = tr.querySelector('.stock-conteo');
             let sc = parseInt(input.value) || 0;
-
             sc = Math.min(Math.max(sc, 0), si);
             input.value = sc;
 
             let ventas = si - sc;
             let vm = ventas * pv;
-            
-            // Si es producto especial, la deuda es 0
             let dm = esEspecial ? 0 : ventas * pc;
             let gm = vm - dm;
 
             tr.querySelector('.ventasCalculadas').innerHTML = ventas;
             tr.querySelector('.stockFinal').innerHTML = sc;
-            tr.querySelector('.ventaMonto').innerText = '$' + vm.toFixed(2);
+            tr.querySelector('.ventaMonto').innerHTML = '$' + vm.toFixed(2);
             
-            // Mostrar deuda según sea especial o no
             let deudaCell = tr.querySelector('.deudaMonto');
             if (esEspecial) {
-                deudaCell.innerHTML = '<span class="badge badge-success">PAGADO</span>';
+                deudaCell.innerHTML = '<span class="badge-pagado">PAGADO</span>';
             } else {
-                deudaCell.innerText = '$' + dm.toFixed(2);
+                deudaCell.innerHTML = '$' + dm.toFixed(2);
             }
             
-            tr.querySelector('.gananciaMonto').innerText = '$' + gm.toFixed(2);
-
+            tr.querySelector('.gananciaMonto').innerHTML = '$' + gm.toFixed(2);
             tr.querySelector('.ventas-input').value = ventas;
             tr.querySelector('.stock-final-input').value = sc;
 
             if (!tr.classList.contains('hidden-row')) {
                 stockFinalArr[index] = sc;
             }
+            index++;
 
             tv += vm;
             td += dm;
             tg += gm;
         });
 
-        document.getElementById('totalVentas').innerText = '$' + tv.toFixed(2);
-        document.getElementById('totalDeuda').innerText = '$' + td.toFixed(2);
-        document.getElementById('totalGanancia').innerText = '$' + tg.toFixed(2);
-
-        document.getElementById('infoVentas').innerText = '$' + tv.toFixed(2);
-        document.getElementById('infoDeuda').innerText = '$' + td.toFixed(2);
-        document.getElementById('infoGanancia').innerText = '$' + tg.toFixed(2);
+        document.getElementById('totalVentas').innerHTML = '$' + tv.toFixed(2);
+        document.getElementById('totalDeuda').innerHTML = '$' + td.toFixed(2);
+        document.getElementById('totalGanancia').innerHTML = '$' + tg.toFixed(2);
+        document.getElementById('infoVentas').innerHTML = '$' + tv.toFixed(2);
+        document.getElementById('infoDeuda').innerHTML = '$' + td.toFixed(2);
+        document.getElementById('infoGanancia').innerHTML = '$' + tg.toFixed(2);
 
         chartVentas.data.datasets[0].data = [tv, td, tg];
         chartVentas.update();
         chartStock.update();
     }
 
-    inputsConteo.forEach(input => {
-        input.addEventListener('input', recalcular);
-    });
+    inputsConteo.forEach(input => input.addEventListener('input', recalcular));
+    recalcular();
 
-    // ================= GUARDAR =================
+    // Guardar
     document.getElementById('formStockFinal').addEventListener('submit', function(e) {
         e.preventDefault();
 
         if (!hayModificaciones) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Sin modificaciones',
-                text: 'No has modificado ningún artículo. Debes cambiar al menos un valor para guardar.',
-                confirmButtonColor: '#3085d6',
-                confirmButtonText: 'Entendido'
-            });
-            return;
-        }
-
-        let valoresInvalidos = false;
-        inputsConteo.forEach(input => {
-            const valor = parseInt(input.value) || 0;
-            const max = parseInt(input.max);
-            if (valor < 0 || valor > max) {
-                valoresInvalidos = true;
-            }
-        });
-
-        if (valoresInvalidos) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Valores inválidos',
-                text: 'Hay valores de stock fuera de rango. Por favor verifica.',
-                confirmButtonColor: '#3085d6'
-            });
-            return;
-        }
-
-        if (todasLasVentasSonCero()) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Ventas en cero',
-                text: 'No se puede guardar porque todas las ventas están en cero. Debes modificar al menos un artículo.',
-                confirmButtonColor: '#3085d6',
-                confirmButtonText: 'Entendido'
-            });
+            Swal.fire({ icon: 'warning', title: 'Sin modificaciones', text: 'Debes modificar al menos un artículo para guardar.', confirmButtonColor: '#f97316' });
             return;
         }
 
@@ -995,83 +676,45 @@ document.addEventListener('DOMContentLoaded', function() {
             text: 'Se actualizará el stock de los productos modificados',
             icon: 'question',
             showCancelButton: true,
-            confirmButtonColor: '#28a745',
-            cancelButtonColor: '#d33',
+            confirmButtonColor: '#22c55e',
+            cancelButtonColor: '#6c757d',
             confirmButtonText: 'Sí, guardar',
             cancelButtonText: 'Cancelar'
         }).then((result) => {
             if (result.isConfirmed) {
-                Swal.fire({
-                    title: 'Guardando...',
-                    text: 'Por favor espera',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
+                Swal.fire({ title: 'Guardando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-                // Crear objeto con datos especiales
                 const formData = new FormData(e.target);
-                
-                // Agregar información de productos especiales
-                document.querySelectorAll('tr[data-es-especial="1"]').forEach(tr => {
-                    const id = tr.dataset.id;
-                    formData.append('especiales[' + id + ']', '1');
-                });
-
-                fetch('actualizar_stock.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(r => r.json())
-                .then(res => {
-                    if (res.status === 'ok') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: '¡Éxito!',
-                            text: res.message || 'Venta guardada correctamente',
-                            timer: 1500,
-                            showConfirmButton: false
-                        }).then(() => {
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire('Error', res.msg || 'Ocurrió un error', 'error');
-                    }
-                })
-                .catch(() => {
-                    Swal.fire('Error', 'Error de conexión', 'error');
-                });
+                fetch('actualizar_stock.php', { method: 'POST', body: formData })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.status === 'ok') {
+                            Swal.fire({ icon: 'success', title: '¡Éxito!', text: res.message, timer: 1500, showConfirmButton: false })
+                                .then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', res.msg || 'Ocurrió un error', 'error');
+                        }
+                    })
+                    .catch(() => Swal.fire('Error', 'Error de conexión', 'error'));
             }
         });
     });
 
-    recalcular();
-
     <?php endif; ?>
-    
-    // ================= FECHAS POR DEFECTO =================
+
+    // Fechas por defecto
     function setDefaultDates() {
         const today = new Date();
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        
-        const formatDate = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
+        const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         
         document.querySelectorAll('#excelForm input[type="date"], #pdfForm input[type="date"]').forEach((input, index) => {
-            if (index % 2 === 0) {
-                input.value = formatDate(firstDay);
-            } else {
-                input.value = formatDate(today);
-            }
+            input.value = index % 2 === 0 ? formatDate(firstDay) : formatDate(today);
         });
     }
-    
     setDefaultDates();
 
 });
 </script>
+
+<?php include('includes/footer.php'); ?>

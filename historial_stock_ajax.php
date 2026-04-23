@@ -49,13 +49,10 @@ if (!empty($proveedor_filtro)) {
 
 // Manejo de fechas - puede ser solo una o ambas
 if (!empty($fecha_desde) && !empty($fecha_hasta)) {
-    // Si ambas fechas existen, es un rango
     $base_query .= " AND DATE(h.fecha_movimiento) BETWEEN '" . $conn->real_escape_string($fecha_desde) . "' AND '" . $conn->real_escape_string($fecha_hasta) . "'";
 } elseif (!empty($fecha_desde)) {
-    // Solo fecha desde
     $base_query .= " AND DATE(h.fecha_movimiento) >= '" . $conn->real_escape_string($fecha_desde) . "'";
 } elseif (!empty($fecha_hasta)) {
-    // Solo fecha hasta
     $base_query .= " AND DATE(h.fecha_movimiento) <= '" . $conn->real_escape_string($fecha_hasta) . "'";
 }
 
@@ -94,7 +91,7 @@ if ($registros_por_pagina !== 'todos') {
 
 $historial = $conn->query($query);
 
-// Generar HTML de la tabla (EXACTAMENTE TU DISEÑO)
+// Generar HTML de la tabla
 ob_start();
 if ($historial->num_rows === 0): ?>
     <tr>
@@ -107,27 +104,63 @@ if ($historial->num_rows === 0): ?>
     <?php 
     $contador = ($registros_por_pagina === 'todos') ? 1 : $offset + 1;
     while ($row = $historial->fetch_assoc()): 
-        $valor_mostrar = $row['cantidad_agregada'];
+        
+        // CORRECCIÓN: Manejo correcto de cantidades
+        $cantidad_mostrar = $row['cantidad_agregada'];
         $color_clase = '';
+        $signo = '';
         
         if ($row['tipo_movimiento'] == 'entrada') {
+            // Entradas siempre son positivas
             $color_clase = 'text-success';
+            $signo = '+';
+            $cantidad_mostrar = abs($row['cantidad_agregada']);
         } elseif ($row['tipo_movimiento'] == 'salida') {
-            $valor_mostrar = -$row['cantidad_agregada'];
+            // Salidas siempre son negativas
             $color_clase = 'text-danger';
+            $signo = '-';
+            $cantidad_mostrar = abs($row['cantidad_agregada']);
         } elseif ($row['tipo_movimiento'] == 'ajuste') {
-            $valor_mostrar = -$row['cantidad_agregada'];
-            $color_clase = 'text-danger';
+            // Para ajustes, usar el valor original directamente
+            if ($row['cantidad_agregada'] > 0) {
+                $color_clase = 'text-success';
+                $signo = '+';
+                $cantidad_mostrar = $row['cantidad_agregada'];
+            } elseif ($row['cantidad_agregada'] < 0) {
+                $color_clase = 'text-danger';
+                $signo = '-';
+                $cantidad_mostrar = abs($row['cantidad_agregada']);
+            } else {
+                $color_clase = '';
+                $signo = '';
+                $cantidad_mostrar = 0;
+            }
         }
+        
+        // Determinar el badge de tipo de movimiento
+        $badge_class = '';
+        $badge_text = '';
+        if ($row['tipo_movimiento'] == 'entrada') {
+            $badge_class = 'badge-entrada';
+            $badge_text = 'Entrada';
+        } elseif ($row['tipo_movimiento'] == 'salida') {
+            $badge_class = 'badge-ajuste';
+            $badge_text = 'Salida';
+        } else {
+            $badge_class = 'badge-ajuste';
+            $badge_text = 'Ajuste';
+        }
+        
+        // Determinar el color del badge de inventario
+        $inventory_badge_class = ($row['tipo_inventario'] == 'producto') ? 'badge-producto' : 'badge-insumo';
+        $inventory_badge_text = ($row['tipo_inventario'] == 'producto') ? 'Producto' : 'Insumo';
     ?>
     <tr>
         <td><?= date('d/m/Y H:i', strtotime($row['fecha_movimiento'])) ?></td>
         <td>
             <strong><?= htmlspecialchars($row['producto_nombre'] ?? 'Producto eliminado') ?></strong>
             <?php if ($row['tipo_inventario']): ?>
-                <small class="badge" style="background-color: <?= $row['tipo_inventario'] == 'producto' ? '#e3f2fd' : '#e5f5e5' ?>; color: <?= $row['tipo_inventario'] == 'producto' ? '#0d47a1' : '#148c20' ?>; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; margin-left: 5px; font-weight: normal;">
-                    <?= $row['tipo_inventario'] ?>
-                </small>
+                <span class="<?= $inventory_badge_class ?>"><?= $inventory_badge_text ?></span>
             <?php endif; ?>
         </td>
         <td>
@@ -138,17 +171,15 @@ if ($historial->num_rows === 0): ?>
             <?php endif; ?>
         </td>
         <td>
-            <?php if ($row['tipo_movimiento'] == 'entrada'): ?>
-                <span class="badge" style="background-color: #28a745; color: white; font-size: 0.7rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">Entrada</span>
-            <?php elseif ($row['tipo_movimiento'] == 'salida'): ?>
-                <span class="badge" style="background-color: #dc3545; color: white; font-size: 0.7rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">Salida</span>
-            <?php else: ?>
-                <span class="badge" style="background-color: #ffc107; color: #212529; font-size: 0.7rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">Ajuste</span>
-            <?php endif; ?>
+            <span class="<?= $badge_class ?>"><?= $badge_text ?></span>
         </td>
         <td class="text-right"><?= number_format($row['cantidad_anterior'], 2) ?></td>
         <td class="text-center <?= $color_clase ?> font-weight-bold">
-            <?= $valor_mostrar > 0 ? '+' . number_format($valor_mostrar, 2) : number_format($valor_mostrar, 2) ?>
+            <?php if ($signo): ?>
+                <?= $signo . number_format($cantidad_mostrar, 2) ?>
+            <?php else: ?>
+                <?= number_format($cantidad_mostrar, 2) ?>
+            <?php endif; ?>
         </td>
         <td class="text-center font-weight-bold"><?= number_format($row['cantidad_nueva'], 2) ?></td>
         <td>
@@ -172,7 +203,7 @@ if ($historial->num_rows === 0): ?>
 <?php endif;
 $tabla_html = ob_get_clean();
 
-// Generar HTML de la paginación (EXACTAMENTE TU DISEÑO)
+// Generar HTML de la paginación
 ob_start();
 if ($total_paginas > 1 && $registros_por_pagina !== 'todos'): ?>
     <div class="row">
@@ -184,12 +215,10 @@ if ($total_paginas > 1 && $registros_por_pagina !== 'todos'): ?>
         <div class="col-sm-6">
             <nav aria-label="Page navigation" class="float-right">
                 <ul class="pagination pagination-sm mb-0">
-                    <!-- Botón Anterior -->
                     <li class="page-item <?= $pagina_actual <= 1 ? 'disabled' : '' ?>">
                         <a class="page-link" href="javascript:void(0)" onclick="irPagina(<?= $pagina_actual - 1 ?>)" tabindex="-1">Anterior</a>
                     </li>
                     
-                    <!-- Números de página -->
                     <?php
                     $rango = 2;
                     $inicio = max(1, $pagina_actual - $rango);
@@ -216,7 +245,6 @@ if ($total_paginas > 1 && $registros_por_pagina !== 'todos'): ?>
                     }
                     ?>
                     
-                    <!-- Botón Siguiente -->
                     <li class="page-item <?= $pagina_actual >= $total_paginas ? 'disabled' : '' ?>">
                         <a class="page-link" href="javascript:void(0)" onclick="irPagina(<?= $pagina_actual + 1 ?>)">Siguiente</a>
                     </li>
