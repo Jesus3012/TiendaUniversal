@@ -536,7 +536,7 @@ table {
     display: block;
 }
 
-/* Estilos para el calendario */
+/* Estilos para el calendario - Versión corregida */
 #calendario {
     background: white;
     border-radius: 8px;
@@ -572,6 +572,68 @@ table {
 
 .fc-daygrid-day:hover {
     background-color: #f8f9fa !important;
+}
+
+/* ESTILOS CORREGIDOS PARA LOS DÍAS MARCADOS EN FULLCALENDARIO v5 */
+.fc-daygrid-day-top {
+    justify-content: center !important;
+}
+
+.fc-daygrid-day-number {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    font-weight: 500 !important;
+    margin: 4px auto !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Día con ventas - Verde */
+.dia-venta .fc-daygrid-day-number {
+    background-color: #28a745 !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3) !important;
+}
+
+/* Día con reportes - Rojo */
+.dia-reporte .fc-daygrid-day-number {
+    background-color: #dc3545 !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3) !important;
+}
+
+/* Día con ambos - Gradiente naranja */
+.dia-ambos .fc-daygrid-day-number {
+    background: linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%) !important;
+    color: white !important;
+    font-weight: bold !important;
+    box-shadow: 0 2px 5px rgba(255, 193, 7, 0.3) !important;
+}
+
+/* Tooltip personalizado */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2c3e50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
 /* Ajuste para móviles */
@@ -623,90 +685,147 @@ table {
     background-color: #f8f9fa !important;
 }
 
-/* Estilo para los días marcados */
-.fc-daygrid-day.fc-day-venta .fc-daygrid-day-number {
-    background-color: #28a745;
-    color: white;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px;
+/* Estilos para vista de semana - VERSIÓN DEFINITIVA */
+/* Asegurar que la celda de semana pueda contener el círculo absoluto */
+.fc-timegrid-day {
+    position: relative !important;
 }
 
-.fc-daygrid-day.fc-day-reporte .fc-daygrid-day-number {
-    background-color: #dc3545;
-    color: white;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px;
+/* Círculo para semana */
+.week-circle-marker {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    z-index: 100 !important;
 }
 
-.fc-daygrid-day.fc-day-ambos .fc-daygrid-day-number {
-    background-color: #ffc107;
-    color: #000;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px;
-    font-weight: bold;
+.week-circle-marker:hover {
+    transform: translate(-50%, -50%) scale(1.2) !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
 }
 
-/* Tooltip personalizado */
-.fc-daygrid-day[data-tooltip] {
-    position: relative;
+/* Fondo del día con ventas */
+.fc-timegrid-day.dia-venta {
+    background: linear-gradient(to bottom, rgba(40, 167, 69, 0.15), transparent);
 }
 
-.fc-daygrid-day[data-tooltip]:hover::after {
+/* Fondo del día con reportes */
+.fc-timegrid-day.dia-reporte {
+    background: linear-gradient(to bottom, rgba(220, 53, 69, 0.15), transparent);
+}
+
+/* Fondo del día con ambos */
+.fc-timegrid-day.dia-ambos {
+    background: linear-gradient(to bottom, rgba(255, 193, 7, 0.2), transparent);
+}
+
+/* Limpiar estilos de números en semana */
+.fc-timegrid-day-number {
+    display: block !important;
+    text-align: center !important;
+    min-height: 30px !important;
+}
+
+
+
+.fc-timegrid-day.dia-venta .fc-timegrid-day-number {
+    background-color: #28a745 !important;
+    border-radius: 50% !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    margin: 8px auto !important;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4) !important;
+}
+
+.fc-timegrid-day.dia-reporte .fc-timegrid-day-number {
+    background-color: #dc3545 !important;
+    border-radius: 50% !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    margin: 8px auto !important;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4) !important;
+}
+
+.fc-timegrid-day.dia-ambos .fc-timegrid-day-number {
+    background: linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%) !important;
+    border-radius: 50% !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    margin: 8px auto !important;
+    box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4) !important;
+}
+
+/* Tooltips para semana */
+.fc-timegrid-day[data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: 100%;
+    top: 35px;
     left: 50%;
     transform: translateX(-50%);
     background: #2c3e50;
     color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 5px 10px;
+    border-radius: 6px;
     font-size: 11px;
     white-space: nowrap;
     z-index: 1000;
-    margin-bottom: 5px;
     pointer-events: none;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+/* Asegurar que la vista de semana tenga altura suficiente */
+.fc-timegrid .fc-scrollgrid-section-body table {
+    min-height: 400px;
 }
 
-/* Forzar colores sólidos en los eventos de fondo */
-.evento-venta {
-    background-color: #38aa5389 !important;
-    opacity: 1 !important;
+/* Forzar que el día actual se vea bien */
+.fc-timegrid-day.fc-day-today {
+    background-color: #fff3e0 !important;
 }
 
-.evento-reporte {
-    background-color: #dc35469e !important;
-    opacity: 1 !important;
+.fc-timegrid-day.fc-day-today .fc-timegrid-day-number {
+    background-color: #f97316 !important;
+    color: white !important;
+    border-radius: 50% !important;
 }
 
-.evento-ambos {
-    background-color: #ffc107a7 !important;
-    opacity: 1 !important;
+/* Asegurar que los estilos de la vista mes no se afecten */
+.fc-daygrid-day-number {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    font-weight: 500 !important;
+    margin: 4px auto !important;
+    transition: all 0.2s ease !important;
 }
 
-/* Asegurar que no haya opacidad heredada */
-.fc-bg-event {
-    opacity: 1 !important;
+.fc-daygrid-day.dia-venta .fc-daygrid-day-number {
+    background-color: #28a745 !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3) !important;
 }
 
-.fc-daygrid-bg-harness {
-    opacity: 1 !important;
+.fc-daygrid-day.dia-reporte .fc-daygrid-day-number {
+    background-color: #dc3545 !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3) !important;
+}
+
+.fc-daygrid-day.dia-ambos .fc-daygrid-day-number {
+    background: linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%) !important;
+    color: white !important;
+    font-weight: bold !important;
+    box-shadow: 0 2px 5px rgba(255, 193, 7, 0.3) !important;
 }
 
 /* =====================================================
@@ -816,6 +935,56 @@ th.sortable.desc::after {
     background-color: #fff3e0 !important;
 }
 
+/* Asegurar que el calendario siempre tenga altura visible */
+.fc-view-harness {
+    min-height: 400px !important;
+}
+
+.fc-daygrid-day {
+    min-height: 80px !important;
+}
+
+/* CSS PARA FORZAR CÍRCULOS EN SEMANA - MUY ESPECÍFICO */
+.fc-timegrid-day {
+    overflow: visible !important;
+}
+
+.fc-timegrid-day-frame {
+    overflow: visible !important;
+    min-height: 60px !important;
+}
+
+.week-circle-marker {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    z-index: 9999 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Fondo de respaldo si no se ve */
+.fc-timegrid-day.dia-venta .week-circle-marker {
+    background-color: #28a745 !important;
+}
+
+.fc-timegrid-day.dia-reporte .week-circle-marker {
+    background-color: #dc3545 !important;
+}
+
+.fc-timegrid-day.dia-ambos .week-circle-marker {
+    background: linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%) !important;
+}
+
+/* Debug - borde rojo para ver si la celda existe */
+/* .fc-timegrid-day.dia-venta { border: 2px solid red !important; } */
 </style>
 
 <div class="content-wrapper">
@@ -1209,87 +1378,87 @@ th.sortable.desc::after {
     </div>
 </div>
 
-            <!-- CALENDARIO DE ACTIVIDAD -->
-            <div class="card card-outline card-info shadow-sm mt-4">
-                <div class="card-header">
-                    <h3 class="card-title font-weight-bold">
-                        <i class="fas fa-calendar-alt mr-2"></i>
-                        Calendario de Actividad
-                    </h3>
-                    <div class="card-tools">
-                        <button type="button" class="btn btn-tool" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Calendario - 9 columnas -->
-                        <div class="col-lg-9 col-md-8">
-                            <div id="calendario" style="min-height: 500px; width: 100%;"></div>
+<!-- CALENDARIO DE ACTIVIDAD -->
+<div class="card card-outline card-info shadow-sm mt-4">
+    <div class="card-header">
+        <h3 class="card-title font-weight-bold">
+            <i class="fas fa-calendar-alt mr-2"></i>
+            Calendario de Actividad
+        </h3>
+        <div class="card-tools">
+            <button type="button" class="btn btn-tool" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Calendario - 9 columnas -->
+            <div class="col-lg-9 col-md-8">
+                <div id="calendario" style="min-height: 500px; width: 100%;"></div>
+            </div>
+            
+            <!-- Panel lateral - 3 columnas -->
+            <div class="col-lg-3 col-md-4">
+                <div class="info-box bg-light p-3 h-100" style="border-left: 4px solid #17a2b8;">
+                    <div class="info-box-content">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h5 class="text-dark mb-0">
+                                <i class="fas fa-calendar-alt mr-2 text-info"></i>
+                                Calendario
+                            </h5>
+                        </div>
+                        <br>
+                        <p class="text-muted small mb-3">
+                            <i class="fas fa-chart-line mr-1"></i>
+                            Visualiza en el calendario los días con ventas (verde) y los días donde generaste reportes (rojo)
+                        </p>
+                        
+                        <hr class="my-2">
+                        
+                        <div class="d-flex align-items-center mb-3">
+                            <div style="width: 20px; height: 20px; background: #28a745; border-radius: 50%; margin-right: 10px; border: 1px solid #1e7e34; flex-shrink: 0;"></div>
+                            <span style="font-size: 0.9rem;"><strong>Ventas</strong> - Días con ventas</span>
                         </div>
                         
-                        <!-- Panel lateral - 3 columnas -->
-                        <div class="col-lg-3 col-md-4">
-                            <div class="info-box bg-light p-3 h-100" style="border-left: 4px solid #17a2b8;">
-                                <div class="info-box-content">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <h5 class="text-dark mb-0">
-                                            <i class="fas fa-calendar-alt mr-2 text-info"></i>
-                                            Calendario
-                                        </h5>
-                                    </div>
-                                    <br>
-                                    <p class="text-muted small mb-3">
-                                        <i class="fas fa-chart-line mr-1"></i>
-                                        Visualiza en el calendario los días con ventas (verde) y los días donde generaste reportes (rojo)
-                                    </p>
-                                    
-                                    <hr class="my-2">
-                                    
-                                    <div class="d-flex align-items-center mb-3">
-                                        <div style="width: 20px; height: 20px; background: #28a745; border-radius: 4px; margin-right: 10px; border: 1px solid #1e7e34; flex-shrink: 0;"></div>
-                                        <span style="font-size: 0.9rem;"><strong>Ventas</strong> - Días con ventas</span>
-                                    </div>
-                                    
-                                    <div class="d-flex align-items-center mb-3">
-                                        <div style="width: 20px; height: 20px; background: #dc3545; border-radius: 4px; margin-right: 10px; border: 1px solid #a71d2a; flex-shrink: 0;"></div>
-                                        <span style="font-size: 0.9rem;"><strong>Reportes</strong> - Días con reportes</span>
-                                    </div>
-                                    
-                                    <div class="d-flex align-items-center mb-3">
-                                        <div style="width: 20px; height: 20px; background: #ffc107; border-radius: 4px; margin-right: 10px; border: 1px solid #d39e00; flex-shrink: 0;"></div>
-                                        <span style="font-size: 0.9rem;"><strong>Ambos</strong> - Ventas y reportes</span>
-                                    </div>
-                                    
-                                    <hr class="my-3">
-                                    
-                                    <div class="mt-2">
-                                        <h6 class="text-dark">
-                                            <i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas
-                                        </h6>
-                                        <table class="table table-sm table-borderless mb-0">
-                                            <tr>
-                                                <td class="pl-0 py-1">Días con ventas:</td>
-                                                <td class="text-success font-weight-bold py-1" id="diasVentas">0</td>
-                                            </tr>
-                                            <tr>
-                                                <td class="pl-0 py-1">Días con reportes:</td>
-                                                <td class="text-danger font-weight-bold py-1" id="diasReportes">0</td>
-                                            </tr>
-                                            <tr>
-                                                <td class="pl-0 py-1">Total días activos:</td>
-                                                <td class="text-primary font-weight-bold py-1" id="diasActivos">0</td>
-                                            </tr>
-                                        </table>
-                                    </div>                        
-                                </div>
-                            </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <div style="width: 20px; height: 20px; background: #dc3545; border-radius: 50%; margin-right: 10px; border: 1px solid #a71d2a; flex-shrink: 0;"></div>
+                            <span style="font-size: 0.9rem;"><strong>Reportes</strong> - Días con reportes</span>
                         </div>
-
+                        
+                        <div class="d-flex align-items-center mb-3">
+                            <div style="width: 20px; height: 20px; background: linear-gradient(135deg, #28a745 50%, #dc3545 50%); border-radius: 50%; margin-right: 10px; border: 1px solid #d39e00; flex-shrink: 0;"></div>
+                            <span style="font-size: 0.9rem;"><strong>Ambos</strong> - Ventas y reportes</span>
+                        </div>
+                        
+                        <hr class="my-3">
+                        
+                        <div class="mt-2">
+                            <h6 class="text-dark">
+                                <i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas
+                            </h6>
+                            <table class="table table-sm table-borderless mb-0">
+                                <tr>
+                                    <td class="pl-0 py-1">Días con ventas:</td>
+                                    <td class="text-success font-weight-bold py-1" id="diasVentas">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="pl-0 py-1">Días con reportes:</td>
+                                    <td class="text-danger font-weight-bold py-1" id="diasReportes">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="pl-0 py-1">Total días activos:</td>
+                                    <td class="text-primary font-weight-bold py-1" id="diasActivos">0</td>
+                                </tr>
+                            </table>
+                        </div>                        
                     </div>
                 </div>
             </div>
+
+        </div>
+    </div>
+</div>
 
             <!-- GRAFICA CON MÁS INFORMACIÓN -->
             <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
@@ -1378,6 +1547,9 @@ const closeDropdownBtn = document.getElementById('closeDropdownBtn');
 // Variables para el calendario
 let calendar = null;
 let fechasVentasPHP = <?= json_encode($fechasVentas) ?>;
+// Agregar estas líneas para los filtros
+let filtroInicio = '<?= $filtroInicio ?>';
+let filtroFin = '<?= $filtroFin ?>';
 
 // ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
 const STORAGE_KEY_ESPECIAL = 'ocultarAlertaProductoEspecial';
@@ -1519,87 +1691,409 @@ function registrarDiaReporte() {
     }
 }
 
-// Función para cargar eventos en el calendario
+// Función para actualizar fechas del calendario según filtros PHP
+function actualizarFechasCalendario() {
+    // Obtener fechas actualizadas desde PHP
+    fetch(window.location.href)
+        .then(response => response.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const scriptContent = doc.querySelector('script').textContent;
+            const match = scriptContent.match(/fechasVentasPHP = (\[.*?\]);/s);
+            if (match) {
+                fechasVentasPHP = eval(match[1]);
+                if (calendar) {
+                    cargarEventosCalendario();
+                }
+            }
+        })
+        .catch(error => console.error('Error actualizando fechas:', error));
+}
+
+// Función para cargar eventos en el calendario - CÍRCULO SIN NÚMERO EN SEMANA
 function cargarEventosCalendario() {
-    if (!calendar) return;
+    if (!calendar) {
+        console.log('Calendario no inicializado');
+        return;
+    }
     
-    calendar.removeAllEvents();
-    
-    const eventosMap = new Map();
-    
-    // Agregar días con ventas (desde PHP)
-    fechasVentasPHP.forEach(fecha => {
-        const fechaStr = fecha.split('T')[0];
-        eventosMap.set(fechaStr, {
-            venta: true,
-            reporte: eventosMap.get(fechaStr)?.reporte || false
-        });
-    });
-    
-    // Agregar días con reportes (desde localStorage)
-    const reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
-    reportesGuardados.forEach(fecha => {
-        const fechaStr = fecha.split('T')[0];
-        eventosMap.set(fechaStr, {
-            venta: eventosMap.get(fechaStr)?.venta || false,
-            reporte: true
-        });
-    });
-    
-    const eventos = [];
-    let contVentas = 0;
-    let contReportes = 0;
-    
-    eventosMap.forEach((valor, fecha) => {
-        const [year, month, day] = fecha.split('-').map(Number);
-        const fechaObj = new Date(year, month - 1, day, 12, 0, 0);
+    function aplicarMarcadores(intentos = 0) {
+        const viewType = calendar.view.type;
+        let dayCells = [];
         
-        if (valor.venta) contVentas++;
-        if (valor.reporte) contReportes++;
+        console.log('Vista actual:', viewType);
         
-        let className = '';
-        let tooltip = '';
-        
-        if (valor.venta && valor.reporte) {
-            className = 'evento-ambos';
-            tooltip = 'Ventas y reportes';
-        } else if (valor.venta) {
-            className = 'evento-venta';
-            tooltip = 'Día con ventas';
-        } else if (valor.reporte) {
-            className = 'evento-reporte';
-            tooltip = 'Día con reportes';
+        if (viewType === 'dayGridMonth') {
+            dayCells = document.querySelectorAll('.fc-daygrid-day');
+        } else if (viewType === 'timeGridWeek') {
+            dayCells = document.querySelectorAll('.fc-timegrid-day');
+        } else {
+            dayCells = document.querySelectorAll('.fc-daygrid-day, .fc-timegrid-day');
         }
         
-        eventos.push({
-            start: fechaObj,
-            allDay: true,
-            display: 'background',
-            classNames: [className],
-            extendedProps: {
-                tooltip: tooltip,
-                tieneVenta: valor.venta,
-                tieneReporte: valor.reporte
+        if (dayCells.length === 0 && intentos < 20) {
+            console.log(`Esperando celdas... intento ${intentos + 1}`);
+            setTimeout(() => aplicarMarcadores(intentos + 1), 300);
+            return;
+        }
+        
+        if (dayCells.length === 0) {
+            console.log('No se encontraron celdas del calendario');
+            return;
+        }
+        
+        console.log(`Aplicando marcadores a ${dayCells.length} celdas (vista: ${viewType})`);
+        
+        // Limpiar clases existentes
+        dayCells.forEach(cell => {
+            cell.classList.remove('dia-venta', 'dia-reporte', 'dia-ambos');
+            cell.removeAttribute('data-tooltip');
+            cell.style.background = '';
+            
+            const dayNumber = cell.querySelector('.fc-daygrid-day-number, .fc-timegrid-day-number');
+            if (dayNumber) {
+                dayNumber.style.cssText = '';
+                // En semana, restaurar el número si fue eliminado
+                if (viewType === 'timeGridWeek' && dayNumber.getAttribute('data-original-number')) {
+                    dayNumber.textContent = dayNumber.getAttribute('data-original-number');
+                    dayNumber.removeAttribute('data-original-number');
+                }
             }
         });
+        
+        const eventosMap = new Map();
+        
+        if (fechasVentasPHP && fechasVentasPHP.length > 0) {
+            fechasVentasPHP.forEach(fecha => {
+                const fechaStr = fecha.split('T')[0];
+                eventosMap.set(fechaStr, {
+                    venta: true,
+                    reporte: eventosMap.get(fechaStr)?.reporte || false
+                });
+            });
+        }
+        
+        const reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
+        reportesGuardados.forEach(fecha => {
+            const fechaStr = fecha.split('T')[0];
+            eventosMap.set(fechaStr, {
+                venta: eventosMap.get(fechaStr)?.venta || false,
+                reporte: true
+            });
+        });
+        
+        let contVentas = 0;
+        let contReportes = 0;
+        
+        eventosMap.forEach((valor, fecha) => {
+            if (valor.venta) contVentas++;
+            if (valor.reporte) contReportes++;
+            
+            dayCells.forEach(cell => {
+                let dateAttr = cell.getAttribute('data-date');
+                
+                if (!dateAttr) {
+                    const ariaLabel = cell.getAttribute('aria-label');
+                    if (ariaLabel) {
+                        const match = ariaLabel.match(/(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i);
+                        if (match) {
+                            const meses = {
+                                'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04',
+                                'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08',
+                                'septiembre': '09', 'octubre': '10', 'noviembre': '11', 'diciembre': '12'
+                            };
+                            const mesNum = meses[match[2].toLowerCase()];
+                            if (mesNum) {
+                                dateAttr = `${match[3]}-${mesNum}-${match[1].padStart(2, '0')}`;
+                            }
+                        }
+                    }
+                }
+                
+                if (dateAttr && dateAttr === fecha) {
+                    cell.classList.add(valor.venta && valor.reporte ? 'dia-ambos' : (valor.venta ? 'dia-venta' : 'dia-reporte'));
+                    cell.setAttribute('data-tooltip', valor.venta && valor.reporte ? '📊 Ventas y Reportes' : (valor.venta ? '💰 Día con ventas' : '📄 Día con reportes'));
+                    
+                    const dayNumber = cell.querySelector('.fc-daygrid-day-number, .fc-timegrid-day-number');
+                    
+                    if (dayNumber) {
+                        if (viewType === 'dayGridMonth') {
+                            // VISTA DE MES: Mostrar número dentro del círculo
+                            const colorFondo = valor.venta && valor.reporte ? '#ffc107' : (valor.venta ? '#28a745' : '#dc3545');
+                            const colorTexto = valor.venta && valor.reporte ? '#000' : 'white';
+                            
+                            dayNumber.style.cssText = `
+                                background-color: ${colorFondo} !important;
+                                color: ${colorTexto} !important;
+                                border-radius: 50% !important;
+                                width: 34px !important;
+                                height: 34px !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                justify-content: center !important;
+                                margin: 4px auto !important;
+                                font-weight: ${valor.venta && valor.reporte ? 'bold' : '500'} !important;
+                                font-size: 14px !important;
+                                box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+                            `;
+                        } 
+else if (viewType === 'timeGridWeek') {
+    // VISTA DE SEMANA: Crear círculo (SIEMPRE, no solo si no existe)
+    
+    // Eliminar círculo existente si lo hay
+    let oldCircle = cell.querySelector('.week-circle-marker');
+    if (oldCircle) oldCircle.remove();
+    
+    // Crear nuevo círculo
+    let circle = document.createElement('div');
+    circle.className = 'week-circle-marker';
+    
+    // Aplicar color según el tipo
+    let colorFondo = '';
+    if (valor.venta && valor.reporte) {
+        colorFondo = '#ffc107';
+        circle.style.background = 'linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%)';
+    } else if (valor.venta) {
+        colorFondo = '#28a745';
+        circle.style.backgroundColor = '#28a745';
+    } else if (valor.reporte) {
+        colorFondo = '#dc3545';
+        circle.style.backgroundColor = '#dc3545';
+    }
+    
+    circle.style.cssText = `
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        width: 20px !important;
+        height: 20px !important;
+        border-radius: 50% !important;
+        background-color: ${colorFondo} !important;
+        cursor: pointer !important;
+        z-index: 10000 !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        transition: transform 0.2s ease !important;
+    `;
+    
+    // Efecto hover
+    circle.onmouseover = function() { 
+        this.style.transform = 'translate(-50%, -50%) scale(1.2)'; 
+        this.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+    };
+    circle.onmouseout = function() { 
+        this.style.transform = 'translate(-50%, -50%) scale(1)'; 
+        this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    };
+    
+    // Agregar círculo a la celda
+    cell.appendChild(circle);
+    
+    // Ocultar el número del día
+    if (dayNumber) {
+        dayNumber.style.opacity = '0';
+        dayNumber.style.visibility = 'hidden';
+    }
+    
+    // Evento de clic en el círculo
+    circle.onclick = (e) => {
+        e.stopPropagation();
+        mostrarDetalleDia(fecha, valor.venta, valor.reporte);
+    };
+}
+                    }
+                    
+                    // Fondo suave para la celda
+                    cell.style.background = `linear-gradient(to bottom, rgba(${valor.venta && valor.reporte ? '255, 193, 7' : (valor.venta ? '40, 167, 69' : '220, 53, 69')}, 0.15), transparent)`;
+                    
+                    cell.removeEventListener('click', cell._clickHandler);
+                    cell._clickHandler = () => mostrarDetalleDia(fecha, valor.venta, valor.reporte);
+                    cell.addEventListener('click', cell._clickHandler);
+                }
+            });
+        });
+        
+        document.getElementById('diasVentas').textContent = contVentas;
+        document.getElementById('diasReportes').textContent = contReportes;
+        document.getElementById('diasActivos').textContent = eventosMap.size;
+    }
+    
+    aplicarMarcadores();
+}
+
+// Función para mostrar el modal con detalles del día
+function mostrarDetalleDia(fechaStr, tieneVenta, tieneReporte) {
+    // Formatear fecha
+    const [year, month, day] = fechaStr.split('-').map(Number);
+    const fechaObj = new Date(year, month - 1, day);
+    const fechaLocal = fechaObj.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
+    const fechaCapitalizada = fechaLocal.charAt(0).toUpperCase() + fechaLocal.slice(1);
     
-    document.getElementById('diasVentas').textContent = contVentas;
-    document.getElementById('diasReportes').textContent = contReportes;
-    document.getElementById('diasActivos').textContent = eventosMap.size;
+    // Obtener reportes guardados para esta fecha
+    const reportesGuardados = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
+    const reportesFecha = reportesGuardados[fechaStr] || [];
     
-    eventos.forEach(evento => {
-        calendar.addEvent(evento);
+    // Determinar icono y título según el tipo
+    let icono = 'info';
+    let titulo = 'Detalle del día';
+    let iconoHeader = '';
+    
+    if (tieneVenta && tieneReporte) {
+        icono = 'warning';
+        titulo = 'Día con ventas y reportes';
+        iconoHeader = 'fa-chart-line';
+    } else if (tieneVenta) {
+        icono = 'success';
+        titulo = ' Día con ventas';
+        iconoHeader = 'fa-shopping-cart';
+    } else if (tieneReporte) {
+        icono = 'info';
+        titulo = 'Día con reportes';
+        iconoHeader = 'fa-file-pdf';
+    } else {
+        icono = 'secondary';
+        titulo = 'Sin actividad';
+        iconoHeader = 'fa-calendar-day';
+    }
+    
+    // Construir HTML del modal
+    let html = `<div style="text-align: left;">`;
+    html += `<div class="mb-3 p-2 bg-light rounded">
+                <i class="fas fa-calendar-alt text-info mr-2"></i> 
+                <strong>Fecha:</strong> ${fechaCapitalizada}
+             </div>`;
+    
+    if (tieneVenta) {
+        html += `<div class="mb-3 p-2 bg-success-light" style="background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+                    <i class="fas fa-shopping-cart text-success mr-2"></i> 
+                    <strong>Ventas:</strong> Hay ventas registradas en este día
+                 </div>`;
+    }
+    
+    if (tieneReporte) {
+        html += `<div class="mb-2">
+                    <i class="fas fa-file-pdf text-danger mr-2"></i> 
+                    <strong> Reportes generados en este día:</strong>
+                 </div>`;
+        
+        if (reportesFecha.length > 0) {
+            html += `<div class="ml-3 mb-3" style="max-height: 300px; overflow-y: auto;">`;
+            
+            reportesFecha.forEach((reporte, index) => {
+                const fechaReporte = new Date(reporte.timestamp);
+                const horaReporte = fechaReporte.toLocaleTimeString('es-ES', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                
+                if (reporte.tipo === 'general') {
+                    const proveedorTexto = reporte.proveedor === 'TODOS' ? 'Todos los proveedores' : reporte.proveedor;
+                    html += `
+                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <i class="fas fa-chart-line text-success mr-2"></i>
+                                    <strong>Reporte General</strong>
+                                    <span class="ml-2 badge badge-success">${proveedorTexto}</span>
+                                </div>
+                                <small class="text-muted">${horaReporte}</small>
+                            </div>
+                        </div>
+                    `;
+                } else if (reporte.tipo === 'proveedor') {
+                    const proveedorTexto = reporte.proveedor === 'TODOS_PROVEEDORES' ? 'Todos los proveedores' : reporte.proveedor;
+                    html += `
+                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <i class="fas fa-truck text-danger mr-2"></i>
+                                    <strong>Reporte por proveedor</strong>
+                                    <span class="ml-2 badge badge-danger">${proveedorTexto}</span>
+                                </div>
+                                <small class="text-muted">${horaReporte}</small>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            html += `</div>`;
+        } else {
+            html += `<div class="ml-3 mb-3 p-2 text-muted" style="background: #f8f9fa; border-radius: 4px;">
+                        <i class="fas fa-info-circle mr-1"></i> No hay reportes guardados para este día
+                     </div>`;
+        }
+    }
+    
+    if (!tieneVenta && !tieneReporte) {
+        html += `<div class="p-3 text-center text-muted">
+                    <i class="fas fa-calendar-day fa-3x mb-2"></i>
+                    <p>No hay actividad registrada en este día</p>
+                    <small>Los reportes se guardan automáticamente al generar PDFs</small>
+                 </div>`;
+    }
+    
+    html += `</div>`;
+    
+    // Mostrar SweetAlert2 modal
+    Swal.fire({
+        title: `<i class="fas ${iconoHeader} mr-2"></i>${titulo}`,
+        html: html,
+        icon: icono,
+        confirmButtonText: ' Cerrar',
+        confirmButtonColor: '#3085d6',
+        showCloseButton: true,
+        focusConfirm: true,
+        width: '550px',
+        background: '#fff',
+        customClass: {
+            popup: 'rounded-lg shadow-lg',
+            title: 'font-weight-bold h4',
+            confirmButton: 'btn btn-primary px-4',
+            closeButton: 'text-secondary'
+        },
+        didOpen: () => {
+            // Agregar estilos adicionales si es necesario
+            const popup = Swal.getPopup();
+            if (popup) {
+                popup.style.borderRadius = '16px';
+            }
+        }
     });
 }
 
-// Inicializar calendario
+// Inicializar calendario - VERSIÓN COMPLETA CORREGIDA
 document.addEventListener('DOMContentLoaded', function() {
-    verificarEstadoAlertaEspecial();
+    // Verificar alerta de producto especial
+    var alerta = document.getElementById('alertaProductoEspecial');
+    var btnContainer = document.getElementById('btnMostrarAlertaEspecial');
+    var alertaOculta = localStorage.getItem('alertaEspecialOculta');
+    if (alertaOculta === 'true') {
+        if (alerta) alerta.style.display = 'none';
+        if (btnContainer) btnContainer.style.display = 'block';
+    } else {
+        if (alerta) alerta.style.display = 'block';
+        if (btnContainer) btnContainer.style.display = 'none';
+    }
     
     const calendarEl = document.getElementById('calendario');
     
     if (calendarEl) {
+        // Destruir calendario existente si lo hay
+        if (calendar) {
+            calendar.destroy();
+        }
+        
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             locale: 'es',
@@ -1615,163 +2109,104 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             height: 'auto',
             firstDay: 1,
-            eventDidMount: function(info) {
-                if (info.event.extendedProps.tooltip) {
-                    info.el.setAttribute('data-tooltip', info.event.extendedProps.tooltip);
-                }
+            datesSet: function(info) {
+                // Forzar recarga de marcadores cuando cambia el mes o semana
+                console.log('Cambió la vista a:', info.view.type);
+                
+                // Intentar cargar múltiples veces para asegurar que las celdas existan
+                setTimeout(() => {
+                    cargarEventosCalendario();
+                }, 100);
+                
+                setTimeout(() => {
+                    cargarEventosCalendario();
+                }, 300);
+                
+                setTimeout(() => {
+                    cargarEventosCalendario();
+                }, 600);
             },
-            eventClick: function(info) {
-                const fecha = info.event.start;
-                const fechaStr = fecha.toISOString().split('T')[0];
-                const fechaLocal = fecha.toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                });
-                
-                const fechaCapitalizada = fechaLocal.charAt(0).toUpperCase() + fechaLocal.slice(1);
-                
-                const reportesGuardados = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
-                const reportesFecha = reportesGuardados[fechaStr] || [];
-                
-                let icono = 'info';
-                let titulo = 'Detalle del día';
-                let iconoHeader = '';
-                
-                if (info.event.extendedProps.tieneVenta && info.event.extendedProps.tieneReporte) {
-                    icono = 'warning';
-                    titulo = 'Día con ventas y reportes';
-                } else if (info.event.extendedProps.tieneVenta) {
-                    icono = 'success';
-                    titulo = 'Día con ventas';
-                } else if (info.event.extendedProps.tieneReporte) {
-                    icono = 'info';
-                    titulo = 'Día con reportes';
-                }
-                
-                let html = `<div style="text-align: left;">`;
-                html += `<p><i class="fas fa-calendar-alt text-info mr-2"></i> <strong>Fecha:</strong> ${fechaCapitalizada}</p>`;
-                
-                if (info.event.extendedProps.tieneVenta) {
-                    html += `<p><i class="fas fa-shopping-cart text-success mr-2"></i> <strong>Ventas:</strong> Hay ventas registradas</p>`;
-                }
-                
-                if (info.event.extendedProps.tieneReporte) {
-                    html += `<p><i class="fas fa-file-pdf text-danger mr-2"></i> <strong>Reportes generados:</strong></p>`;
-                    
-                    if (reportesFecha.length > 0) {
-                        html += `<div style="margin-left: 25px; margin-top: 5px;">`;
-                        
-                        reportesFecha.forEach(reporte => {
-                            if (reporte.tipo === 'general') {
-                                if (reporte.proveedor === 'TODOS') {
-                                    html += `
-                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-chart-line text-success mr-2"></i>
-                                                <strong> Reporte General</strong>
-                                                <span class="ml-2 badge badge-success">Todos los proveedores</span>
-                                            </div>
-                                        </div>
-                                    `;
-                                } else {
-                                    html += `
-                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-chart-line text-success mr-2"></i>
-                                                <strong> ${reporte.proveedor}</strong>
-                                                <span class="ml-2 badge badge-success">Reporte General</span>
-                                            </div>
-                                        </div>
-                                    `;
-                                }
-                            } else if (reporte.tipo === 'proveedor') {
-                                if (reporte.proveedor === 'TODOS_PROVEEDORES') {
-                                    html += `
-                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-truck text-danger mr-2"></i>
-                                                <strong>Reporte por proveedor</strong>
-                                                <span class="ml-2 badge badge-danger">Todos los proveedores</span>
-                                            </div>
-                                        </div>
-                                    `;
-                                } else {
-                                    html += `
-                                        <div class="mb-2 p-2" style="background: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;">
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-truck text-danger mr-2"></i>
-                                                <strong>${reporte.proveedor}</strong>
-                                                <span class="ml-2 badge badge-danger">Reporte por proveedor</span>
-                                            </div>
-                                        </div>
-                                    `;
-                                }
-                            }
-                        });
-                        
-                        html += `</div>`;
-                    }
-                }
-                
-                if (!info.event.extendedProps.tieneVenta && !info.event.extendedProps.tieneReporte) {
-                    html += `<p class="text-muted"><i class="fas fa-minus-circle text-muted mr-2"></i> No hay actividad registrada en este día</p>`;
-                }
-                
-                html += `</div>`;
-                
-                Swal.fire({
-                    title: `<i class="fas ${iconoHeader} mr-2"></i>${titulo}`,
-                    html: html,
-                    icon: icono,
-                    confirmButtonText: 'Cerrar',
-                    confirmButtonColor: '#3085d6',
-                    width: 500,
-                    background: '#fff',
-                    customClass: {
-                        popup: 'rounded-lg shadow-lg',
-                        title: 'font-weight-bold'
-                    }
-                });
+            viewDidMount: function(view) {
+                // Al cambiar entre vista mes/semana, recargar marcadores
+                console.log('Vista montada:', view.type);
+                setTimeout(() => {
+                    cargarEventosCalendario();
+                }, 200);
             }
         });
         
         calendar.render();
-        cargarEventosCalendario();
+        
+        // Forzar actualización del tamaño y cargar eventos
+        setTimeout(() => {
+            calendar.updateSize();
+            cargarEventosCalendario();
+        }, 300);
+        
+        // También actualizar cuando la ventana cambie de tamaño
+        window.addEventListener('resize', function() {
+            setTimeout(() => {
+                if (calendar) calendar.updateSize();
+                cargarEventosCalendario();
+            }, 100);
+        });
     }
     
-    // Evento para limpiar historial con SweetAlert2
+    // Evento para limpiar historial
     document.getElementById('limpiarHistorialBtn')?.addEventListener('click', function() {
         Swal.fire({
             title: '¿Limpiar historial de reportes?',
-            html: '<p>Esta acción eliminará todos los registros de reportes generados.</p><p class="text-muted small"><i class="fas fa-info-circle mr-1"></i> Los días con ventas no se verán afectados.</p>',
+            html: '<p>Esta acción eliminará todos los registros de reportes generados.</p>',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc3545',
             cancelButtonColor: '#6c757d',
             confirmButtonText: 'Sí, limpiar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true,
-            customClass: {
-                confirmButton: 'btn btn-danger',
-                cancelButton: 'btn btn-secondary'
-            }
+            cancelButtonText: 'Cancelar'
         }).then((result) => {
             if (result.isConfirmed) {
-                limpiarHistorialReportes();
-                Swal.fire({
-                    title: '<i class="fas fa-check-circle text-success mr-2"></i>¡Historial limpiado!',
-                    text: 'Los registros de reportes han sido eliminados.',
-                    icon: 'success',
-                    confirmButtonColor: '#28a745',
-                    confirmButtonText: 'Aceptar',
-                    timer: 2000,
-                    timerProgressBar: true
-                });
+                localStorage.removeItem('diasReportes');
+                localStorage.removeItem('reportesPorFecha');
+                cargarEventosCalendario();
+                Swal.fire('¡Historial limpiado!', '', 'success');
             }
         });
     });
+    
+    // Inicializar gráfica si existe
+    <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
+    const ctx = document.getElementById('graficaVentas');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['Ganancia neta ($<?= number_format($totalGanancia, 2) ?>)', 'Deuda a proveedores ($<?= number_format($totalProveedor, 2) ?>)'],
+                datasets: [{
+                    data: [<?= $totalGanancia ?>, <?= $totalProveedor ?>],
+                    backgroundColor: ['#28a745', '#dc3545'],
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+    <?php endif; ?>
+    
+    // Inicializar tablas
+    if (document.getElementById('tablaProductos') && document.getElementById('tablaProductosBody').children.length > 0) {
+        new TablaDinamica('tablaProductos', 'tablaProductosBody', 'productosPorPagina', 'paginacionProductos',
+            { desde: 'productosDesde', hasta: 'productosHasta', total: 'productosTotal' });
+    }
+    
+    if (document.getElementById('tablaDeuda') && document.getElementById('tablaDeudaBody').children.length > 0) {
+        new TablaDinamica('tablaDeuda', 'tablaDeudaBody', 'deudaPorPagina', 'paginacionDeuda',
+            { desde: 'deudaDesde', hasta: 'deudaHasta', total: 'deudaTotal' });
+    }
 });
 
 // Modificar la función registrarRangoReporte para recibir el tipo de reporte
@@ -2190,6 +2625,56 @@ function limpiarHistorialReportes() {
     localStorage.removeItem('reportesPorFecha');
     cargarEventosCalendario();
 }
+
+// Función para actualizar calendario después de aplicar filtros
+function actualizarCalendarioPorFiltros() {
+    // Recargar las fechas desde PHP
+    fetch(window.location.href)
+        .then(response => response.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const scripts = doc.querySelectorAll('script');
+            let nuevoFechasVentas = [];
+            
+            for (let script of scripts) {
+                const content = script.textContent;
+                if (content && content.includes('fechasVentasPHP')) {
+                    const match = content.match(/fechasVentasPHP = (\[.*?\]);/s);
+                    if (match) {
+                        try {
+                            nuevoFechasVentas = eval(match[1]);
+                            break;
+                        } catch(e) {}
+                    }
+                }
+            }
+            
+            if (nuevoFechasVentas.length > 0) {
+                fechasVentasPHP = nuevoFechasVentas;
+                if (calendar) {
+                    cargarEventosCalendario();
+                }
+            }
+        })
+        .catch(error => console.error('Error actualizando fechas:', error));
+}
+
+// Detectar cuando se aplican filtros (cuando se envía el formulario)
+document.querySelector('form')?.addEventListener('submit', function() {
+    setTimeout(() => {
+        if (calendar) {
+            // Recargar el calendario para que muestre el mes correspondiente a los filtros
+            if (filtroInicio && filtroFin) {
+                const fechaInicio = new Date(filtroInicio);
+                if (!isNaN(fechaInicio)) {
+                    calendar.gotoDate(fechaInicio);
+                }
+            }
+            setTimeout(() => cargarEventosCalendario(), 500);
+        }
+    }, 100);
+});
 
 // Gráfica
 <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
@@ -3096,6 +3581,44 @@ document.addEventListener('DOMContentLoaded', function() {
         );
     }
 });
+
+// Función para ir a la fecha del filtro y actualizar el calendario
+function irAFechaFiltro() {
+    if (filtroInicio && filtroInicio !== '') {
+        const fechaInicio = new Date(filtroInicio);
+        if (!isNaN(fechaInicio) && calendar) {
+            // Ir al mes de la fecha de inicio
+            calendar.gotoDate(fechaInicio);
+            // Esperar y recargar marcadores
+            setTimeout(() => {
+                cargarEventosCalendario();
+            }, 500);
+            setTimeout(() => {
+                cargarEventosCalendario();
+            }, 1000);
+        }
+    }
+}
+
+// Detectar cuando se aplican filtros (el formulario se envía)
+const filtroForm = document.querySelector('form');
+if (filtroForm) {
+    filtroForm.addEventListener('submit', function(e) {
+        // Pequeña pausa para que la página recargue
+        setTimeout(() => {
+            irAFechaFiltro();
+        }, 500);
+    });
+}
+
+// También ejecutar al cargar la página si hay filtros
+if (filtroInicio && filtroInicio !== '') {
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(() => {
+            irAFechaFiltro();
+        }, 1000);
+    });
+}
 </script>
 
 <?php include('includes/footer.php'); ?>
