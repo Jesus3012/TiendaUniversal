@@ -535,11 +535,11 @@ for ($i = 0; $i < 7; $i++) {
             <div class="section-header"><div class="section-title"><i class="fas fa-bolt"></i><span>Acciones Rápidas</span></div><div class="section-divider"></div></div>
             <div class="row g-3">
                 <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='dashboard_ventas.php'"><div class="action-icon mx-auto"><i class="fas fa-cash-register"></i></div><h4>Realizar Venta</h4><p>Registrar nueva venta</p></div></div>
-                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='inventario.php'"><div class="action-icon mx-auto"><i class="fas fa-boxes"></i></div><h4>Inventario</h4><p>Gestionar stock</p></div></div>
-                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='estadisticas.php'"><div class="action-icon mx-auto"><i class="fas fa-chart-line"></i></div><h4>Estadísticas</h4><p>Ver métricas y KPI</p></div></div>
-                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='productos.php'"><div class="action-icon mx-auto"><i class="fas fa-tags"></i></div><h4>Productos</h4><p>Registrar productos</p></div></div>
+                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='dashboard_inventario.php'"><div class="action-icon mx-auto"><i class="fas fa-boxes"></i></div><h4>Inventario</h4><p>Gestionar stock</p></div></div>
+                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='ver_ventas.php'"><div class="action-icon mx-auto"><i class="fas fa-chart-line"></i></div><h4>Estadísticas</h4><p>Ver métricas y KPI</p></div></div>
+                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='dashboard_productos.php'"><div class="action-icon mx-auto"><i class="fas fa-tags"></i></div><h4>Productos</h4><p>Registrar productos</p></div></div>
                 <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='proveedores.php'"><div class="action-icon mx-auto"><i class="fas fa-truck"></i></div><h4>Proveedores</h4><p>Gestionar proveedores</p></div></div>
-                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='reportes.php'"><div class="action-icon mx-auto"><i class="fas fa-file-alt"></i></div><h4>Reportes</h4><p>Reporte de ventas</p></div></div>
+                <div class="col-md-4 col-lg-2"><div class="action-card" onclick="window.location.href='historial_reportes.php'"><div class="action-icon mx-auto"><i class="fas fa-file-alt"></i></div><h4>Reportes</h4><p>Reporte de ventas</p></div></div>
             </div>
         </div>
 

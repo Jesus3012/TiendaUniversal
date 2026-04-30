@@ -151,8 +151,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
               <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i> Registrar Ventas</a> -->
             </div>
           </details>
-          <a href="cambiar_password.php"><i class="fas fa-key"></i> Cambiar contraseña</a>
-          
+
         <?php elseif ($rol === 'vendedor'): ?>
           <a href="dashboard_vendedor.php"><i class="fas fa-home"></i> Panel Vendedor</a>
           <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
@@ -220,7 +219,6 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
             <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i><span>Registrar Ventas</span></a> -->
           </div>
         </div>
-        <a href="cambiar_password.php"><i class="fas fa-key"></i><span>Cambiar contraseña</span></a>
 
       <?php elseif ($rol === 'vendedor'): ?>
         <a href="dashboard_vendedor.php"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>

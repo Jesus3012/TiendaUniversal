@@ -1,7 +1,10 @@
+.hero-premium {
+    background: url('../uploads/panel_admin.png') center center / cover no-repeat fixed;
+}
+
 /* Hero Section - Versión Moderna CON IMAGEN */
 .hero-premium {
     position: relative;
-    background: url('../img/panel_principal.png') center center / cover no-repeat fixed;
     border-radius: 0 0 50px 50px;
     overflow: hidden;
     margin-bottom: 2.5rem;
