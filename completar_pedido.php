@@ -1,93 +1,88 @@
 <?php
-include 'includes/db.php';
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-header('Content-Type: application/json');
+include 'includes/db.php';
 session_start();
 
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+header('Content-Type: application/json');
 
 $data = json_decode(file_get_contents("php://input"), true);
-
 $folio = intval($data['folio']);
 $usuario = $_SESSION['nombre'] ?? 'Sistema';
+
+// Depuración - registrar lo que llega
+error_log("Completar pedido - Folio recibido: " . $folio);
 
 $conn->begin_transaction();
 
 try {
-
-    // 1️⃣ Obtener TODOS los productos del pedido
-    $stmt = $conn->prepare("
-        SELECT id, nombre_producto, cantidad_pedida, faltante 
+    // 1️⃣ Verificar si el pedido existe
+    $check = $conn->query("SELECT id_orden, estado FROM pedidos WHERE id_orden = $folio");
+    
+    if($check->num_rows == 0){
+        throw new Exception("No existe el pedido con folio: $folio");
+    }
+    
+    $pedidoData = $check->fetch_assoc();
+    error_log("Pedido encontrado - Estado actual: " . $pedidoData['estado']);
+    
+    // 2️⃣ Obtener productos pendientes
+    $productos = $conn->query("
+        SELECT id, id_producto, nombre_producto, cantidad_pedida, faltante
         FROM pedidos 
-        WHERE id_orden = ?
+        WHERE id_orden = $folio AND estado = 'pendiente'
     ");
-    $stmt->bind_param("i", $folio);
-    $stmt->execute();
-    $res = $stmt->get_result();
 
-    if($res->num_rows == 0){
-        throw new Exception("Pedido no encontrado");
+    if($productos->num_rows > 0){
+        while($row = $productos->fetch_assoc()) {
+            $id_pedido = $row['id'];
+            $nombre = $row['nombre_producto'];
+            $cantidad_original = (int)$row['cantidad_pedida'];
+            $faltante = (int)$row['faltante'];
+            $cantidad_solventada = $cantidad_original - $faltante;
+
+            // Guardar en pedidos_solventados
+            $conn->query("
+                INSERT INTO pedidos_solventados
+                (id_pedido, id_producto, cantidad_original, cantidad_solventada, cantidad_faltante, usuario, fecha)
+                VALUES ($id_pedido, {$row['id_producto']}, $cantidad_original, $cantidad_solventada, $faltante, '$usuario', NOW())
+            ");
+
+            // LOG de producto completado
+            $conn->query("
+                INSERT INTO pedidos_log (id_pedido, accion, detalle, usuario, fecha) 
+                VALUES ($folio, 'PRODUCTO COMPLETADO', 'Producto: $nombre | Original: $cantidad_original | Completado: $cantidad_solventada', '$usuario', NOW())
+            ");
+        }
     }
 
-    while($row = $res->fetch_assoc()) {
+    // 3️⃣ Actualizar pedidos a completado
+    $sqlUpdate = "UPDATE pedidos SET estado = 'completado', faltante = 0, fecha_completado = NOW() WHERE id_orden = $folio";
+    $conn->query($sqlUpdate);
+    error_log("Filas actualizadas en pedidos: " . $conn->affected_rows);
 
-        $id_producto = $row['id'];
-        $nombre = $row['nombre_producto'];
-        $cantidad_original = (int)$row['cantidad_pedida'];
-        $faltante = (int)$row['faltante'];
-        $cantidad_solventada = max(0, $cantidad_original - $faltante);
+    // 4️⃣ Actualizar ventas
+    $sqlVenta = "UPDATE ventas SET metodo_pago = 'completado' WHERE id_orden = $folio";
+    $conn->query($sqlVenta);
+    error_log("Filas actualizadas en ventas: " . $conn->affected_rows);
 
-        // 2️⃣ Guardar en pedidos_solventados (UNO POR PRODUCTO)
-        $stmt2 = $conn->prepare("
-            INSERT INTO pedidos_solventados
-            (id_pedido, id_producto, cantidad_original, cantidad_solventada, cantidad_faltante, usuario)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        $stmt2->bind_param(
-            "iiiiis",
-            $folio,
-            $id_producto,
-            $cantidad_original,
-            $cantidad_solventada,
-            $faltante,
-            $usuario
-        );
-        $stmt2->execute();
-
-        // 3️⃣ Guardar log por producto
-        $accion = "Pedido completado";
-        $detalle = "Producto: $nombre | Original: $cantidad_original | Solventadas: $cantidad_solventada | Faltante: $faltante";
-
-        $stmt3 = $conn->prepare("
-            INSERT INTO pedidos_log
-            (id_pedido, accion, detalle, usuario)
-            VALUES (?, ?, ?, ?)
-        ");
-        $stmt3->bind_param("isss", $folio, $accion, $detalle, $usuario);
-        $stmt3->execute();
-    }
-
-    // 4️⃣ Actualizar TODOS los productos del pedido
-    $stmt4 = $conn->prepare("
-        UPDATE pedidos
-        SET estado = 'completado',
-            cantidad_pedida = 0,
-            faltante = 0
-        WHERE id_orden = ?
+    // 5️⃣ LOG general del pedido
+    $conn->query("
+        INSERT INTO pedidos_log (id_pedido, accion, detalle, usuario, fecha) 
+        VALUES ($folio, 'PEDIDO COMPLETADO', 'El pedido ha sido completado en su totalidad', '$usuario', NOW())
     ");
-    $stmt4->bind_param("i", $folio);
-    $stmt4->execute();
 
     $conn->commit();
 
-    echo json_encode(['ok'=>true]);
+    echo json_encode(['success' => true]);
 
-} catch (Throwable $e) {
-
+} catch (Exception $e) {
     $conn->rollback();
-
+    error_log("Error: " . $e->getMessage());
     echo json_encode([
-        'error' => true,
-        'mensaje' => $e->getMessage()
+        'success' => false,
+        'error' => $e->getMessage()
     ]);
 }
+?>

@@ -1,0 +1,752 @@
+/* ============================================
+   ESTILOS MODERNOS - MÓDULO DE PEDIDOS
+   ============================================ */
+.content-wrapper {
+    background: linear-gradient(135deg, #fff5e6 0%, #ffe0cc 100%);
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+/* Breadcrumb - Índice mejorado y más grande */
+.breadcrumb-custom {
+    background: white;
+    border-radius: 16px;
+    padding: 16px 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.breadcrumb-custom .breadcrumb {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.breadcrumb-custom .breadcrumb-item {
+    font-size: 1.05rem;
+}
+
+.breadcrumb-custom .breadcrumb-item + .breadcrumb-item::before {
+    content: ">";
+    color: #cbd5e1;
+    font-weight: 600;
+    padding: 0 10px;
+    font-size: 1rem;
+}
+
+.breadcrumb-custom .breadcrumb-item a {
+    color: #64748b;
+    text-decoration: none;
+    transition: color 0.2s;
+    padding: 4px 0;
+    display: inline-block;
+}
+
+.breadcrumb-custom .breadcrumb-item a:hover {
+    color: #f97316;
+}
+
+.breadcrumb-custom .breadcrumb-item.active {
+    color: #f97316;
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.breadcrumb-custom .breadcrumb-item i {
+    margin-right: 8px;
+    font-size: 1rem;
+}
+
+.breadcrumb-custom .breadcrumb-item .fa-home {
+    font-size: 1rem;
+}
+
+.breadcrumb-custom .breadcrumb-item .fa-boxes {
+    font-size: 1rem;
+}
+
+/* Tarjetas */
+.card {
+    border-radius: 16px;
+    overflow: hidden;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.card-header {
+    background: white;
+    border-bottom: 2px solid #f97316;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.card-header h5 {
+    color: #f97316;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Buscador pegado a la derecha */
+.buscador-wrapper {
+    width: 300px;
+    margin-left: auto;
+}
+
+.buscador-wrapper .input-group {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.buscador-wrapper .input-group-text {
+    background: white;
+    border-right: none;
+    color: #f97316;
+}
+
+.buscador-wrapper input {
+    border-left: none;
+}
+
+.buscador-wrapper input:focus {
+    border-color: #f97316;
+    box-shadow: none;
+}
+
+/* Tabla */
+.table thead th {
+    background: #f97316;
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 12px;
+}
+
+.table-hover tbody tr:hover {
+    background: #fff3e6;
+}
+
+/* Badges */
+.badge-info {
+    background: #f97316;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.badge-success {
+    background: #28a745;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+.badge-danger {
+    background: #dc3545;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+.badge-warning {
+    background: #ffc107;
+    color: #000;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+.badge-secondary {
+    background: #6c757d;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+/* Paginación */
+.pagination-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.pagination-controls button {
+    padding: 5px 12px;
+    border: 1px solid #dee2e6;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+    background: #f97316;
+    color: white;
+    border-color: #f97316;
+}
+
+.pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-controls .active {
+    background: #f97316;
+    color: white;
+    border-color: #f97316;
+}
+
+/* Mensajes vacíos */
+.empty-state {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    color: #f97316;
+    opacity: 0.5;
+    margin-bottom: 12px;
+}
+
+.empty-state-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #64748b;
+    margin-bottom: 5px;
+}
+
+.empty-state-text {
+    font-size: 13px;
+    color: #94a3b8;
+}
+
+/* Flecha */
+.flecha {
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.flecha.abierta {
+    transform: rotate(90deg);
+}
+
+/* Timeline */
+.timeline {
+    position: relative;
+    padding-left: 25px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #f97316;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.timeline-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    left: -20px;
+    top: 0;
+}
+
+.timeline-icon i {
+    font-size: 12px;
+    color: white;
+}
+
+.timeline-content {
+    margin-left: 20px;
+}
+
+/* Alerta de ayuda elegante */
+.alert-ayuda {
+    background: linear-gradient(135deg, #fef9f1 0%, #fff5e6 100%);
+    border: 1px solid #f97316;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+
+.alert-ayuda i {
+    color: #f97316;
+    margin-right: 8px;
+}
+
+.alert-ayuda strong {
+    color: #f97316;
+}
+
+/* Botones de filtro de estado */
+.btn-estado {
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-estado-pendiente {
+    background: white;
+    border: 2px solid #f97316;
+    color: #f97316;
+}
+
+.btn-estado-pendiente:hover,
+.btn-estado-pendiente.active {
+    background: #f97316;
+    color: white;
+    border-color: #f97316;
+}
+
+.btn-estado-completado {
+    background: white;
+    border: 2px solid #28a745;
+    color: #28a745;
+}
+
+.btn-estado-completado:hover,
+.btn-estado-completado.active {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.btn-estado-todos {
+    background: white;
+    border: 2px solid #6c757d;
+    color: #6c757d;
+}
+
+.btn-estado-todos:hover,
+.btn-estado-todos.active {
+    background: #6c757d;
+    color: white;
+    border-color: #6c757d;
+}
+
+/* Botón ayuda */
+.btn-ayuda {
+    background: white;
+    border: 2px solid #f97316;
+    color: #f97316;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-ayuda:hover {
+    background: #f97316;
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .pagination-wrapper {
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .buscador-wrapper {
+        width: 100%;
+        margin-left: 0;
+    }
+    
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .table thead {
+        display: none;
+    }
+
+    .table tbody tr {
+        display: block;
+        margin-bottom: 12px;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 10px;
+        background: white;
+    }
+
+    .table tbody td {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 4px;
+        font-size: 13px;
+        border: none;
+    }
+
+    .table tbody td:before {
+        content: attr(data-label);
+        font-weight: 600;
+        margin-right: 10px;
+        color: #f97316;
+    }
+}
+
+/* Buscador uniforme */
+.buscador-wrapper .input-group-sm .input-group-text,
+.buscador-wrapper .input-group-sm .form-control {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    height: 41px;
+}
+
+.buscador-wrapper .input-group-text {
+    background: white;
+    border-color: #ced4da;
+}
+
+.buscador-wrapper #contadorProductos {
+    min-width: 40px;
+    text-align: center;
+    font-weight: 500;
+    color: #f97316;
+}
+
+/* Estilos mejorados para los pedidos - Adaptado a la paleta existente */
+.pedido-card {
+    border-radius: 8px;
+    margin-bottom: 15px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+
+.pedido-header {
+    padding: 12px 15px;
+    cursor: pointer;
+}
+
+/* Header Pendiente - Usando el naranja de tu sistema */
+.pedido-header.bg-warning {
+    background: #f97316 !important;
+    border-bottom: 2px solid #ea580c;
+}
+
+/* Header Completado - Usando el verde de tu sistema */
+.pedido-header.bg-success {
+    background: #28a745 !important;
+    border-bottom: 2px solid #1e7e34;
+}
+
+/* Texto blanco para ambos headers */
+.pedido-header .pedido-info strong,
+.pedido-header .pedido-info span,
+.pedido-header .pedido-info i {
+    color: white !important;
+}
+
+.pedido-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.pedido-info strong {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.pedido-info span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+}
+
+.pedido-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pedido-actions button {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+}
+
+/* Botón Completar - Verde de tu sistema */
+.btn-completar-pedido {
+    background: #28a745;
+    color: white;
+}
+
+.btn-completar-pedido:hover {
+    background: #1e7e34;
+}
+
+
+/* Botón pequeño de completar producto */
+.btn-completar-producto {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.btn-completar-producto:hover {
+    background: #1e7e34;
+}
+
+/* Botón deshabilitado */
+.btn-disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pedido-body {
+    padding: 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+}
+
+/* Tabla dentro del pedido */
+.pedido-table {
+    width: 100%;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+.pedido-table th {
+    background: #f97316;
+    color: white;
+    padding: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.pedido-table td {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #e9ecef;
+    text-align: center;
+    background: white;
+}
+
+.pedido-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+.pedido-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Productos completados - texto tachado en gris */
+.producto-completado td {
+    color: #6c757d;
+    text-decoration: line-through;
+}
+
+/* Badge de producto completado - Verde de tu sistema */
+.badge-completado-producto {
+    background: #28a745;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    margin-left: 8px;
+}
+
+/* Separación entre pedidos */
+#pendientesContainer, 
+#completadosContainer, 
+#todosContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Badge de estado del pedido */
+.badge-pendiente-header {
+    background: #f97316;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.badge-completado-header {
+    background: #28a745;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+/* Flecha de colapso */
+.flecha {
+    transition: transform 0.2s;
+    font-size: 12px;
+    color: white;
+}
+
+.flecha.abierta {
+    transform: rotate(90deg);
+}
+
+/* Alertas internas */
+.alert-success-pedido {
+    background: #d4edda;
+    color: #155724;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    margin-top: 12px;
+    text-align: center;
+    border: 1px solid #c3e6cb;
+}
+
+/* Badges de estado en la tabla */
+.badge-estado-completado {
+    background: #28a745;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+
+.badge-estado-stock {
+    background: #f97316;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+
+.badge-estado-parcial {
+    background: #ffc107;
+    color: #212529;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+
+.badge-estado-sinstock {
+    background: #dc3545;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+
+/* Colores para textos */
+.text-danger-fuerte {
+    color: #dc3545 !important;
+    font-weight: 600;
+}
+
+.text-success-fuerte {
+    color: #28a745 !important;
+    font-weight: 600;
+}
+
+/* Botón Historial - Gris con texto blanco (VERSIÓN CORREGIDA) */
+.btn-historial {
+    background: #6c757d !important;
+    color: white !important;
+    border: none !important;
+    padding: 5px 12px !important;
+    font-size: 0.75rem !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+}
+
+.btn-historial:hover {
+    background: #5a6268 !important;
+    color: white !important;
+}
+
+/* Header Cancelado - Rojo */
+.pedido-header.bg-danger {
+    background: #dc3545 !important;
+    border-bottom: 2px solid #c82333;
+}
+
+/* Badge de estado cancelado */
+.badge-cancelado-header {
+    background: #dc3545;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+/* Botón de filtro cancelado */
+.btn-estado-cancelado {
+    background: white;
+    border: 2px solid #dc3545;
+    color: #dc3545;
+}
+
+.btn-estado-cancelado:hover,
+.btn-estado-cancelado.active {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+/* Badge cancelado en tabla */
+.badge-estado-cancelado {
+    background: #dc3545;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    display: inline-block;
+}
+
+/* Alerta de pedido cancelado */
+.alert-danger-pedido {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    margin-top: 12px;
+    text-align: center;
+    border: 1px solid #f5c6cb;
+}

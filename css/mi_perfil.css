@@ -1,0 +1,439 @@
+.content-wrapper {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.profile-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+    overflow: hidden;
+    margin-bottom: 30px;
+    transition: transform 0.3s ease;
+}
+
+.profile-card:hover {
+    transform: translateY(-5px);
+}
+
+.profile-header {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    padding: 40px 20px;
+    text-align: center;
+    position: relative;
+}
+
+.profile-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid white;
+    background: white;
+    object-fit: cover;
+    margin-bottom: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.profile-avatar:hover {
+    transform: scale(1.05);
+}
+
+.profile-name {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    margin: 0;
+    word-break: break-word;
+}
+
+.profile-role {
+    color: rgba(255,255,255,0.9);
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.profile-body {
+    padding: 30px;
+}
+
+/* Tabs responsive */
+.nav-tabs-custom {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 25px;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.nav-tabs-custom .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 12px 20px;
+    transition: all 0.3s ease;
+    position: relative;
+    background: transparent;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .nav-tabs-custom .nav-link {
+        padding: 10px 12px;
+        font-size: 13px;
+        white-space: normal;
+        word-break: break-word;
+    }
+}
+
+.nav-tabs-custom .nav-link:hover {
+    color: #f97316;
+    background: transparent;
+}
+
+.nav-tabs-custom .nav-link.active {
+    color: #f97316;
+    background: transparent;
+}
+
+.nav-tabs-custom .nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #f97316;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 8px;
+    display: block;
+    font-size: 14px;
+}
+
+.form-control {
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    padding: 10px 15px;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    border-color: #f97316;
+    box-shadow: 0 0 0 0.2rem rgba(249,115,22,0.25);
+    outline: none;
+}
+
+.btn-orange {
+    background: #f97316;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 25px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-orange:hover {
+    background: #ea580c;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(249,115,22,0.3);
+    color: white;
+}
+
+.btn-outline-orange {
+    border: 2px solid #f97316;
+    color: #f97316;
+    background: transparent;
+    border-radius: 10px;
+    padding: 10px 25px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-outline-orange:hover {
+    background: #f97316;
+    color: white;
+    transform: translateY(-2px);
+}
+
+.info-item {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+}
+
+.info-item:hover {
+    background: #ffedd5;
+    transform: translateX(5px);
+}
+
+.info-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+}
+
+.info-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    word-break: break-word;
+}
+
+.foto-preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #f97316;
+    margin: 0 auto 15px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    display: block;
+}
+
+.foto-preview:hover {
+    transform: scale(1.05);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.status-active {
+    background: #d4edda;
+    color: #155724;
+}
+
+/* Grid responsive */
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0 -15px;
+}
+
+.col-md-6, .col-md-8, .col-md-12 {
+    padding: 0 15px;
+    box-sizing: border-box;
+}
+
+.col-md-6 { width: 50%; }
+.col-md-8 { width: 66.666%; }
+.col-md-12 { width: 100%; }
+
+/* Estilos para el cambio de contraseña en una línea en PC */
+.password-row {
+    display: flex;
+    gap: 15px;
+    align-items: flex-start;  /* Cambiado de flex-end a flex-start */
+}
+
+.password-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.password-row .form-control {
+    height: 42px;
+}
+
+.password-row .btn-orange {
+    margin-top: 31px;  /* Ajuste para que coincida con la altura del label + input */
+    height: 42px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Asegurar que el texto pequeño tenga la misma altura en ambos campos */
+.password-row .text-muted {
+    display: block;
+    min-height: 20px;  /* Altura fija para el texto pequeño */
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* En el segundo grupo, agregar un espacio invisible para mantener la altura */
+.password-row .form-group:last-child .text-muted-placeholder {
+    display: block;
+    min-height: 20px;
+    visibility: hidden;
+}
+
+@media (max-width: 768px) {
+    .col-md-6, .col-md-8 {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    
+    .profile-header {
+        padding: 30px 15px;
+    }
+    
+    .profile-body {
+        padding: 20px;
+    }
+    
+    .profile-avatar {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .profile-name {
+        font-size: 20px;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        margin-top: 5px;
+        margin-left: 0;
+    }
+    
+    .password-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .password-row .btn-orange {
+        width: 100%;
+    }
+}
+
+.text-center {
+    text-align: center;
+}
+
+.mb-3 { margin-bottom: 1rem; }
+.mb-4 { margin-bottom: 1.5rem; }
+.mt-4 { margin-top: 1.5rem; }
+.me-2 { margin-right: 0.5rem; }
+.d-block { display: block; }
+.text-muted { color: #6c757d; }
+.text-success { color: #28a745; }
+
+/* ============================================ */
+/* ESTILOS MEJORADOS PARA SWEETALERT - LETRA MÁS GRANDE */
+/* ============================================ */
+.swal2-popup {
+    font-size: 18px !important;  /* Letra más grande */
+    border-radius: 20px !important;
+    padding: 2rem !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
+.swal2-title {
+    font-size: 26px !important;  /* Título más grande */
+    font-weight: 700 !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem !important;
+}
+
+.swal2-html-container {
+    font-size: 18px !important;  /* Texto del contenido más grande */
+    line-height: 1.8 !important;  /* Espaciado entre líneas */
+    color: #333 !important;
+    margin: 1rem 0 !important;
+}
+
+.swal2-content {
+    font-size: 18px !important;
+    line-height: 1.8 !important;
+}
+
+.swal2-confirm, .swal2-cancel {
+    font-size: 16px !important;
+    padding: 12px 30px !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
+    margin: 0 8px !important;
+}
+
+.swal2-icon {
+    margin-top: 1.5rem !important;
+    margin-bottom: 1rem !important;
+    transform: scale(1.2) !important;
+}
+
+.swal2-icon .swal2-icon-content {
+    font-size: 4rem !important;
+}
+
+.swal2-styled.swal2-confirm {
+    background-color: #f97316 !important;
+    font-size: 16px !important;
+}
+
+.swal2-styled.swal2-cancel {
+    background-color: #6c757d !important;
+    font-size: 16px !important;
+}
+
+.swal2-close {
+    font-size: 32px !important;
+}
+
+/* Para los mensajes de error/info/success */
+.swal2-html-container ul, 
+.swal2-html-container li {
+    font-size: 18px !important;
+    margin-bottom: 8px !important;
+}
+
+.swal2-html-container strong {
+    font-size: 18px !important;
+    color: #f97316 !important;
+}
+
+/* Para móviles */
+@media (max-width: 768px) {
+    .swal2-popup {
+        font-size: 16px !important;
+        padding: 1.5rem !important;
+    }
+    
+    .swal2-title {
+        font-size: 22px !important;
+    }
+    
+    .swal2-html-container {
+        font-size: 16px !important;
+        line-height: 1.6 !important;
+    }
+    
+    .swal2-confirm, .swal2-cancel {
+        font-size: 14px !important;
+        padding: 10px 20px !important;
+    }
+}
+
+/* Ocultar input de archivo */
+.hidden-file-input {
+    display: none;
+}

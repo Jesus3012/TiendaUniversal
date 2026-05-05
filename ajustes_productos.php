@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
                     confirmButtonText: 'Aceptar',
                     confirmButtonColor: '#f97316'
                 }).then(() => {
-                    window.location = 'inventario.php';
+                    window.location = 'ajustes_productos.php';
                 });
                 </script>";
                 exit;
@@ -288,11 +288,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             text: 'Los cambios se guardaron correctamente.',
             confirmButtonColor: '#f97316'
         }).then(() => {
-            window.location='inventario.php';
+            window.location='ajustes_productos.php';
         });
         </script>";
         exit;
-    } else {
+    }else {
         echo "<script>
         Swal.fire({
             icon: 'error',

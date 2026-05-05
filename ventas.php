@@ -86,7 +86,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 $conn->begin_transaction();
                 
                 try {
-                    $folio = 'VENTA_' . date('Ymd') . '_' . uniqid();
+                    // ================= GENERAR FOLIO NUMÉRICO SECUENCIAL =================
+                    // Obtener el último folio con formato 'Venta_codigo_X' de la tabla ventas
+                    $folioQuery = $conn->query("
+                        SELECT folio_ticket FROM ventas 
+                        WHERE folio_ticket LIKE 'Venta_codigo_%' 
+                        ORDER BY id DESC LIMIT 1
+                    ");
+
+                    $ultimoNumero = 0;
+                    if ($folioQuery && $folioQuery->num_rows > 0) {
+                        $ultimoFolio = $folioQuery->fetch_assoc();
+                        preg_match('/Venta_codigo_(\d+)/', $ultimoFolio['folio_ticket'], $matches);
+                        if (isset($matches[1])) {
+                            $ultimoNumero = intval($matches[1]);
+                        }
+                    }
+
+                    $nuevoNumero = $ultimoNumero + 1;
+                    $folio = 'Venta_codigo_' . $nuevoNumero;
                     
                     foreach ($carrito as $item) {
                         $stmt = $conn->prepare("

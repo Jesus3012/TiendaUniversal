@@ -11,142 +11,75 @@ if ($_SESSION['rol'] !== 'vendedor' && $_SESSION['rol'] !== 'administrador') {
 ?>
 
 <style>
+    
 /* ================================
-   DATA TABLES - ICONOS ORDEN
-   Compatible con AdminLTE + scroll
+   ESTILOS OPTIMIZADOS - TABLA Y BUSCADOR
    ================================ */
 
-/* Base para encabezados */
-table.dataTable thead th {
-    position: relative;
-    padding-right: 30px !important;
-    vertical-align: middle;
+/* Para que la tabla se vea bien al 100% zoom */
+table.dataTable {
+    width: 100% !important;
+    font-size: 13px !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Icono neutro (columna ordenable) */
-.dataTables_scrollHead thead th.sorting::after {
-    content: "\f0dc"; /* fa-sort */
-    font-family: "Font Awesome 6 Free";
-    font-weight: 900;
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #adb5bd;
-    font-size: 0.8rem;
-    opacity: 0.9;
+.dataTables_wrapper {
+    overflow-x: auto;
 }
 
-/* Ascendente */
-.dataTables_scrollHead thead th.sorting_asc::after {
-    content: "\f0de"; /* fa-sort-up */
-    color: #0d6efd;
-    opacity: 1;
+table.dataTable thead th,
+table.dataTable tbody td {
+    padding: 10px 8px !important;
+    white-space: normal !important;
+    word-break: break-word;
 }
 
-/* Descendente */
-.dataTables_scrollHead thead th.sorting_desc::after {
-    content: "\f0dd"; /* fa-sort-down */
-    color: #0d6efd;
-    opacity: 1;
+table.dataTable tbody td:first-child {
+    font-weight: 500;
 }
 
-/* ================================
-   🚫 OCULTAR ICONOS CLONADOS
-   (Scroll interno DataTables)
-   ================================ */
-.dataTables_scrollBody thead th::after,
-.dataTables_scrollBody thead th::before {
-    content: none !important;
+/* Ocultar buscador interno de DataTable */
+.dataTables_filter {
     display: none !important;
 }
 
-/* ================================
-   Quitar iconos en columnas NO ordenables
-   ================================ */
-table.dataTable thead th.no-sort::after {
-    display: none !important;
+/* Filtros mejorados */
+.card-primary.card-outline {
+    border-top: 3px solid #f97316;
 }
 
-/* ================================
-   Mejorar hover visual
-   ================================ */
-.dataTables_scrollHead thead th:hover::after {
-    color: #0a58ca;
-    opacity: 1;
-}
-
-/* ================================
-   Evitar duplicados por DataTables
-   ================================ */
-table.dataTable thead th::before {
-    display: none !important;
-}
-
-/* ================================
-   Estilos para filas expandibles
-   ================================ */
-tr.details {
-    background-color: #f8f9fa;
-}
-
-.details-content {
-    padding: 15px;
-}
-
-.details-table {
+#buscar_global, #fecha_inicio, #fecha_fin {
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    font-size: 14px;
     width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
 }
 
-.details-table th {
-    background-color: #e9ecef;
-    padding: 8px;
-    text-align: left;
-    font-size: 0.9rem;
+#buscar_global:focus, #fecha_inicio:focus, #fecha_fin:focus {
+    border-color: #f97316;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(249,115,22,0.2);
 }
 
-.details-table td {
-    padding: 8px;
-    border-bottom: 1px solid #dee2e6;
-    font-size: 0.9rem;
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+    border-radius: 8px;
+    padding: 8px 16px;
 }
 
-.details-table tr:last-child td {
-    border-bottom: none;
+.btn-secondary:hover {
+    background-color: #5a6268;
 }
 
-.details-table .text-right {
-    text-align: right;
-}
-
-.details-table .text-center {
-    text-align: center;
-}
-
-.expand-icon {
-    cursor: pointer;
-    color: #0d6efd;
-    font-size: 1.1rem;
-    transition: transform 0.2s;
-}
-
-.expand-icon:hover {
-    transform: scale(1.1);
-}
-
-.expand-icon.expanded {
-    transform: rotate(90deg);
-}
-
-/* ================================
-   Estilos para badges de estado
-   ================================ */
+/* Badges */
 .badge-pedido {
-    font-size: 0.8rem;
-    padding: 3px 8px;
-    border-radius: 4px;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 500;
 }
 
 .badge-pendiente {
@@ -159,122 +92,411 @@ tr.details {
     color: #fff;
 }
 
-/* ================================
-   Estilos para subtotales
-   ================================ */
-.subtotal-row {
-    background-color: #f1f3f4;
-    font-weight: bold;
+/* Modal Ticket */
+.modal-ticket .modal-header {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+    border: none;
 }
 
-.subtotal-row td {
-    border-top: 2px solid #dee2e6;
+.modal-ticket .modal-header .close {
+    color: white;
+    opacity: 1;
+}
+
+.ticket-paper {
+    font-family: 'Courier New', monospace;
+    background: white;
+}
+
+.ticket-header {
+    text-align: center;
+    border-bottom: 1px dashed #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.ticket-info {
+    border-bottom: 1px dashed #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+.ticket-info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+}
+
+.ticket-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.ticket-items-table th {
+    border-bottom: 1px solid #000;
+    text-align: center;
+    padding: 5px;
+}
+
+.ticket-items-table td {
+    padding: 5px;
+    text-align: center;
+    border-bottom: 1px dotted #ccc;
+}
+
+.ticket-total {
+    text-align: right;
+    font-weight: bold;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #ccc;
+}
+
+.ticket-footer {
+    text-align: center;
+    font-size: 10px;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px dashed #ccc;
+}
+
+.btn-ver-ticket {
+    background: #f97316;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+
+.btn-ver-ticket:hover {
+    background: #ea580c;
+}
+
+/* Paginación */
+.dataTables_paginate .paginate_button {
+    padding: 6px 12px !important;
+    margin: 0 2px !important;
+    border-radius: 6px !important;
+}
+
+.dataTables_paginate .paginate_button.current {
+    background: #f97316 !important;
+    color: white !important;
+    border-color: #f97316 !important;
+}
+
+/* Mensaje sin resultados */
+.empty-message {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+.empty-icon {
+    font-size: 60px;
+    color: #cbd5e1;
+    margin-bottom: 15px;
+}
+
+.empty-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #64748b;
+    margin: 0 0 5px 0;
+}
+
+.empty-text {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0;
+}
+.dataTables_wrapper .bottom {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+}
+.dataTables_info {
+    text-align: center !important;
+    flex: 1 !important;
+}
+
+/* =====================================================
+   DISEÑO TARJETA - PAGINACIÓN Y SELECTOR
+   ===================================================== */
+
+/* Contenedor inferior */
+.dataTables_wrapper .bottom {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+    padding: 16px 20px !important;
+    margin-top: 20px !important;
+    background: #f8fafc !important;
+    border-radius: 16px !important;
+}
+
+/* Selector de cantidad */
+.dataTables_length label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    font-size: 0.8rem !important;
+    color: #475569 !important;
+    margin: 0 !important;
+}
+
+.dataTables_length select {
+    width: auto !important;
+    padding: 6px 24px 6px 10px !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    background: white !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+}
+
+/* Info de registros */
+.dataTables_info {
+    font-size: 0.8rem !important;
+    color: #475569 !important;
+    background: white !important;
+    padding: 6px 16px !important;
+    border-radius: 20px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+    margin: 0 !important;
+}
+
+/* Paginación */
+.dataTables_paginate {
+    display: flex !important;
+    gap: 5px !important;
+    margin: 0 !important;
+}
+
+.dataTables_paginate .paginate_button {
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #475569 !important;
+    font-weight: 500 !important;
+    transition: all 0.2s !important;
+    cursor: pointer !important;
+}
+
+.dataTables_paginate .paginate_button.current {
+    background: #f97316 !important;
+    border-color: #f97316 !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(249,115,22,0.2) !important;
+}
+
+.dataTables_paginate .paginate_button:hover:not(.current) {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* Estilos para modales de devolución y cancelación */
+.modal-content-custom {
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+}
+
+.modal-header-custom {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+    border-radius: 16px 16px 0 0;
+    padding: 15px 20px;
+}
+
+.modal-header-custom .close {
+    color: white;
+    opacity: 1;
+}
+
+.modal-header-custom h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.modal-body-custom {
+    padding: 20px;
+}
+
+.modal-footer-custom {
+    border-top: 1px solid #e2e8f0;
+    padding: 15px 20px;
 }
 </style>
 
-<!-- Content Wrapper. Contains page content -->
+<!-- Content Wrapper -->
 <div class="content-wrapper">
-    <!-- Content Header (Page header) -->
     <section class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
+    <div class="container-fluid">
+        <div class="row mb-2">
             <div class="col-sm-6">
-                <h1>Historial de Ventas / Cancelación</h1>
+                <h1>
+                    <i class="fas fa-hand-holding-usd" style="color: #f97316; margin-right: 10px;"></i>
+                    Historial de Ventas
+                </h1>
             </div>
+        </div>
+    </div>
+</section>
+
+    <section>
+        <div class="container-fluid">
+
+            <!-- Filtros - UN SOLO BUSCADOR GLOBAL -->
+            <div class="card card-primary card-outline">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <input type="text" id="buscar_global" class="form-control" placeholder="Buscar producto o cliente...">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <input type="date" id="fecha_inicio" class="form-control" placeholder="Fecha inicio">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <input type="date" id="fecha_fin" class="form-control" placeholder="Fecha fin">
+                        </div>
+                        <div class="col-md-2 mb-2">
+                            <button id="btnLimpiar" class="btn btn-secondary w-100">Limpiar filtros</button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-12" style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button class="btn btn-success" id="export_excel"><i class="fa fa-file-excel"></i> Excel</button>
+                            <button class="btn btn-primary" id="export_pdf"><i class="fas fa-file-pdf"></i> PDF</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div><!-- /.container-fluid -->
+
+            <!-- Tabla Ventas -->
+            <div class="card card-outline card-info">
+                <div class="card-header">
+                    <h3 class="card-title">Ventas registradas</h3>
+                </div>
+                <div class="card-body table-responsive p-0">
+                    <table id="tablaVentas" class="table table-striped table-hover table-bordered w-100">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Folio</th>
+                                <th>Total</th>
+                                <th>Cliente</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>   
     </section>
-        <!-- Main content -->
-        <section>
-            <div class="container-fluid">
-
-                <!-- Filtros -->
-                <div class="card card-primary card-outline">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3 mb-2">
-                                <input type="text" id="buscar_producto" class="form-control" placeholder="Buscar producto...">
-                            </div>
-                            <div class="col-md-3 mb-2">
-                                <input type="email" id="buscar_cliente" class="form-control" placeholder="Buscar por cliente...">
-                            </div>
-                            <div class="col-md-2 mb-2">
-                                <input type="date" id="fecha_inicio" class="form-control">
-                            </div>
-                            <div class="col-md-2 mb-2">
-                                <input type="date" id="fecha_fin" class="form-control">
-                            </div>
-                            <div class="col-md-2 mb-2" style="display: flex; gap: 10px;">
-                                <button id="btnBuscar" class="btn btn-warning flex-fill">Buscar</button>
-                                <button id="btnLimpiar" class="btn btn-secondary flex-fill">Limpiar</button>
-                            </div>
-                        </div>
-                        <div class="row mt-2">
-                            <div class="col-md-12" style="display: flex; gap: 10px;">
-                                <button class="btn btn-success" id="export_excel"><i class="fa fa-file-excel"></i> Exportar Excel</button>
-                                <button class="btn btn-primary" id="export_pdf"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tabla Ventas -->
-                <div class="card card-outline card-info">
-                    <div class="card-header">
-                        <h3 class="card-title">Ventas registradas</h3>
-                    </div>
-                    <div class="card-body table-responsive p-0">
-                        <table id="tablaVentas" class="table table-striped table-hover table-bordered table-sm w-100">
-                            <thead class="table-primary">
-                                <tr>
-                                    <th style="width: 30px;"></th> <!-- Columna para expandir -->
-                                    <th>Folio</th>
-                                    <th>Total</th>
-                                    <th>Cliente</th>
-                                    <th>Fecha</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>   
-        </section>
-    <!-- /.content -->
 </div>
-<!-- /.content-wrapper -->
 
-<!-- Hidden template for inline use (no visible) -->
-<div id="tplDevolucion" style="display:none;">
-    <div style="padding:20px; max-width:440px;">
-        <h5>Devolución parcial</h5>
-        <input type="hidden" id="dv_folio">
-        <label>Producto</label>
-        <select id="dv_producto" class="form-control mb-2"></select>
-        <label>Cantidad a devolver</label>
-        <input type="number" id="dv_cantidad" min="1" class="form-control mb-2">
-        <label>Motivo</label>
-        <input type="text" id="dv_motivo" class="form-control mb-3">
-        <div class="d-flex justify-content-end gap-2">
-            <button id="dv_cancel" class="btn btn-secondary">Cancelar</button>
-            <button id="dv_confirm" class="btn btn-danger">Confirmar</button>
+<!-- Modal Ticket -->
+<div class="modal fade" id="modalTicket" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document" style="max-width: 420px;">
+        <div class="modal-content modal-ticket">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-receipt"></i> TICKET DE VENTA</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="modalTicketBody" style="background: white;">
+                <!-- Contenido dinámico -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnImprimirTicket" style="background: #f97316;">Imprimir</button>
+            </div>
         </div>
     </div>
 </div>
 
-<div id="tplCancelarArticulo" style="display:none;">
-    <div style="padding:20px; max-width:440px;">
-        <h5>Cancelar artículo</h5>
-        <input type="hidden" id="ca_folio">
-        <label>Producto</label>
-        <select id="ca_producto" class="form-control mb-2"></select>
-        <label>Motivo</label>
-        <input type="text" id="ca_motivo" class="form-control mb-3">
-        <div class="d-flex justify-content-end gap-2">
-            <button id="ca_cancel" class="btn btn-secondary">Cancelar</button>
-            <button id="ca_confirm" class="btn btn-danger">Confirmar</button>
+<!-- Modal para Cancelar Artículo -->
+<div class="modal fade" id="modalCancelarArticulo" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content modal-content-custom">
+            <div class="modal-header modal-header-custom">
+                <h5 class="modal-title">
+                    <i class="fas fa-times-circle"></i> Cancelar Artículo
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body modal-body-custom">
+                <input type="hidden" id="ca_folio">
+                <div class="form-group">
+                    <label><i class="fas fa-box"></i> Seleccionar producto:</label>
+                    <select id="ca_producto" class="form-control">
+                        <option value="">Cargando productos...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-comment"></i> Motivo de cancelación:</label>
+                    <textarea id="ca_motivo" class="form-control" rows="3" placeholder="Ej: Cliente cambió de opinión, producto defectuoso, etc."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer modal-footer-custom">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarCancelarArticulo">
+                    <i class="fas fa-check"></i> Confirmar cancelación
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Devolución Parcial -->
+<div class="modal fade" id="modalDevolucion" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content modal-content-custom">
+            <div class="modal-header modal-header-custom">
+                <h5 class="modal-title">
+                    <i class="fas fa-arrow-rotate-left"></i> Devolución Parcial
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body modal-body-custom">
+                <input type="hidden" id="dv_folio">
+                <div class="form-group">
+                    <label><i class="fas fa-box"></i> Seleccionar producto:</label>
+                    <select id="dv_producto" class="form-control">
+                        <option value="">Cargando productos...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-sort-numeric-down"></i> Cantidad a devolver:</label>
+                    <input type="number" id="dv_cantidad" class="form-control" min="1" placeholder="Ej: 2">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-comment"></i> Motivo de devolución:</label>
+                    <textarea id="dv_motivo" class="form-control" rows="3" placeholder="Ej: Producto defectuoso, no cumple expectativas, etc."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer modal-footer-custom">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btnConfirmarDevolucion">
+                    <i class="fas fa-check"></i> Confirmar devolución
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -283,112 +505,192 @@ tr.details {
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
 let tabla;
-let detallesCargados = {}; // Cache para detalles expandidos
+let timeoutBusqueda;
+let productosVenta = [];
 
 $(document).ready(function() {
     cargarVentas();
-
-    $('#btnBuscar').click(() => cargarVentas());
-    $('#btnLimpiar').click(() => {
-        $('#buscar_producto,#buscar_cliente,#fecha_inicio,#fecha_fin').val('');
-        cargarVentas();
+    
+    // BUSCADOR GLOBAL EN TIEMPO REAL
+    $('#buscar_global').on('keyup', function() {
+        clearTimeout(timeoutBusqueda);
+        timeoutBusqueda = setTimeout(() => {
+            if (tabla) {
+                tabla.ajax.reload();
+            }
+        }, 400);
     });
-
-    $('#export_excel').click(() => {
+    
+    // Filtro de fechas
+    $('#fecha_inicio, #fecha_fin').on('change', function() {
         const inicio = $('#fecha_inicio').val();
         const fin = $('#fecha_fin').val();
-
-        if (!inicio || !fin) {
+        
+        if (inicio && fin && new Date(inicio) > new Date(fin)) {
             Swal.fire({
                 icon: 'warning',
-                title: 'Fechas faltantes',
-                text: 'Selecciona ambas fechas para exportar.',
-                confirmButtonColor: '#3085d6'
+                title: 'Rango inválido',
+                text: 'La fecha inicio no puede ser mayor a la fecha fin',
+                confirmButtonColor: '#f97316'
             });
             return;
         }
-
-        window.location = `exportar_excel.php?inicio=${inicio}&fin=${fin}`;
+        if (tabla) {
+            tabla.ajax.reload();
+        }
     });
-
-    $('#export_pdf').click(() => exportar('pdf'));
+    
+    // Botón limpiar
+    $('#btnLimpiar').on('click', function() {
+        $('#buscar_global, #fecha_inicio, #fecha_fin').val('');
+        if (tabla) {
+            tabla.ajax.reload();
+        }
+        Swal.fire({
+            icon: 'success',
+            title: 'Filtros limpiados',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    });
+    
+    // Exportar Excel
+    $('#export_excel').click(() => {
+        const inicio = $('#fecha_inicio').val();
+        const fin = $('#fecha_fin').val();
+        const busqueda = $('#buscar_global').val();
+        if (!inicio || !fin) {
+            Swal.fire({ icon: 'warning', title: 'Fechas requeridas', text: 'Selecciona ambas fechas', confirmButtonColor: '#f97316' });
+            return;
+        }
+        window.location = `exportar_excel.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}`;
+    });
+    
+    // Exportar PDF
+    $('#export_pdf').click(() => {
+        const inicio = $('#fecha_inicio').val();
+        const fin = $('#fecha_fin').val();
+        const busqueda = $('#buscar_global').val();
+        if (!inicio || !fin) {
+            Swal.fire({ icon: 'warning', title: 'Fechas requeridas', text: 'Selecciona ambas fechas', confirmButtonColor: '#f97316' });
+            return;
+        }
+        window.location = `api/exportar_ventas.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}`;
+    });
+    
+    // Eventos de modales
+    $('#btnConfirmarCancelarArticulo').on('click', function() {
+        const folio = $('#ca_folio').val();
+        const producto = $('#ca_producto').val();
+        const motivo = $('#ca_motivo').val();
+        
+        if (!producto) {
+            Swal.fire('Error', 'Selecciona un producto', 'error');
+            return;
+        }
+        if (!motivo) {
+            Swal.fire('Error', 'Ingresa un motivo', 'error');
+            return;
+        }
+        
+        confirmarCancelarArticulo(folio, producto, motivo);
+    });
+    
+    $('#btnConfirmarDevolucion').on('click', function() {
+        const folio = $('#dv_folio').val();
+        const producto = $('#dv_producto').val();
+        const cantidad = $('#dv_cantidad').val();
+        const motivo = $('#dv_motivo').val();
+        
+        if (!producto) {
+            Swal.fire('Error', 'Selecciona un producto', 'error');
+            return;
+        }
+        if (!cantidad || cantidad <= 0) {
+            Swal.fire('Error', 'Ingresa una cantidad válida', 'error');
+            return;
+        }
+        if (!motivo) {
+            Swal.fire('Error', 'Ingresa un motivo', 'error');
+            return;
+        }
+        
+        confirmarDevolucion(folio, producto, cantidad, motivo);
+    });
 });
 
 function cargarVentas() {
-    const producto = $('#buscar_producto').val();
-    const cliente = $('#buscar_cliente').val();
-    const inicio = $('#fecha_inicio').val();
-    const fin = $('#fecha_fin').val();
-
     if (tabla) {
         tabla.destroy();
-        detallesCargados = {};
     }
 
     tabla = $('#tablaVentas').DataTable({
         ajax: {
             url: 'api/obtener_ventas.php',
-            data: {
-                producto: producto,
-                cliente: cliente,
-                inicio: inicio,
-                fin: fin
+            type: 'GET',
+            data: function(d) {
+                return {
+                    global: $('#buscar_global').val(),
+                    inicio: $('#fecha_inicio').val(),
+                    fin: $('#fecha_fin').val()
+                };
             },
-            dataSrc: 'data'
+            dataSrc: 'data',
+            error: function(xhr, error, thrown) {
+                console.error('Error en AJAX:', error);
+                console.error('Respuesta:', xhr.responseText);
+            }
         },
-
-        order: [[4, 'desc']], // FECHA más reciente primero
-
         columns: [
-            {
-                data: null,
-                orderable: false,
-                width: '30px',
-                render: function() {
-                    return '<i class="fas fa-chevron-right expand-icon"></i>';
-                }
-            },
-            { data: 'folio_ticket', title: 'Folio' },
+            { data: 'folio_ticket', defaultContent: '—' },
             { 
                 data: 'total_general', 
-                title: 'Total', 
                 render: function(data) { 
-                    return data ? `$${parseFloat(data).toFixed(2)}` : '—'; 
+                    return data ? `$${parseFloat(data).toFixed(2)}` : '$0.00'; 
                 } 
             },
-            { data: 'correo_cliente', title: 'Cliente' },
             { 
-                data: 'fecha_venta',
-                title: 'Fecha',
-                render: function(data, type, row) {
-                    if (type === 'sort' || type === 'type') {
-                        return row.fecha_raw;
+                data: 'correo_cliente', 
+                render: function(data) {
+                    if (!data || data === '' || data === 'null' || data === 'Cliente no registrado') {
+                        return 'Venta en general';
                     }
                     return data;
                 }
             },
-            {
-                data: null,
-                title: 'Estado',
-                render: function(row) {
-                    const esPedido = row.folio_ticket ? row.folio_ticket.startsWith('PEDIDO-') : false;
-                    
-                    if (esPedido) {
-                        const estado = row.estado_pedido || 'pendiente';
-                        const badgeClass = estado === 'completado' ? 'badge-completado' : 'badge-pendiente';
-                        const texto = estado === 'completado' ? 'Completado' : 'Pendiente';
-                        return `<span class="badge-pedido ${badgeClass}">${texto}</span>`;
+            { 
+                data: 'fecha_venta', 
+                defaultContent: '—',
+                render: function(data, type, row) {
+                    if (type === 'sort') {
+                        return row.fecha_raw || '';
                     }
-                    
-                    return '<span class="badge-pedido badge-completado">Venta directa</span>';
+                    return data || '—';
                 }
             },
             {
                 data: null,
-                title: 'Acciones',
+                render: function(row) {
+                    const esPedido = row.folio_ticket && row.folio_ticket.startsWith('PEDIDO-');
+                    if (esPedido) {
+                        const estado = row.estado_pedido || 'pendiente';
+                        if (estado === 'completado') {
+                            return '<span class="badge-pedido badge-completado"><i class="fas fa-check-circle"></i> Completado</span>';
+                        } else if (estado === 'cancelado') {
+                            return '<span class="badge-pedido" style="background: #dc3545; color: white;"><i class="fas fa-ban"></i> Cancelado</span>';
+                        } else {
+                            return '<span class="badge-pedido badge-pendiente"><i class="fas fa-clock"></i> Pendiente</span>';
+                        }
+                    }
+                    return '<span class="badge-pedido badge-completado"><i class="fas fa-tag"></i> Venta directa</span>';
+                }
+            },
+            {
+                data: null,
                 orderable: false,
                 render: function(row) {
                     const folio = row.folio_ticket ? String(row.folio_ticket) : '';
@@ -399,533 +701,630 @@ function cargarVentas() {
                         : `<span class="text-muted" title="Sin ticket"><i class="fas fa-file-pdf"></i></span>`;
 
                     return `
+                        <button class="btn-ver-ticket" data-folio="${encodeURIComponent(folio)}">
+                            <i class="fas fa-eye"></i> Ver
+                        </button>
                         ${ticketLink}
-                        
-                        | <a href="#" class="text-primary reenvio-ticket"
-                            data-folio="${encodeURIComponent(folio)}"
-                            title="Reenviar ticket">
+                        | <a href="#" class="reenvio-ticket" data-folio="${encodeURIComponent(folio)}" title="Reenviar" style="color: #f97316;">
                             <i class="fas fa-paper-plane"></i>
                         </a>
-
-                        | ${
-                            esPedido && pedidoCompletado
-                            ? `<span class="text-muted" title="Pedido completado">
-                                    <i class="fas fa-times"></i>
-                            </span>`
-                            : `<a href="#" class="text-warning cancelar-articulo"
-                                    data-folio="${encodeURIComponent(folio)}"
-                                    title="Cancelar artículo">
-                                    <i class="fas fa-times"></i>
-                            </a>`
+                        | ${!esPedido || !pedidoCompletado ? 
+                            `<a href="#" class="cancelar-articulo" data-folio="${encodeURIComponent(folio)}" title="Cancelar artículo" style="color: #ffc107;">
+                                <i class="fas fa-times-circle"></i>
+                            </a>` : 
+                            `<span class="text-muted"><i class="fas fa-times-circle"></i></span>`
                         }
-                        
-                        | ${
-                            esPedido && pedidoCompletado
-                            ? `<span class="text-muted" title="Pedido completado">
-                                    <i class="fa-solid fa-arrow-rotate-left"></i>
-                            </span>`
-                            : `<a href="#" class="text-info devolucion-parcial"
-                                    data-folio="${encodeURIComponent(folio)}"
-                                    title="Devolución parcial">
-                                    <i class="fa-solid fa-arrow-rotate-left" style="color:#7a68b1;"></i>
-                            </a>`
+                        | ${!esPedido || !pedidoCompletado ? 
+                            `<a href="#" class="devolucion-parcial" data-folio="${encodeURIComponent(folio)}" title="Devolución" style="color: #7a68b1;">
+                                <i class="fas fa-arrow-rotate-left"></i>
+                            </a>` : 
+                            `<span class="text-muted"><i class="fas fa-arrow-rotate-left"></i></span>`
                         }
-                        
-                        | <a href="#" class="text-danger cancelar-venta"
-                            data-folio="${encodeURIComponent(folio)}"
-                            title="Cancelar venta">
+                        | <a href="#" class="cancelar-venta" data-folio="${encodeURIComponent(folio)}" title="Cancelar venta" style="color: #dc3545;">
                             <i class="fas fa-ban"></i>
                         </a>
                     `;
                 }
             }
         ],
-
         language: {
-            url: "https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json",
+            processing: "Procesando...",
+            lengthMenu: "Mostrar _MENU_ registros",
             info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+            infoEmpty: "No hay registros",
+            infoFiltered: "(filtrado de _MAX_ registros totales)",
+            zeroRecords: "No se encontraron ventas",
             paginate: {
-                previous: "<i class='fas fa-angle-left'></i> Anterior",
-                next: "Siguiente <i class='fas fa-angle-right'></i>"
+                first: '<i class="fas fa-angle-double-left"></i>',
+                previous: '<i class="fas fa-angle-left"></i>',
+                next: '<i class="fas fa-angle-right"></i>',
+                last: '<i class="fas fa-angle-double-right"></i>'
             }
         },
-        dom:
-            "<'row'<'col-sm-12'tr>>" +
-            "<'row mt-2'<'col-sm-12 col-md-6'i><'col-sm-12 col-md-6 text-right'p>>",
-        responsive: true,
-        scrollX: true,
+        order: [[3, 'desc']],
         pageLength: 10,
-        lengthChange: false,
+        lengthChange: true,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+        responsive: true,
+        searching: false,
+        processing: true,
+        serverSide: false,
+        stateSave: false,
         autoWidth: false,
-        pagingType: "simple_numbers",
-        drawCallback: function() {
-            $('.dataTables_paginate a').addClass('btn btn-outline-primary btn-sm mx-1');
-            bindRowActions();
-            bindExpandEvents();
-        }
-    });
-
-    // Evento para cuando se hace clic en el icono de expandir
-    $('#tablaVentas tbody').on('click', 'td:first-child .expand-icon', function() {
-        const tr = $(this).closest('tr');
-        const row = tabla.row(tr);
-        const icon = $(this);
-        
-        if (row.child.isShown()) {
-            // Ocultar detalles
-            row.child.hide();
-            icon.removeClass('expanded');
-        } else {
-            // Mostrar detalles
-            icon.addClass('expanded');
+        dom: 'rt<"bottom"lip><"clear">',
+        columnDefs: [
+            { orderable: false, targets: [4, 5] },
+            { type: 'date', targets: [3] },
+            { className: "text-center", targets: [4] },
+            { className: "text-nowrap", targets: [5] }
+        ],
+        drawCallback: function(settings) {
+            $('.dataTables_paginate .paginate_button').addClass('btn btn-sm');
+            bindAcciones();
             
-            // Obtener datos de la fila
-            const rowData = row.data();
-            
-            // Verificar si ya tenemos los detalles cargados
-            if (detallesCargados[rowData.folio_ticket]) {
-                row.child(detallesCargados[rowData.folio_ticket]).show();
-            } else {
-                // Cargar detalles del servidor
-                cargarDetallesVenta(rowData.folio_ticket, row);
+            var api = this.api();
+            if (api.rows().count() === 0) {
+                $('#tablaVentas tbody').html(`
+                    <tr class="odd">
+                        <td valign="top" colspan="6" class="dataTables_empty">
+                            <div class="empty-message">
+                                <div class="empty-icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="empty-title">No hay ventas registradas</div>
+                                <div class="empty-text">Prueba con otros filtros o realiza una nueva venta</div>
+                            </div>
+                         </div>
+                      </div>
+                  </tr>
+                `);
             }
         }
     });
 }
 
-function bindRowActions(){
+function bindAcciones() {
+    // Botón Ver Ticket
+    $('.btn-ver-ticket').off('click').on('click', function(e) {
+        e.preventDefault();
+        const folio = decodeURIComponent($(this).data('folio'));
+        verTicket(folio);
+    });
+    
     // Reenvío de ticket
-    $('#tablaVentas').off('click', '.reenvio-ticket').on('click', '.reenvio-ticket', function(e){
+    $('.reenvio-ticket').off('click').on('click', function(e) {
         e.preventDefault();
         const folio = decodeURIComponent($(this).data('folio'));
         reenviarTicket(folio);
     });
-
-    // Cancelar artículo
-    $('#tablaVentas').off('click', '.cancelar-articulo').on('click', '.cancelar-articulo', function(e){
+    
+    // Cancelar artículo - MODAL MEJORADO
+    $('.cancelar-articulo').off('click').on('click', function(e) {
         e.preventDefault();
         const folio = decodeURIComponent($(this).data('folio'));
-        cancelarArticuloModal(folio);
+        cargarProductosParaCancelar(folio);
     });
-
-    // Devolución parcial
-    $('#tablaVentas').off('click', '.devolucion-parcial').on('click', '.devolucion-parcial', function(e){
+    
+    // Devolución parcial - MODAL MEJORADO
+    $('.devolucion-parcial').off('click').on('click', function(e) {
         e.preventDefault();
         const folio = decodeURIComponent($(this).data('folio'));
-        abrirDevolucionModal(folio);
+        cargarProductosParaDevolucion(folio);
     });
-
-    // Cancelar venta completa
-    $('#tablaVentas').off('click', '.cancelar-venta').on('click', '.cancelar-venta', function(e){
+    
+    // Cancelar venta/pedido
+    $('.cancelar-venta').off('click').on('click', function(e) {
         e.preventDefault();
         const folio = decodeURIComponent($(this).data('folio'));
         cancelarVenta(folio);
     });
 }
 
-function bindExpandEvents() {
-    // Reinicializar iconos expandidos si es necesario
-    $('.expand-icon').removeClass('expanded');
-}
-
-function cargarDetallesVenta(folio, row) {
-    // Mostrar loading
-    row.child('<div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i> Cargando detalles...</div>').show();
+// Cargar productos para cancelar artículo
+function cargarProductosParaCancelar(folio) {
+    Swal.fire({
+        title: 'Cargando productos...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false
+    });
     
     $.ajax({
         url: 'api/obtener_detalles_venta.php',
         method: 'GET',
         data: { folio: folio },
+        dataType: 'json',
         success: function(response) {
+            Swal.close();
+            
             if (response.success && response.data && response.data.length > 0) {
-                const detallesHtml = generarTablaDetalles(response.data, response.subtotal, response.iva, response.total);
-                detallesCargados[folio] = detallesHtml;
-                row.child(detallesHtml).show();
+                productosVenta = response.data;
+                
+                // Limpiar y llenar select
+                const select = $('#ca_producto');
+                select.empty();
+                select.append('<option value="">Seleccionar producto...</option>');
+                
+                productosVenta.forEach(producto => {
+                    select.append(`<option value="${producto.id_producto}">${producto.producto} (Cant: ${producto.cantidad})</option>`);
+                });
+                
+                $('#ca_folio').val(folio);
+                $('#ca_motivo').val('');
+                $('#modalCancelarArticulo').modal('show');
             } else {
-                row.child('<div class="alert alert-warning m-3">No hay detalles disponibles para esta venta</div>').show();
+                Swal.fire('Error', 'No se pudieron cargar los productos', 'error');
             }
         },
         error: function() {
-            row.child('<div class="alert alert-danger m-3">Error al cargar los detalles</div>').show();
+            Swal.close();
+            Swal.fire('Error', 'Error de conexión', 'error');
         }
     });
 }
 
-function generarTablaDetalles(items, subtotal, iva, total) {
-    let html = `
-        <div class="details-content">
-            <table class="details-table">
-                <thead>
-                    <tr>
-                        <th>Producto</th>
-                        <th class="text-center">Cantidad</th>
-                        <th class="text-right">Precio Unit.</th>
-                        <th class="text-right">Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
+// Confirmar cancelación de artículo - VERSIÓN CORREGIDA
+function confirmarCancelarArticulo(folio, idProducto, motivo) {
+    // Buscar el nombre del producto en productosVenta
+    const productoSeleccionado = productosVenta.find(p => p.id_producto == idProducto);
     
-    items.forEach(item => {
-        const precio = parseFloat(item.precio_unitario || item.precio || 0);
-        const cantidad = parseInt(item.cantidad);
-        const subtotalItem = precio * cantidad;
-        
-        html += `
-            <tr>
-                <td>${item.producto}</td>
-                <td class="text-center">${cantidad}</td>
-                <td class="text-right">$${precio.toFixed(2)}</td>
-                <td class="text-right">$${subtotalItem.toFixed(2)}</td>
-            </tr>
-        `;
+    if (!productoSeleccionado) {
+        Swal.fire('Error', 'No se encontró el producto seleccionado', 'error');
+        return;
+    }
+    
+    const nombreProducto = productoSeleccionado.producto;
+    
+    Swal.fire({
+        title: 'Procesando...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false
     });
     
-    // Agregar total general
-    html += `
-                </tbody>
-                <tfoot>
-                    <tr class="subtotal-row">
-                        <td colspan="3" class="text-right"><strong>Total:</strong></td>
-                        <td class="text-right"><strong>$${parseFloat(total).toFixed(2)}</strong></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    `;
+    $.ajax({
+        url: 'api/cancelar_articulo.php',
+        method: 'POST',
+        data: JSON.stringify({
+            folio: folio,
+            producto: nombreProducto,  // 👈 Enviar nombre, no ID
+            motivo: motivo
+        }),
+        contentType: 'application/json',
+        dataType: 'json',
+        success: function(response) {
+            Swal.close();
+            $('#modalCancelarArticulo').modal('hide');
+            
+            if (response.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Artículo cancelado',
+                    text: response.message,
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    tabla.ajax.reload();
+                });
+            } else {
+                Swal.fire('Error', response.message, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.close();
+            let errorMsg = 'Error de conexión';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMsg = response.message || errorMsg;
+            } catch(e) {}
+            Swal.fire('Error', errorMsg, 'error');
+        }
+    });
+}
+
+// Cargar productos para devolución
+function cargarProductosParaDevolucion(folio) {
+    Swal.fire({
+        title: 'Cargando productos...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false
+    });
     
-    return html;
+    $.ajax({
+        url: 'api/obtener_detalles_venta.php',
+        method: 'GET',
+        data: { folio: folio },
+        dataType: 'json',
+        success: function(response) {
+            Swal.close();
+            
+            if (response.success && response.data && response.data.length > 0) {
+                productosVenta = response.data;
+                
+                // Limpiar y llenar select
+                const select = $('#dv_producto');
+                select.empty();
+                select.append('<option value="">Seleccionar producto...</option>');
+                
+                productosVenta.forEach(producto => {
+                    select.append(`<option value="${producto.id_producto}" data-max="${producto.cantidad}">${producto.producto} (Cantidad disponible: ${producto.cantidad})</option>`);
+                });
+                
+                $('#dv_folio').val(folio);
+                $('#dv_cantidad').val('');
+                $('#dv_motivo').val('');
+                $('#modalDevolucion').modal('show');
+                
+                // Actualizar max cuando cambie el producto
+                $('#dv_producto').off('change').on('change', function() {
+                    const selectedOption = $(this).find('option:selected');
+                    const maxCantidad = selectedOption.data('max') || 0;
+                    $('#dv_cantidad').attr('max', maxCantidad);
+                    $('#dv_cantidad').attr('placeholder', `Máximo: ${maxCantidad}`);
+                });
+            } else {
+                Swal.fire('Error', 'No se pudieron cargar los productos', 'error');
+            }
+        },
+        error: function() {
+            Swal.close();
+            Swal.fire('Error', 'Error de conexión', 'error');
+        }
+    });
 }
 
-function getRowDataByFolio(folio) {
-    const all = tabla.rows().data().toArray();
-    for (let i=0;i<all.length;i++){
-        if (String(all[i].folio_ticket) === String(folio)) return all[i];
-    }
-    return null;
+// Confirmar devolución
+function confirmarDevolucion(folio, idProducto, cantidad, motivo) {
+    Swal.fire({
+        title: 'Procesando...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false
+    });
+    
+    $.ajax({
+        url: 'api/devolver_parcial.php',
+        method: 'POST',
+        data: JSON.stringify({
+            folio: folio,
+            id_producto: idProducto,
+            cantidad: parseInt(cantidad),
+            motivo: motivo
+        }),
+        contentType: 'application/json',
+        dataType: 'json',
+        success: function(response) {
+            Swal.close();
+            $('#modalDevolucion').modal('hide');
+            
+            if (response.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Devolución procesada',
+                    text: response.message,
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    tabla.ajax.reload();
+                });
+            } else {
+                Swal.fire('Error', response.message, 'error');
+            }
+        },
+        error: function() {
+            Swal.close();
+            Swal.fire('Error', 'Error de conexión', 'error');
+        }
+    });
 }
 
-/* Funciones existentes se mantienen igual */
+function verTicket(folio) {
+    Swal.fire({ title: 'Cargando...', didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
+    
+    $.ajax({
+        url: 'api/obtener_detalles_venta.php',
+        method: 'GET',
+        data: { folio: folio },
+        dataType: 'json',
+        success: function(response) {
+            Swal.close();
+            
+            if (response.success && response.data && response.data.length > 0) {
+                const items = response.data;
+                const total = response.total || 0;
+                const venta = items[0];
+                const fecha = new Date(venta.fecha_venta);
+                const fechaStr = fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const cliente = (venta.correo_cliente && venta.correo_cliente !== '' && venta.correo_cliente !== 'null') ? venta.correo_cliente : 'Venta en general';
+                
+                let itemsHtml = '';
+                items.forEach(item => {
+                    const precio = parseFloat(item.precio_unitario || item.precio || 0);
+                    const cantidad = parseInt(item.cantidad);
+                    itemsHtml += `
+                        <tr>
+                            <td>${cantidad}</td>
+                            <td>${item.producto}</td>
+                            <td>$${precio.toFixed(2)}</td>
+                            <td>$${(precio * cantidad).toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                
+const html = `
+    <div style="font-family: 'Courier New', monospace; background: white; max-width: 380px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 15px;">
+            <h4 style="font-size: 14px; font-weight: bold; margin: 0;">TIENDA PESCADORES</h4>
+            <p style="font-size: 10px; margin: 3px 0;">RFC: PESC123456</p>
+            <p style="font-size: 10px; margin: 0;">Tel: 1234-5678</p>
+            <p style="font-size: 10px; margin: 3px 0;">${fechaStr}</p>
+        </div>
+        <div style="border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                <span style="font-weight: bold;">FOLIO:</span>
+                <span>${folio}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                <span style="font-weight: bold;">CLIENTE:</span>
+                <span>${cliente}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                <span style="font-weight: bold;">VENDEDOR:</span>
+                <span>${venta.vendedor_nombre || 'Sistema'}</span>
+            </div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+            <thead>
+                <tr>
+                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">CANT</th>
+                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRODUCTO</th>
+                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRECIO</th>
+                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">SUBTOTAL</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsHtml}
+            </tbody>
+        </table>
+        <div style="text-align: right; font-weight: bold; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #333;">
+            TOTAL: $${parseFloat(total).toFixed(2)}
+        </div>
+        <div style="text-align: center; font-size: 9px; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #333; color: #666;">
+            ¡Gracias por tu compra!<br>Este ticket es válido como comprobante
+        </div>
+    </div>
+`;
+                
+                $('#modalTicketBody').html(html);
+                $('#modalTicket').modal('show');
+            } else {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los detalles', confirmButtonColor: '#f97316' });
+            }
+        },
+        error: function() {
+            Swal.close();
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión', confirmButtonColor: '#f97316' });
+        }
+    });
+    
+    $('#btnImprimirTicket').off('click').on('click', function() {
+        const contenido = $('#modalTicketBody').html();
+        const ventana = window.open('', '_blank');
+        ventana.document.write(`
+            <html>
+            <head>
+                <title>Ticket de Venta</title>
+                <style>
+                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
+                    .ticket-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                    .ticket-info { border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                    .ticket-info-row { display: flex; justify-content: space-between; font-size: 11px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+                    th, td { padding: 5px; text-align: center; border-bottom: 1px dotted #ccc; }
+                    .total { text-align: right; font-weight: bold; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #000; }
+                    .footer { text-align: center; font-size: 9px; margin-top: 15px; }
+                </style>
+            </head>
+            <body>${contenido}</body>
+            </html>
+        `);
+        ventana.document.close();
+        ventana.print();
+        ventana.close();
+    });
+}
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 async function reenviarTicket(folio) {
     try {
-        Swal.fire({
-            title: 'Reenviando ticket...',
-            didOpen: () => Swal.showLoading(),
-            allowOutsideClick: false,
-            showConfirmButton: false
-        });
-
+        Swal.fire({ title: 'Reenviando...', didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
         const res = await fetch(`enviar_ticket.php?folio=${encodeURIComponent(folio)}`);
-        const data = await res.json().catch(()=>({success:false, message:'Respuesta no válida'}));
-
+        const data = await res.json();
         Swal.close();
-        Swal.fire({ icon: data.success ? 'success' : 'error', title: data.message || (data.success ? 'Ticket reenviado' : 'Error'), timer: 2500, showConfirmButton:false });
+        Swal.fire({ icon: data.success ? 'success' : 'error', title: data.message || (data.success ? 'Ticket reenviado' : 'Error'), timer: 2500, showConfirmButton: false });
     } catch (err) {
         Swal.close();
-        Swal.fire({ icon: 'error', title: 'Error al reenviar', text: err.message || err, timer:3000, showConfirmButton:false });
+        Swal.fire({ icon: 'error', title: 'Error', text: err.message, confirmButtonColor: '#f97316' });
     }
-}
-
-function cancelarArticuloModal(folio) {
-    const row = getRowDataByFolio(folio);
-    if (!row) return Swal.fire({icon:'error', title:'Folio no encontrado'});
-
-    // Cargar detalles actualizados del folio
-    $.ajax({
-        url: 'api/obtener_detalles_venta.php',
-        method: 'GET',
-        data: { folio: folio },
-        success: function(response) {
-            if (!response.success || !response.data) {
-                return Swal.fire({icon:'error', title:'Error al cargar productos'});
-            }
-            
-            const items = response.data.filter(item => !item.cancelado); // Solo mostrar no cancelados
-            
-            if (!items.length) {
-                return Swal.fire({icon:'info', title:'No hay artículos disponibles para cancelar'});
-            }
-
-            const tpl = $($('#tplCancelarArticulo').html());
-            tpl.find('#ca_folio').val(folio);
-            const select = tpl.find('#ca_producto').empty();
-            
-            items.forEach((it, idx) => {
-                const nombre = it.producto || ('Artículo ' + (idx+1));
-                const precio = parseFloat(it.precio_unitario || it.precio || 0).toFixed(2);
-                const display = `${nombre} - $${precio} (x${it.cantidad})`;
-                select.append(`<option value="${it.id_producto}" data-idx="${idx}">${$('<div>').text(display).html()}</option>`);
-            });
-
-            Swal.fire({
-                html: tpl.prop('outerHTML'),
-                showConfirmButton: false,
-                showCloseButton: true,
-                didOpen: () => {
-                    const modal = Swal.getHtmlContainer();
-                    $(modal).find('#ca_cancel').on('click', () => Swal.close());
-                    $(modal).find('#ca_confirm').on('click', async () => {
-                        const id_producto = $(modal).find('#ca_producto').val();
-                        const motivo = $(modal).find('#ca_motivo').val();
-                        const productoItem = items.find(it => it.id_producto == id_producto);
-
-                        if(!productoItem) return Swal.fire({icon:'error', title:'Producto inválido'});
-
-                        try {
-                            Swal.fire({title:'Procesando...', didOpen:()=>Swal.showLoading(), showConfirmButton:false, allowOutsideClick:false});
-                            const res = await fetch('api/cancelar_articulo.php', {
-                                method: 'POST',
-                                headers: {'Content-Type':'application/json'},
-                                body: JSON.stringify({ 
-                                    folio: folio, 
-                                    id_producto: id_producto,
-                                    cantidad: productoItem.cantidad,
-                                    motivo: motivo 
-                                })
-                            });
-                            const data = await res.json().catch(()=>({success:false, message:'Respuesta no válida'}));
-                            Swal.close();
-                            Swal.fire({ icon: data.success ? 'success' : 'error', title: data.message || (data.success?'Artículo cancelado':'Error'), timer:2000, showConfirmButton:false });
-                            
-                            // Recargar tabla y limpiar cache de detalles
-                            detallesCargados = {};
-                            tabla.ajax.reload(null, false);
-                        } catch (err) {
-                            Swal.close();
-                            Swal.fire({ icon:'error', title:'Error', text: err.message || err, timer:2500, showConfirmButton:false });
-                        }
-                    });
-                }
-            });
-        },
-        error: function() {
-            Swal.fire({icon:'error', title:'Error al cargar productos'});
-        }
-    });
-}
-
-function abrirDevolucionModal(folio) {
-    const row = getRowDataByFolio(folio);
-    if (!row) return Swal.fire({icon:'error', title:'Folio no encontrado'});
-
-    // Cargar detalles actualizados
-    $.ajax({
-        url: 'api/obtener_detalles_venta.php',
-        method: 'GET',
-        data: { folio: folio },
-        success: function(response) {
-            if (!response.success || !response.data) {
-                return Swal.fire({icon:'error', title:'Error al cargar productos'});
-            }
-            
-            const items = response.data.filter(item => !item.cancelado && item.cantidad > (item.devueltos || 0));
-
-            if (!items.length) {
-                return Swal.fire({icon:'info', title:'No hay artículos disponibles para devolver'});
-            }
-
-            const tpl = $($('#tplDevolucion').html());
-            tpl.find('#dv_folio').val(folio);
-            const select = tpl.find('#dv_producto').empty();
-
-            items.forEach((it) => {
-                const idp = it.id_producto;  
-                const disponible = it.cantidad - (it.devueltos || 0);     
-                const nombre = it.producto;
-                const precio = parseFloat(it.precio_unitario || it.precio || 0).toFixed(2);
-
-                select.append(`
-                    <option value="${idp}" data-max="${disponible}" data-precio="${precio}">
-                        ${nombre} - $${precio} (Disponible: ${disponible})
-                    </option>
-                `);
-            });
-
-            Swal.fire({
-                html: tpl.prop('outerHTML'),
-                showConfirmButton: false,
-                showCloseButton: true,
-                didOpen: () => {
-                    const modal = Swal.getHtmlContainer();
-
-                    $(modal).find('#dv_cancel').on('click', () => Swal.close());
-
-                    $(modal).find('#dv_confirm').on('click', async () => {
-                        const id_producto = $(modal).find('#dv_producto').val();
-                        const max = Number($(modal).find('#dv_producto option:selected').data('max'));
-                        const cantidad = Number($(modal).find('#dv_cantidad').val());
-                        const motivo = $(modal).find('#dv_motivo').val() || '';
-
-                        if (!id_producto) {
-                            return Swal.fire({icon:'error', title:'Producto inválido'});
-                        }
-
-                        if (!cantidad || cantidad <= 0 || cantidad > max) {
-                            return Swal.fire({
-                                icon:'warning',
-                                title:`Cantidad inválida`,
-                                text:`Máximo permitido: ${max}`
-                            });
-                        }
-
-                        try {
-                            Swal.fire({
-                                title:'Procesando...',
-                                didOpen:()=>Swal.showLoading(),
-                                showConfirmButton:false,
-                                allowOutsideClick:false
-                            });
-
-                            const res = await fetch('api/devolver_parcial.php', {
-                                method: 'POST',
-                                headers: {'Content-Type':'application/json'},
-                                body: JSON.stringify({
-                                    folio: folio,
-                                    id_producto: id_producto,
-                                    cantidad: cantidad,
-                                    motivo: motivo
-                                })
-                            });
-
-                            const data = await res.json().catch(()=>({success:false, message:'Respuesta no válida'}));
-
-                            Swal.close();
-                            Swal.fire({
-                                icon: data.success ? 'success' : 'error',
-                                title: data.message || (data.success ? 'Devolución realizada' : 'Error'),
-                                timer:2000,
-                                showConfirmButton:false
-                            });
-
-                            // Recargar tabla y limpiar cache
-                            detallesCargados = {};
-                            tabla.ajax.reload(null, false);
-
-                        } catch (err) {
-                            Swal.close();
-                            Swal.fire({
-                                icon:'error',
-                                title:'Error',
-                                text: err.message || err,
-                                timer:2500,
-                                showConfirmButton:false
-                            });
-                        }
-                    });
-                }
-            });
-        },
-        error: function() {
-            Swal.fire({icon:'error', title:'Error al cargar productos'});
-        }
-    });
 }
 
 function cancelarVenta(folio) {
+    console.log("Cancelando con folio:", folio);
+    
+    if (!folio) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo obtener el folio'
+        });
+        return;
+    }
+    
+    const esPedido = folio.toString().startsWith('PEDIDO-');
+    const titulo = esPedido ? '¿Cancelar pedido?' : '¿Cancelar venta?';
+    const texto = esPedido 
+        ? '¿Estás seguro de que deseas cancelar este pedido? Esta acción no se puede deshacer y se restaurará el stock.'
+        : '¿Estás seguro de que deseas cancelar esta venta? Esta acción no se puede deshacer.';
+    
     Swal.fire({
-        title: '¿Cancelar esta venta completa?',
+        title: titulo,
+        text: texto,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: 'Sí, cancelar venta',
-        cancelButtonText: 'No',
-        confirmButtonColor: '#d33'
-    }).then(async (r) => {
-        if (!r.isConfirmed) return;
-
-        try {
-            Swal.fire({
-                title:'Cancelando venta...',
-                didOpen:()=>Swal.showLoading(),
-                showConfirmButton:false,
-                allowOutsideClick:false
-            });
-
-            const res = await fetch('api/cancelar_venta.php', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ folio: folio })
-            });
-
-            const data = await res.json();
-
-            Swal.close();
-
-            if (data.pedido_completado) {
-                const confirmacion = await Swal.fire({
-                    title: 'Pedido completado',
-                    text: data.message,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sí, cancelar de todos modos',
-                    cancelButtonText: 'No'
-                });
-
-                if (!confirmacion.isConfirmed) return;
-
-                Swal.fire({
-                    title:'Cancelando pedido...',
-                    didOpen:()=>Swal.showLoading(),
-                    showConfirmButton:false,
-                    allowOutsideClick:false
-                });
-
-                const resForzado = await fetch('api/cancelar_venta.php', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ 
-                        folio: folio,
-                        forzar: true
-                    })
-                });
-
-                const dataFinal = await resForzado.json();
-                Swal.close();
-
-                Swal.fire({
-                    icon: dataFinal.success ? 'success' : 'error',
-                    title: dataFinal.message,
-                    timer:2500,
-                    showConfirmButton:false
-                });
-
-                if (dataFinal.success) {
-                    detallesCargados = {};
-                    tabla.ajax.reload(null, false);
-                }
-
-                return;
-            }
-
-            Swal.fire({
-                icon: data.success ? 'success' : 'error',
-                title: data.message,
-                timer:2000,
-                showConfirmButton:false
-            });
-
-            if (data.success) {
-                detallesCargados = {};
-                tabla.ajax.reload(null, false);
-            }
-
-        } catch (err) {
-            Swal.close();
-            Swal.fire({
-                icon:'error',
-                title:'Error',
-                text: err.message || err,
-                timer:3000,
-                showConfirmButton:false
-            });
+        confirmButtonText: 'Sí, cancelar',
+        cancelButtonText: 'No, mantener',
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            procesarCancelacionVenta(folio, esPedido);
         }
     });
 }
 
-function exportar(tipo) {
-    const producto = $('#buscar_producto').val();
-    const cliente = $('#buscar_cliente').val();
-    const inicio = $('#fecha_inicio').val();
-    const fin = $('#fecha_fin').val();
-    window.location = `api/exportar_ventas.php?format=${tipo}&producto=${encodeURIComponent(producto)}&cliente=${encodeURIComponent(cliente)}&inicio=${inicio}&fin=${fin}`;
+async function procesarCancelacionVenta(folio, esPedido) {
+    Swal.fire({
+        title: 'Verificando...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const requestBody = {
+            folio: folio.toString(),
+            forzar: false
+        };
+        
+        console.log("Enviando petición:", requestBody);
+        
+        const response = await fetch('api/cancelar_venta.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        Swal.close();
+        
+        console.log("Respuesta del servidor:", data);
+        
+        if (data.pedido_completado === true) {
+            Swal.fire({
+                title: 'Pedido completado',
+                text: data.message,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cancelar',
+                cancelButtonText: 'No',
+                confirmButtonColor: '#d33'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    cancelarPedidoCompletado(folio);
+                }
+            });
+        } else if (data.success) {
+            const tituloExito = esPedido ? '¡Pedido cancelado!' : '¡Venta cancelada!';
+            Swal.fire({
+                icon: 'success',
+                title: tituloExito,
+                text: data.message,
+                confirmButtonColor: '#28a745',
+                timer: 2000
+            }).then(() => {
+                location.reload();
+            });
+        } else {
+            const tituloError = esPedido ? 'Error al cancelar pedido' : 'Error al cancelar venta';
+            Swal.fire({
+                icon: 'error',
+                title: tituloError,
+                text: data.message || 'No se pudo cancelar',
+                confirmButtonColor: '#f97316'
+            });
+        }
+    } catch (error) {
+        Swal.close();
+        console.error('Error:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error de conexión',
+            text: error.message,
+            confirmButtonColor: '#f97316'
+        });
+    }
+}
+
+async function cancelarPedidoCompletado(folio) {
+    Swal.fire({
+        title: 'Cancelando pedido completado...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const requestBody = {
+            folio: folio.toString(),
+            forzar: true
+        };
+        
+        console.log("Enviando petición con forzar=true:", requestBody);
+        
+        const response = await fetch('api/cancelar_venta.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        Swal.close();
+        
+        console.log("Respuesta final:", data);
+        
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: '¡Pedido cancelado!',
+                text: data.message,
+                confirmButtonColor: '#28a745',
+                timer: 2000
+            }).then(() => {
+                location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.message || 'No se pudo cancelar el pedido',
+                confirmButtonColor: '#f97316'
+            });
+        }
+    } catch (error) {
+        Swal.close();
+        console.error('Error:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error de conexión',
+            text: error.message,
+            confirmButtonColor: '#f97316'
+        });
+    }
 }
 </script>
+
+<?php include 'includes/footer.php'; ?>

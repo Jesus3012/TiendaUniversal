@@ -115,6 +115,9 @@ $pagina_actual = "Registrar venta";
             right: 20px;
             font-size: 0.7rem;
             color: #94a3b8;
+            background: #f8fafc;
+            padding: 4px 12px;
+            border-radius: 20px;
         }
         
         /* Breadcrumb personalizado */
@@ -150,6 +153,63 @@ $pagina_actual = "Registrar venta";
             margin-right: 6px;
             font-size: 0.75rem;
         }
+        
+        /* Título del módulo */
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .section-title i {
+            font-size: 1.8rem;
+            color: #f97316;
+        }
+        
+        .section-divider {
+            height: 4px;
+            width: 60px;
+            background: #f97316;
+            border-radius: 4px;
+            margin: 15px 0 10px 0;
+        }
+        
+        .section-header p {
+            color: #64748b;
+        }
+        
+        /* Fondo del content-wrapper */
+        .content-wrapper {
+            background: #fff7ea !important;
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .method-card {
+                padding: 2rem 1.5rem;
+            }
+            
+            .method-icon {
+                width: 80px;
+                height: 80px;
+            }
+            
+            .method-icon i {
+                font-size: 2.2rem;
+            }
+            
+            .method-card h3 {
+                font-size: 1.2rem;
+            }
+            
+            .section-title {
+                font-size: 1.4rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -182,11 +242,11 @@ $pagina_actual = "Registrar venta";
                 <span>Nueva Venta</span>
             </div>
             <div class="section-divider"></div>
-            <p class="text-muted mt-2 mb-0">Selecciona el método de venta para continuar</p>
+            <p class="mt-2 mb-0">Selecciona el método de venta para continuar</p>
         </div>
         
-        <!-- Tarjetas de selección de método -->
-        <div class="row g-4">
+        <!-- Tarjetas superiores (2 columnas) -->
+        <div class="row g-4 justify-content-center">
             <!-- Método 1: Código de Barras -->
             <div class="col-md-6">
                 <div class="method-card" onclick="window.location.href='ventas.php'">
@@ -211,6 +271,22 @@ $pagina_actual = "Registrar venta";
                     <p>Busca y selecciona productos de la lista</p>
                     <div class="method-badge">
                         <i class="fas fa-search me-1"></i> Buscar producto
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tarjeta inferior centrada (Pedidos de Usuarios) - MISMO TAMAÑO -->
+        <div class="row mt-4 justify-content-center">
+            <div class="col-md-6">
+                <div class="method-card" onclick="window.location.href='pedidos.php'">
+                    <div class="method-icon">
+                        <i class="fas fa-shopping-cart"></i>
+                    </div>
+                    <h3>Pedidos de Usuarios</h3>
+                    <p>Gestiona los pedidos realizados o por realizar de tus clientes</p>
+                    <div class="method-badge">
+                        <i class="fas fa-clock me-1"></i> Pendientes por atender
                     </div>
                 </div>
             </div>

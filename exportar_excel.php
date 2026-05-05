@@ -1,108 +1,63 @@
 <?php
-require 'vendor/autoload.php';
-include('includes/db.php');
+session_start();
+include 'includes/db.php';
 
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-
-$inicio = $_GET['inicio'] ?? null;
-$fin = $_GET['fin'] ?? null;
-
-if (!$inicio || !$fin) {
-    die("Fechas inválidas");
+if (!isset($_SESSION['usuario_id'])) {
+    die('No autorizado');
 }
 
-$sql = $conn->query("
-    SELECT 
-        v.id, 
-        p.nombre AS producto, 
-        p.precio_compra,
-        p.precio_venta,
-        v.cantidad_vendida, 
-        v.fecha_venta
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE DATE(v.fecha_venta) BETWEEN '$inicio' AND '$fin'
-    ORDER BY v.fecha_venta DESC
-");
+$inicio = $_GET['inicio'] ?? '';
+$fin = $_GET['fin'] ?? '';
+$busqueda = $_GET['busqueda'] ?? '';
 
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
+// Configurar headers para Excel
+header('Content-Type: application/vnd.ms-excel');
+header('Content-Disposition: attachment; filename="ventas_' . date('Y-m-d') . '.xls"');
+header('Cache-Control: max-age=0');
 
-// === TITULO ===
-$sheet->setCellValue("A1", "REPORTE DE VENTAS ($inicio a $fin)");
-$sheet->mergeCells("A1:F1");
-$sheet->getStyle("A1")->getFont()->setBold(true)->setSize(14);
-$sheet->getStyle("A1")->getAlignment()->setHorizontal('center');
+// Crear el contenido del Excel
+echo "Folio\tTotal\tCliente\tFecha\tEstado\n";
 
-// === ENCABEZADOS ===
-$encabezados = [
-    "ID", 
-    "Producto", 
-    "Precio Compra", 
-    "Precio Venta", 
-    "Cantidad", 
-    "Fecha de Venta"
-];
+$sql = "SELECT v.folio_ticket, v.correo_cliente, v.fecha_venta,
+        (SELECT SUM(v2.cantidad_vendida * p2.precio_venta) 
+         FROM ventas v2 
+         JOIN productos p2 ON v2.id_producto = p2.id 
+         WHERE v2.folio_ticket = v.folio_ticket) as total_general
+        FROM ventas v
+        WHERE DATE(v.fecha_venta) BETWEEN '$inicio' AND '$fin'";
 
-$columnas = ["A", "B", "C", "D", "E", "F"];
-
-foreach ($columnas as $i => $col) {
-    $sheet->setCellValue($col . "3", $encabezados[$i]);
-
-    // Estilo del encabezado
-    $sheet->getStyle($col . "3")->applyFromArray([
-        "font" => ["bold" => true, "color" => ["rgb" => "FFFFFF"]],
-        "fill" => [
-            "fillType" => Fill::FILL_SOLID,
-            "startColor" => ["rgb" => "4CAF50"]
-        ],
-        "borders" => [
-            "allBorders" => [
-                "borderStyle" => Border::BORDER_THIN,
-                "color" => ["rgb" => "000000"]
-            ]
-        ]
-    ]);
-
-    $sheet->getColumnDimension($col)->setAutoSize(true);
+if (!empty($busqueda)) {
+    $busqueda = $conn->real_escape_string($busqueda);
+    $sql .= " AND (v.folio_ticket LIKE '%$busqueda%' OR v.correo_cliente LIKE '%$busqueda%')";
 }
 
-// === RELLENAR DATOS ===
-$fila = 4;
+$sql .= " ORDER BY v.fecha_venta DESC";
 
-while ($row = $sql->fetch_assoc()) {
-    $sheet->setCellValue("A$fila", $row['id']);
-    $sheet->setCellValue("B$fila", $row['producto']);
-    $sheet->setCellValue("C$fila", "$" . number_format($row['precio_compra'], 2));
-    $sheet->setCellValue("D$fila", "$" . number_format($row['precio_venta'], 2));
-    $sheet->setCellValue("E$fila", $row['cantidad_vendida']);
-    $sheet->setCellValue("F$fila", $row['fecha_venta']);
+$result = $conn->query($sql);
 
-    // Bordes
-    foreach ($columnas as $col) {
-        $sheet->getStyle("$col$fila")->applyFromArray([
-            "borders" => [
-                "allBorders" => [
-                    "borderStyle" => Border::BORDER_THIN,
-                    "color" => ["rgb" => "777777"]
-                ]
-            ]
-        ]);
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $estado = 'Venta directa';
+        if (strpos($row['folio_ticket'], 'PEDIDO-') === 0) {
+            $estado = 'Pedido';
+        } elseif (strpos($row['folio_ticket'], 'Venta_conteo') === 0) {
+            $estado = 'Conteo';
+        } elseif (strpos($row['folio_ticket'], 'Venta_codigo') === 0) {
+            $estado = 'Venta código';
+        }
+        
+        $cliente = !empty($row['correo_cliente']) ? $row['correo_cliente'] : 'Venta en general';
+        
+        echo $row['folio_ticket'] . "\t" . 
+             number_format($row['total_general'], 2) . "\t" . 
+             $cliente . "\t" . 
+             date('d/m/Y H:i', strtotime($row['fecha_venta'])) . "\t" . 
+             $estado . "\n";
     }
-
-    $fila++;
+} else {
+    echo "No hay ventas en el período seleccionado.\t\t\t\t";
 }
 
-$filename = "ReporteVentas_$inicio-$fin.xlsx";
-
-// Encabezados para descarga
-header("Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-header("Content-Disposition: attachment; filename=\"$filename\"");
-header("Cache-Control: max-age=0");
-
-$writer = new Xlsx($spreadsheet);
-$writer->save("php://output");
+$conn->close();
 exit;
+?>

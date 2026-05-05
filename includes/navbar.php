@@ -132,6 +132,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
         <?php if ($rol === 'administrador'): ?>
           <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i> Inicio</a>
           <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+          <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
           <a href="dashboard_productos.php"><i class="fas fa-box"></i> Registrar Productos</a>
           <a href="proveedores.php"><i class="fas fa-truck"></i> Proveedores</a>
@@ -139,24 +140,15 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
           <a href="historial_stock.php"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
           <a href="ver_ventas.php"><i class="fas fa-chart-line"></i> Estadisticas</a>
           <a href="configuracion.php"><i class="fas fa-cogs"></i> Configuración</a>
-          
-          <details class="mobile-submenu">
-            <summary>
-              <i class="fas fa-store"></i> Inventario / Ventas
-              <i class="fas fa-chevron-right"></i>
-            </summary>
-            <div class="mobile-submenu-items">
-              <a href="pedidos.php"><i class="fas fa-shipping-fast"></i> Pedidos</a>
-              <a href="historial_ventas.php"><i class="fas fa-receipt"></i> Historial / Cancelación</a>
+          <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
               <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i> Registrar Ventas</a> -->
-            </div>
-          </details>
 
         <?php elseif ($rol === 'vendedor'): ?>
           <a href="dashboard_vendedor.php"><i class="fas fa-home"></i> Panel Vendedor</a>
           <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
-          <a href="historial_ventas.php"><i class="fas fa-receipt"></i> Historial / Cancelación</a>
+          <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
+          <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
           <a href="cambiar_password.php"><i class="fas fa-key"></i> Cambiar contraseña</a>
         <?php endif; ?>
         
@@ -199,32 +191,22 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
         <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
         <a href="dashboard_productos.php"><i class="fas fa-box"></i><span>Registrar Productos</span></a>
+        <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="proveedores.php"><i class="fas fa-truck"></i><span>Proveedores</span></a>
         <a href="historial_reportes.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
         <a href="historial_stock.php"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
         <a href="ver_ventas.php"><i class="fas fa-chart-line"></i><span>Estadisticas</span></a>
         <a href="configuracion.php"><i class="fas fa-cogs"></i><span>Configuración</span></a>
-
-        <div class="submenu">
-          <div class="submenu-toggle" role="button" tabindex="0">
-            <div>
-              <i class="fas fa-store"></i>
-              <span>Inventario / Ventas</span>
-            </div>
-            <i class="fas fa-chevron-right icon-arrow"></i>
-          </div>
-          <div class="submenu-items">
-            <a href="pedidos.php"><i class="fas fa-shipping-fast"></i><span>Pedidos</span></a>
-            <a href="historial_ventas.php"><i class="fas fa-receipt"></i><span>Historial / Cancelación</span></a>
+        <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
             <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i><span>Registrar Ventas</span></a> -->
-          </div>
         </div>
 
       <?php elseif ($rol === 'vendedor'): ?>
         <a href="dashboard_vendedor.php"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>
         <a href="ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
-        <a href="historial_ventas.php"><i class="fas fa-receipt"></i><span>Historial / Cancelación</span></a>
+        <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
+        <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
         <a href="cambiar_password.php"><i class="fas fa-key"></i><span>Cambiar contraseña</span></a>
       <?php endif; ?>
     </div>

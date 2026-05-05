@@ -92,48 +92,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($stmt->execute()) {
             // Procesar logo
 
-            if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
+            // Procesar imagen del Dashboard
+            if (isset($_FILES['imagen_dashboard']) && $_FILES['imagen_dashboard']['error'] === UPLOAD_ERR_OK) {
                 $upload_dir = 'img/';
                 if (!file_exists($upload_dir)) {
                     mkdir($upload_dir, 0777, true);
                 }
                 
-                // ELIMINAR ARCHIVOS ANTERIORES (todos los panel_principal.*)
-                $old_files = glob($upload_dir . 'panel_principal.*');
+                // ELIMINAR ARCHIVOS ANTERIORES (todos los dashboard_principal.*)
+                $old_files = glob($upload_dir . 'dashboard_principal.*');
                 foreach ($old_files as $old_file) {
                     if (is_file($old_file)) {
-                        unlink($old_file); // Elimina el archivo anterior
+                        unlink($old_file);
                     }
                 }
                 
-                $extension = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
+                $extension = strtolower(pathinfo($_FILES['imagen_dashboard']['name'], PATHINFO_EXTENSION));
                 $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
                 
                 if (in_array($extension, $allowed)) {
-                    $final_extension = ($extension === 'png') ? 'jpg' : $extension;
-                    $filename = 'panel_principal.' . $final_extension;
+                    $final_extension = $extension;
+                    $filename = 'dashboard_principal.' . $final_extension;
                     $target_path = $upload_dir . $filename;
                     
+                    // Optimizar imagen
                     if ($extension === 'png') {
-                        // Convertir PNG a JPG
-                        $src = imagecreatefrompng($_FILES['logo']['tmp_name']);
+                        $src = imagecreatefrompng($_FILES['imagen_dashboard']['tmp_name']);
                         $width = imagesx($src);
                         $height = imagesy($src);
                         $dst = imagecreatetruecolor($width, $height);
                         $white = imagecolorallocate($dst, 255, 255, 255);
                         imagefill($dst, 0, 0, $white);
                         imagecopy($dst, $src, 0, 0, 0, 0, $width, $height);
-                        imagejpeg($dst, $target_path, 90);
+                        imagejpeg($dst, $target_path, 85);
                         imagedestroy($src);
                         imagedestroy($dst);
-                    } else {
-                        move_uploaded_file($_FILES['logo']['tmp_name'], $target_path);
+                    } elseif ($extension === 'jpeg' || $extension === 'jpg') {
+                        $src = imagecreatefromjpeg($_FILES['imagen_dashboard']['tmp_name']);
+                        imagejpeg($src, $target_path, 85);
+                        imagedestroy($src);
+                    } elseif ($extension === 'gif') {
+                        move_uploaded_file($_FILES['imagen_dashboard']['tmp_name'], $target_path);
+                    } elseif ($extension === 'webp') {
+                        move_uploaded_file($_FILES['imagen_dashboard']['tmp_name'], $target_path);
                     }
                     
                     // Guardar ruta en BD
-                    $stmt_logo = $conn->prepare("UPDATE configuracion_galeria SET logo = ? WHERE id = 1");
-                    $stmt_logo->bind_param("s", $target_path);
-                    $stmt_logo->execute();
+                    $stmt_dashboard = $conn->prepare("UPDATE configuracion_galeria SET imagen_dashboard = ? WHERE id = 1");
+                    $stmt_dashboard->bind_param("s", $target_path);
+                    $stmt_dashboard->execute();
                 }
             }
             
@@ -960,46 +967,69 @@ if ($fecha_obtenida) {
                                 </div>
                                 
                                 <!-- Sección de Logo mejorada -->
-                                <div class="form-group">
-                                    <label>Logo de la tienda</label>
-                                    <div class="row">
-                                        <!-- Columna para el logo actual -->
-                                        <div class="col-md-3">
-                                            <div class="text-center">
-                                                <label class="text-muted small mb-2">Logo actual</label>
-                                                <div id="logoContainer" class="border rounded p-2 bg-light" style="min-height: 120px; display: flex; align-items: center; justify-content: center;">
-                                                    <?php if ($logo_path && file_exists($logo_path)): ?>
-                                                        <img src="<?= $logo_path ?>?v=<?= time() ?>" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;" id="currentLogo">
-                                                    <?php else: ?>
-                                                        <div class="text-center" id="currentLogo">
-                                                            <i class="fas fa-store fa-3x text-muted"></i>
-                                                            <p class="small text-muted mt-1 mb-0">Sin logo</p>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Columna para carga de nuevo logo -->
-                                        <div class="col-md-5">
-                                            <div class="form-group mb-0">
-                                                <label class="text-muted small mb-2">Nuevo logo</label>
-                                                <input type="file" name="logo" accept="image/*" id="logoInput" class="form-control-file" onchange="previewLogo(this)">
-                                                <small class="text-muted d-block mt-1">Formatos: JPG, PNG, GIF, WEBP. Los PNG se guardarán con fondo blanco.</small>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Columna para vista previa -->
-                                        <div class="col-md-4">
-                                            <div id="logoPreviewContainer" style="display: none;">
-                                                <label class="text-muted small mb-2">Vista previa</label>
-                                                <div class="border rounded p-2 bg-light text-center" style="min-height: 120px; display: flex; align-items: center; justify-content: center;">
-                                                    <img id="logoPreview" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+<!-- Sección de Logo y Dashboard mejorada -->
+<div class="form-group">
+    <label class="font-weight-bold mb-3">Imágenes de la tienda</label>
+    <div class="row">
+        <!-- Logo de la tienda -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title mb-3"><i class="fas fa-image mr-2"></i> Logo de la tienda</h6>
+                    <div class="border rounded p-3 bg-light mb-3" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
+                        <?php if ($logo_path && file_exists($logo_path)): ?>
+                            <img src="<?= $logo_path ?>?v=<?= time() ?>" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;" id="currentLogo">
+                        <?php else: ?>
+                            <div class="text-center" id="currentLogo">
+                                <i class="fas fa-store fa-3x text-muted"></i>
+                                <p class="small text-muted mt-1 mb-0">Sin logo</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="custom-file">
+                        <input type="file" name="logo" accept="image/*" id="logoInput" class="custom-file-input" onchange="previewLogo(this, 'logoPreview', 'logoPreviewContainer')">
+                        <label class="custom-file-label" for="logoInput">Seleccionar logo</label>
+                        <small class="text-muted d-block mt-1">Formatos: JPG, PNG, GIF, WEBP</small>
+                    </div>
+                    <div id="logoPreviewContainer" style="display: none;" class="mt-3">
+                        <label class="text-muted small">Vista previa:</label>
+                        <img id="logoPreview" class="img-fluid border rounded p-1" style="max-height: 80px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Imagen del Dashboard Principal -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title mb-3"><i class="fas fa-tachometer-alt mr-2"></i> Imagen del Dashboard</h6>
+                    <div class="border rounded p-3 bg-light mb-3" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
+                        <?php 
+                        $dashboard_img = $config_general['imagen_dashboard'] ?? '';
+                        if ($dashboard_img && file_exists($dashboard_img)): ?>
+                            <img src="<?= $dashboard_img ?>?v=<?= time() ?>" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;" id="currentDashboardImg">
+                        <?php else: ?>
+                            <div class="text-center" id="currentDashboardImg">
+                                <i class="fas fa-chart-line fa-3x text-muted"></i>
+                                <p class="small text-muted mt-1 mb-0">Imagen por defecto</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="custom-file">
+                        <input type="file" name="imagen_dashboard" accept="image/*" id="dashboardInput" class="custom-file-input" onchange="previewLogo(this, 'dashboardPreview', 'dashboardPreviewContainer')">
+                        <label class="custom-file-label" for="dashboardInput">Seleccionar imagen</label>
+                        <small class="text-muted d-block mt-1">Formatos: JPG, PNG, GIF, WEBP (Tamaño recomendado: 1200x400px)</small>
+                    </div>
+                    <div id="dashboardPreviewContainer" style="display: none;" class="mt-3">
+                        <label class="text-muted small">Vista previa:</label>
+                        <img id="dashboardPreview" class="img-fluid border rounded p-1" style="max-height: 80px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
                             </div>
                             <div class="card-footer text-right">
                                 <button type="submit" name="action" value="update_general" class="btn btn-primary">
@@ -1603,21 +1633,26 @@ function cambiarTab(tabId) {
 }
 
 // ==================== FUNCIONES DE IMAGEN ====================
-function previewLogo(input) {
-    const previewContainer = document.getElementById('logoPreviewContainer');
-    const previewImg = document.getElementById('logoPreview');
+function previewLogo(input, previewId, containerId) {
+    const previewContainer = document.getElementById(containerId);
+    const previewImg = document.getElementById(previewId);
+    const fileLabel = input.nextElementSibling;
     
     if (input.files && input.files[0]) {
+        const fileName = input.files[0].name;
+        fileLabel.textContent = fileName;
+        
         const reader = new FileReader();
         reader.onload = function(e) {
             previewImg.src = e.target.result;
             previewImg.style.display = 'block';
-            previewContainer.style.display = 'block';
+            if (previewContainer) previewContainer.style.display = 'block';
         };
         reader.readAsDataURL(input.files[0]);
     } else {
+        fileLabel.textContent = 'Seleccionar archivo';
         previewImg.style.display = 'none';
-        previewContainer.style.display = 'none';
+        if (previewContainer) previewContainer.style.display = 'none';
     }
 }
 

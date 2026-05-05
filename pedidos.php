@@ -6,585 +6,518 @@ include('includes/navbar.php');
 
 date_default_timezone_set('America/Mexico_City');
 
-// MODIFICADO: Solo mostrar productos (no insumos)
+// Solo mostrar productos (no insumos)
 $res = $conn->query("SELECT id, nombre, cantidad FROM productos WHERE tipo_inventario = 'producto' ORDER BY nombre");
 if(!$res){
     die("Error SQL: " . $conn->error);
 }
 
-// MODIFICADO: Filtrar solicitantes solo de productos
+// Filtrar solicitantes solo de productos
 $solicitantes = $conn->query("SELECT DISTINCT p.solicitado_por 
                               FROM pedidos p 
                               INNER JOIN productos prod ON p.nombre_producto = prod.nombre 
                               WHERE prod.tipo_inventario = 'producto' 
                               ORDER BY p.solicitado_por");
 
-// MODIFICADO: Filtrar órdenes que contengan solo productos
+// Filtrar órdenes que contengan solo productos
 $ordenes = $conn->query("SELECT p.id_orden, MAX(p.solicitado_por) as solicitado_por 
                          FROM pedidos p 
                          INNER JOIN productos prod ON p.nombre_producto = prod.nombre 
                          WHERE prod.tipo_inventario = 'producto' 
                          GROUP BY p.id_orden 
                          ORDER BY p.id_orden DESC");
+
+// Obtener todos los productos para paginación
+$productosData = [];
+$productosResult = $conn->query("SELECT id, nombre, cantidad FROM productos WHERE tipo_inventario = 'producto' ORDER BY nombre");
+while($row = $productosResult->fetch_assoc()) {
+    $productosData[] = $row;
+}
 ?>
 
-<style>
-.select2-container {
-    width: 100% !important;
-}
-.select2-selection {
-    height: 38px !important;
-    padding-top: 4px;
-}
-
-@media (max-width: 768px){
-
-    #tablaPedidos thead{
-        display:none;
-    }
-
-    #tablaPedidos tbody tr{
-        display:block;
-        margin-bottom:15px;
-        border:1px solid #ddd;
-        border-radius:10px;
-        padding:10px;
-        background:white;
-    }
-
-    #tablaPedidos tbody td{
-        display:flex;
-        justify-content:space-between;
-        padding:6px 4px;
-        font-size:14px;
-        border: none;
-    }
-
-    #tablaPedidos tbody td:before{
-        content: attr(data-label);
-        font-weight:bold;
-        margin-right: 10px;
-    }
-
-    .pedir{
-        width:80px;
-    }
-}
-
-.flecha{
-    display:inline-block;
-    transition: transform .35s ease;
-}
-
-.flecha.abierta{
-    transform: rotate(90deg);
-}
-
-.timeline {
-    position: relative;
-    padding-left: 20px;
-}
-
-.timeline::before {
-    content: '';
-    position: absolute;
-    left: 14px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: #dee2e6;
-}
-
-.timeline-item {
-    position: relative;
-}
-
-.timeline-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 4px;
-}
-
-.timeline-content {
-    width: 100%;
-}
-
-</style>
+<link rel="stylesheet" href="css/pedidos.css">
 
 <div class="content-wrapper">
     <section class="content pt-4">
         <div class="container-fluid">
 
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
-                <h3 class="mb-2 mb-md-0">Módulo de Pedidos / Reabastecimiento</h3>
+           <!-- BREADCRUMB - Índice mejorado -->
+            <div class="breadcrumb-custom">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item">
+                            <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                                <i class="fas fa-home fa-lg"></i> Inicio
+                            </a>
+                        </li>
+                        <li class="breadcrumb-item">
+                            <a href="ventas_modulo.php">
+                                <i class="fas fa-cash-register"></i> Registrar Venta
+                            </a>
+                        </li>
+                        <li class="breadcrumb-item active">
+                            <i class="fas fa-boxes fa-lg"></i> Pedidos / Reabastecimiento
+                        </li>
+                    </ol>
+                </nav>
+            </div>
 
-                <button class="btn btn-info mb-2 mb-sm-0" onclick="mostrarAyuda()" title="Muestra las instrucciones para generar reportes">
-                    <i class="fas fa-question-circle"></i> Ayuda
-                </button>
-                <div class="btn-group">
-                    <button class="btn btn-primary" onclick="exportarExcel()">
-                        <i class="fas fa-file-excel"></i> Excel
-                    </button>
-
-                    <button class="btn btn-danger" onclick="exportarPDF()">
-                        <i class="fas fa-file-pdf"></i> PDF
-                    </button>
+            <!-- Título y botones -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                <h3 class="mb-2 mb-md-0" style="color: #2c3e50;">Pedidos / Reabastecimiento</h3>
+                    <div class="d-flex justify-content-end align-items-center" style="gap: 130px;">
+                        <button class="btn-ayuda" onclick="mostrarAyuda()">
+                            <i class="fas fa-question-circle"></i> Ayuda
+                        </button>
+                    <div class="border-start border-secondary" style="height: 30px;"></div>
+                    <div style="margin-left: 20px;">
+                        <button class="btn btn-sm btn-success" style="margin-right: 10px;" onclick="exportarExcel()">
+                            <i class="fas fa-file-excel me-1"></i> Excel
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="exportarPDF()">
+                            <i class="fas fa-file-pdf me-1"></i> PDF
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div id="ayudaReporte" class="alert alert-info alert-dismissible fade show" role="alert" style="display:none;">
-                <h5 class="mb-2"><i class="fas fa-info-circle"></i> ¿Cómo generar un reporte?</h5>
-                
-                <ol class="mb-3">
-                    <li>Selecciona el <strong>tipo de filtro</strong>.</li>
-                    <li>Elige el <strong>solicitante</strong> o el <strong>folio</strong>.</li>
-                    <li>Presiona <strong>Excel</strong> o <strong>PDF</strong> para descargar.</li>
-                </ol>
-
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <input type="checkbox" id="noMostrarAyuda">
-                        <label for="noMostrarAyuda" class="mb-0">No volver a mostrar este mensaje</label>
+            <!-- AYUDA - Fondo gris claro -->
+            <div id="ayudaReporte" style="display: none; background: #f8f9fa; border-radius: 20px; margin-bottom: 25px; border: 1px solid #f97316;">
+                <div style="padding: 25px 30px;">
+                    <div class="text-center mb-4">
+                        <div style="background: #f97316; width: 55px; height: 55px; border-radius: 55px; display: inline-flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-file-alt fa-xl text-white"></i>
+                        </div>
+                        <h5 class="mt-3 mb-1" style="color: #2c3e50;">Generar reporte de pedidos</h5>
+                        <p class="text-secondary small mb-0">Exporta tus pedidos fácilmente</p>
                     </div>
-
-                    <button class="btn btn-sm btn-primary" onclick="cerrarAyuda()">
-                        Entendido
-                    </button>
+                    
+                    <div class="d-flex justify-content-between align-items-center text-center" style="gap: 15px; margin: 25px 0;">
+                        <div style="flex: 1;">
+                            <div class="bg-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px; border: 2px solid #f97316;">
+                                <span style="color: #f97316; font-weight: bold;">1</span>
+                            </div>
+                            <div class="small fw-bold mt-2">Filtro</div>
+                            <div class="small text-secondary">Todos/Solicitante/Folio</div>
+                        </div>
+                        <div><i class="fas fa-arrow-right text-secondary"></i></div>
+                        <div style="flex: 1;">
+                            <div class="bg-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px; border: 2px solid #f97316;">
+                                <span style="color: #f97316; font-weight: bold;">2</span>
+                            </div>
+                            <div class="small fw-bold mt-2">Seleccionar</div>
+                            <div class="small text-secondary">Elije opción</div>
+                        </div>
+                        <div><i class="fas fa-arrow-right text-secondary"></i></div>
+                        <div style="flex: 1;">
+                            <div class="bg-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px; border: 2px solid #f97316;">
+                                <span style="color: #f97316; font-weight: bold;">3</span>
+                            </div>
+                            <div class="small fw-bold mt-2">Exportar</div>
+                            <div class="small text-secondary">Excel o PDF</div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center pt-3" style="border-top: 1px solid #dee2e6;">
+                        <label class="mb-0 small text-secondary">
+                            <input type="checkbox" id="noMostrarAyuda"> No volver a mostrar
+                        </label>
+                        <button onclick="cerrarAyuda()" style="background: none; border: none; color: #f97316; font-weight: 500;">
+                            <i class="fas fa-times"></i> Cerrar
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- FILTROS -->
-            <div class="row mb-3 align-items-end">
-                <!-- Tipo de reporte -->
+            <div class="row mb-3">
                 <div class="col-md-4">
-                    <label class="font-weight-bold">Tipo de reporte</label>
-                    <select id="tipoReporte" class="form-control">
+                    <label class="small fw-bold text-secondary">Tipo de reporte</label>
+                    <select id="tipoReporte" class="form-control form-control-sm">
                         <option value="todos">Todos los pedidos</option>
                         <option value="solicitante">Filtrar por solicitante</option>
                         <option value="orden">Filtrar por folio</option>
                     </select>
                 </div>
-
-                <!-- Solicitante -->
                 <div class="col-md-4" id="divSolicitante" style="display:none;">
-                    <label class="font-weight-bold">Solicitante</label>
-                    <select id="filtroSolicitante" class="form-control w-100">
-                        <option value="">Buscar quién hizo el pedido...</option>
+                    <label class="small fw-bold text-secondary">Solicitante</label>
+                    <select id="filtroSolicitante" class="form-control form-control-sm">
+                        <option value="">Seleccionar...</option>
                         <?php while($s = $solicitantes->fetch_assoc()): ?>
-                            <option value="<?= htmlspecialchars($s['solicitado_por']) ?>">
-                                <?= htmlspecialchars($s['solicitado_por']) ?>
-                            </option>
+                            <option value="<?= htmlspecialchars($s['solicitado_por']) ?>"><?= htmlspecialchars($s['solicitado_por']) ?></option>
                         <?php endwhile; ?>
                     </select>
                 </div>
-
-                <!-- Folio -->
                 <div class="col-md-4" id="divOrden" style="display:none;">
-                    <label class="font-weight-bold">Folio del pedido</label>
-                    <select id="filtroOrden" class="form-control w-100">
-                        <option value="">Buscar folio...</option>
+                    <label class="small fw-bold text-secondary">Folio</label>
+                    <select id="filtroOrden" class="form-control form-control-sm">
+                        <option value="">Seleccionar...</option>
                         <?php while($o = $ordenes->fetch_assoc()): ?>
-                            <option value="<?= $o['id_orden'] ?>">
-                                Folio #<?= $o['id_orden'] ?> — <?= htmlspecialchars($o['solicitado_por']) ?>
-                            </option>
+                            <option value="<?= $o['id_orden'] ?>">Folio #<?= $o['id_orden'] ?></option>
                         <?php endwhile; ?>
                     </select>
                 </div>
             </div>
-            
-            <!-- TABLA DE PRODUCTOS -->
-            <div class="card card-outline card-primary shadow">
-                <div class="card-header d-flex align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-boxes"></i> Lista de productos
-                    </h5>
-                    <div class="ml-auto" style="width:320px;">
-                        <div class="input-group input-group-sm">
-                            <div class="input-group-prepend">
-                                <span class="input-group-text bg-white border-right-0">
-                                    <i class="fas fa-search text-muted"></i>
-                                </span>
-                            </div>
-                            <input type="text"
-                                id="buscadorProductos"
-                                class="form-control border-left-0"
-                                placeholder="Buscar producto...">
-                            <div class="input-group-append">
-                                <span class="input-group-text bg-white">
-                                    <span id="contadorProductos" class="text-muted">0</span>
-                                </span>
-                            </div>
+
+            <!-- TABLA DE PRODUCTOS CON BUSCADOR A LA DERECHA -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-boxes"></i> Lista de productos</h5>
+                    <div class="buscador-wrapper">
+                       <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" id="buscadorProductos" class="form-control" placeholder="Buscar producto...">
+                            <span class="input-group-text bg-white" id="contadorProductos" style="width: 30px; display: inline-flex; justify-content: center;">0</span>
                         </div>
                     </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover table-striped text-center mb-0" id="tablaPedidos">
-                            <thead class="bg-dark text-white">
+                        <table class="table table-hover mb-0" id="tablaPedidos">
+                            <thead>
                                 <tr>
                                     <th>Producto</th>
-                                    <th>Stock Actual</th>
-                                    <th>Pedir</th>
-                                    <th>Artículos por hacer</th>
-                                    <th>Estado</th>
+                                    <th class="text-center">Stock</th>
+                                    <th class="text-center" style="width: 100px;">Pedir</th>
+                                    <th class="text-center">Faltante</th>
+                                    <th class="text-center">Estado</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                            <?php while($row = $res->fetch_assoc()): ?>
-                                <tr data-id="<?= $row['id'] ?>"
-                                    data-nombre="<?= htmlspecialchars($row['nombre']) ?>"
-                                    data-stock="<?= $row['cantidad'] ?>">
-
-                                    <td class="text-left font-weight-bold" data-label="Producto"><?= htmlspecialchars($row['nombre']) ?></td>
-                                    <td data-label="Stock"><span class="badge badge-info p-2 stock"><?= $row['cantidad'] ?></span></td>
-                                    <td data-label="Pedir">
-                                        <input type="number" min="0"
-                                            class="form-control form-control-sm pedir"
-                                            oninput="calcular(this)">
-                                    </td>
-                                    <td class="faltante font-weight-bold" data-label="Faltante">0</td>
-                                    <td class="estado" data-label="Estado">
-                                        <span class="badge badge-secondary">Sin pedido</span>
-                                    </td>
-                                </tr>
-                            <?php endwhile; ?>
-                            </tbody>
+                            <tbody id="tablaProductosBody"></tbody>
                         </table>
+                    </div>
+                    <div class="pagination-wrapper">
+                        <div class="rows-per-page">
+                            <span class="small">Mostrar:</span>
+                            <select id="rowsPerPage">
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                            </select>
+                        </div>
+                        <div class="pagination-controls" id="paginationControls"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="d-flex justify-content-end">
-                <button class="btn btn-success" onclick="abrirModalSolicitante()">
+            <div class="text-end mb-3">
+                <button class="btn btn-sm btn-success" onclick="abrirModalSolicitante()">
                     <i class="fas fa-save"></i> Guardar Pedido
                 </button>
             </div>
 
-            <hr class="my-4">
-            
-            <!-- FILTRO DE ESTADOS -->
-            <div class="d-flex justify-content-end mb-2">
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary filtro-estado active" data-estado="pendiente">Pendientes</button>
-                    <button class="btn btn-outline-success filtro-estado" data-estado="completado">Completados</button>
-                    <button class="btn btn-outline-secondary filtro-estado" data-estado="todos">Todos</button>
+            <hr>
+
+            <!-- FILTRO DE ESTADOS - Actualizado con Cancelados -->
+            <div class="d-flex justify-content-end mb-3">
+                <div class="btn-group btn-group-sm gap-2">
+                    <button class="btn btn-estado btn-estado-pendiente filtro-estado active" data-estado="pendiente">
+                        <i class="fas fa-clock"></i> Pendientes
+                    </button>
+                    <button class="btn btn-estado btn-estado-completado filtro-estado" data-estado="completado">
+                        <i class="fas fa-check-circle"></i> Completados
+                    </button>
+                    <button class="btn btn-estado btn-estado-cancelado filtro-estado" data-estado="cancelado">
+                        <i class="fas fa-ban"></i> Cancelados
+                    </button>
+                    <button class="btn btn-estado btn-estado-todos filtro-estado" data-estado="todos">
+                        <i class="fas fa-list"></i> Todos
+                    </button>
                 </div>
             </div>
 
-            <!-- LISTA DE PEDIDOS -->
-            <div class="card card-outline card-warning shadow">
-                <div class="card-header d-flex align-items-center">
-                    <h5 class="mb-0" id="tituloPedidos">
-                        <i class="fas fa-clipboard-list"></i>
-                        Pedidos pendientes por completar
-                    </h5>
-
-                    <div class="ml-auto" style="width:360px;">
+            <!-- LISTA DE PEDIDOS CON BUSCADOR A LA DERECHA -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0" id="tituloPedidos"><i class="fas fa-clipboard-list"></i> Pedidos pendientes</h5>
+                    <div class="buscador-wrapper">
                         <div class="input-group input-group-sm">
-                            <div class="input-group-prepend">
-                                <span class="input-group-text bg-white border-right-0">
-                                    <i class="fas fa-search text-muted"></i>
-                                </span>
-                            </div>
-                            <input type="text"
-                                id="buscadorPedidos"
-                                class="form-control border-left-0"
-                                placeholder="Buscar folio, solicitante o producto...">
+                            <span class="input-group-text bg-white"><i class="fas fa-search"></i></span>
+                            <input type="text" id="buscadorPedidos" class="form-control" placeholder="Buscar folio, solicitante...">
                         </div>
                     </div>
                 </div>
+                <div class="card-body p-2" id="pedidosContainer">
+                    <?php
+// Pedidos PENDIENTES - Excluir cancelados
+$foliosPendientes = $conn->query("
+    SELECT DISTINCT p.id_orden, p.solicitado_por, p.fecha
+    FROM pedidos p
+    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+    WHERE prod.tipo_inventario = 'producto'
+    AND p.estado = 'pendiente'
+    GROUP BY p.id_orden
+    ORDER BY p.id_orden DESC
+");
 
-                <div class="card-body p-2">
-                <?php
-                // MODIFICADO: Filtrar pedidos pendientes solo de productos
-                $foliosPendientes = $conn->query("
-                    SELECT 
-                        p.id_orden,
-                        MAX(p.solicitado_por) as solicitado_por,
-                        MAX(p.fecha) as fecha
-                    FROM pedidos p
-                    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                    WHERE prod.tipo_inventario = 'producto'
-                    AND EXISTS (
-                        SELECT 1 
-                        FROM pedidos px
-                        INNER JOIN productos prod2 ON px.nombre_producto = prod2.nombre
-                        WHERE px.id_orden = p.id_orden
-                        AND prod2.tipo_inventario = 'producto'
-                        AND px.estado = 'pendiente'
-                    )
-                    GROUP BY p.id_orden
-                    ORDER BY p.id_orden DESC
-                ");
+// Pedidos COMPLETADOS - Con la fecha del último producto completado
+$foliosCompletados = $conn->query("
+    SELECT DISTINCT p.id_orden, p.solicitado_por, p.fecha,
+           (SELECT MAX(fecha_completado) FROM pedidos WHERE id_orden = p.id_orden AND estado = 'completado') as ultima_fecha_completado
+    FROM pedidos p
+    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+    WHERE prod.tipo_inventario = 'producto'
+    AND p.estado = 'completado'
+    GROUP BY p.id_orden
+    ORDER BY p.id_orden DESC
+");
 
-                // MODIFICADO: Filtrar pedidos completados solo de productos
-                $foliosCompletados = $conn->query("
-                    SELECT 
-                        p.id_orden,
-                        MAX(p.solicitado_por) as solicitado_por,
-                        MAX(p.fecha) as fecha
-                    FROM pedidos p
-                    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                    WHERE prod.tipo_inventario = 'producto'
-                    AND NOT EXISTS (
-                        SELECT 1 
-                        FROM pedidos px
-                        INNER JOIN productos prod2 ON px.nombre_producto = prod2.nombre
-                        WHERE px.id_orden = p.id_orden
-                        AND prod2.tipo_inventario = 'producto'
-                        AND px.estado = 'pendiente'
-                    )
-                    GROUP BY p.id_orden
-                    ORDER BY p.id_orden DESC
-                ");
+// Pedidos CANCELADOS - Incluir fecha_cancelacion desde ordenes_pedido
+$foliosCancelados = $conn->query("
+    SELECT DISTINCT p.id_orden, p.solicitado_por, p.fecha,
+           op.fecha_cancelacion
+    FROM pedidos p
+    INNER JOIN productos prod ON p.nombre_producto = prod.nombre
+    LEFT JOIN ordenes_pedido op ON p.id_orden = op.id_orden
+    WHERE prod.tipo_inventario = 'producto'
+    AND p.estado = 'cancelado'
+    GROUP BY p.id_orden
+    ORDER BY p.id_orden DESC
+");
+                    ?>
 
-                if($foliosPendientes->num_rows == 0 && $foliosCompletados->num_rows == 0){
-                    echo '<div class="alert alert-info text-center m-2">
-                            <i class="fas fa-info-circle"></i>
-                            No hay pedidos de productos registrados
-                        </div>';
-                }
-                ?>
-
-                <div id="accordionPedidos">
-                    <?php $i=0; while($f = $foliosPendientes->fetch_assoc()): $i++; ?>
-
-
-                        <?php
-                        // Construimos texto de búsqueda del pedido
-                        $textoBusqueda = $f['id_orden'] . ' ' . $f['solicitado_por'];
-
-                        $productosTxt = $conn->query("
-                            SELECT p.nombre_producto
-                            FROM pedidos p
-                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                            WHERE p.id_orden = {$f['id_orden']}
-                            AND prod.tipo_inventario = 'producto'
-                        ");
-
-                        while($pt = $productosTxt->fetch_assoc()){
-                            $textoBusqueda .= ' ' . $pt['nombre_producto'];
-                        }
-                        ?>
-
-                        <div class="border rounded mb-3 shadow-sm pedido-card"
-                            data-search="<?= strtolower($textoBusqueda) ?>"
-                            data-estado="pendiente">
-
-                            <!-- ENCABEZADO -->
-                            <div class="bg-warning p-2 d-flex justify-content-between align-items-center flex-wrap"
-                                data-toggle="collapse"
-                                data-target="#collapse<?= $i ?>"
-                                style="cursor:pointer;">
-
-                                <div class="text-dark d-flex align-items-center">
-                                   <i class="fas fa-chevron-right mr-2 flecha"></i>
-
-                                    <strong>Folio #<?= $f['id_orden'] ?></strong>
-
-                                    <span class="ml-3">
-                                        <i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?>
-                                    </span>
-
-                                    <span class="ml-3">
-                                        <i class="fas fa-clock"></i>
-                                        <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?>
-                                    </span>
-                                    
-                                    <?php
-                                        $diff = (new DateTime($f['fecha']))->diff(new DateTime());
-
-                                        if($diff->days > 0){
-                                            $tiempo = "Hace {$diff->days} día(s)";
-                                        }elseif($diff->h > 0){
-                                            $tiempo = "Hace {$diff->h} hora(s)";
-                                        }else{
-                                            $tiempo = "Hace {$diff->i} minuto(s)";
-                                        }
-                                    ?>
-                                    <span class="ml-3 text-muted">
-                                        <i class="fas fa-clock"></i> <?= $tiempo ?>
-                                    </span>
-                                </div>
-                                <div>
-                                    <button class="btn btn-info btn-sm"
-                                        onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
-                                        Historial
-                                        <i class="fas fa-history"></i>
-                                    </button>
-                                    <button class="btn btn-success btn-sm"
-                                            onclick="event.stopPropagation(); completarPedido(<?= $f['id_orden'] ?>)">
-                                        Completar pedido
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- COLLAPSE -->
-                            <div id="collapse<?= $i ?>" 
-                                class="collapse"
-                                data-parent="#accordionPedidos">
-
-                                <!-- TABLA COMPACTA -->
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover text-center mb-0">
-                                        <thead class="bg-light">
-                                            <tr> 
-                                                <th class="text-left">Producto</th>
-                                                <th>Pedido</th>
-                                                <th>Artículos por hacer</th>
-                                                <th>Completar articulo</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                        <?php
-                                        // MODIFICADO: Solo mostrar productos en el detalle
-                                        $productos = $conn->query("
-                                            SELECT p.id, p.nombre_producto, p.cantidad_pedida, p.faltante
-                                            FROM pedidos p
-                                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                                            WHERE p.id_orden = {$f['id_orden']}
-                                            AND prod.tipo_inventario = 'producto'
-                                        ");
-
-                                        while($p = $productos->fetch_assoc()):
-                                        ?>
-                                            <tr>
-                                                <td class="text-left"><?= htmlspecialchars($p['nombre_producto']) ?></td>
-                                                <td>
-                                                    <span class="badge badge-info"><?= $p['cantidad_pedida'] ?></span>
-                                                </td>
-                                                <td>
-                                                    <?php if($p['faltante'] > 0): ?>
-                                                        <span class="badge badge-danger"><?= $p['faltante'] ?></span>
-                                                    <?php else: ?>
-                                                        <span class="badge badge-success">0</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-success"
-                                                        onclick="completarProducto(<?= $p['id'] ?>)">
-                                                        <i class="fas fa-check"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        <?php endwhile; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endwhile; ?>
-
-                        <?php while($f = $foliosCompletados->fetch_assoc()): $i++; ?>
-                        <?php
-                        // Construimos texto de búsqueda
-                        $textoBusqueda = $f['id_orden'] . ' ' . $f['solicitado_por'];
-
-                        $productosTxt = $conn->query("
-                            SELECT p.nombre_producto
-                            FROM pedidos p
-                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                            WHERE p.id_orden = {$f['id_orden']}
-                            AND prod.tipo_inventario = 'producto'
-                        ");
-
-                        while($pt = $productosTxt->fetch_assoc()){
-                            $textoBusqueda .= ' ' . $pt['nombre_producto'];
-                        }
-                        ?>
-
-                        <div class="border rounded mb-3 shadow-sm pedido-card"
-                            data-search="<?= strtolower($textoBusqueda) ?>"
-                            data-estado="completado">
-
-                            <div class="bg-success p-2 d-flex justify-content-between align-items-center flex-wrap"
-                                data-toggle="collapse"
-                                data-target="#collapse<?= $i ?>"
-                                style="cursor:pointer;">
-
-                                <div class="text-white d-flex align-items-center">
-                                    <i class="fas fa-chevron-right mr-2 flecha"></i>
-
-                                    <strong>Folio #<?= $f['id_orden'] ?></strong>
-
-                                    <span class="ml-3">
-                                        <i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?>
-                                    </span>
-
-                                    <span class="ml-3">
-                                        <i class="fas fa-clock"></i>
-                                        <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?>
-                                    </span>
-                                </div>
-                                <button class="btn btn-light btn-sm"
-                                    onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
-                                    Historial
-                                    <i class="fas fa-history"></i>
-                                </button>
-
-                            </div>
-
-                            <div id="collapse<?= $i ?>" 
-                                class="collapse"
-                                data-parent="#accordionPedidos">
-
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover text-center mb-0">
-                                        <thead class="bg-light">
-                                            <tr> 
-                                                <th class="text-left">Producto</th>
-                                                <th>Original</th>
-                                                <th>Solventado</th>
-                                                <th>Completado el</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                        <?php
-                                        // MODIFICADO: Solo mostrar productos en completados
-                                        $productos = $conn->query("
-                                            SELECT 
-                                                p.nombre_producto,
-                                                ps.cantidad_original,
-                                                ps.cantidad_solventada,
-                                                ps.cantidad_faltante,
-                                                ps.fecha
-                                            FROM pedidos p
-                                            LEFT JOIN pedidos_solventados ps 
-                                                ON ps.id_producto = p.id
-                                                AND ps.id_pedido = p.id_orden
-                                            INNER JOIN productos prod ON p.nombre_producto = prod.nombre
-                                            WHERE p.id_orden = {$f['id_orden']}
-                                            AND prod.tipo_inventario = 'producto'
-                                        ");
-
-                                        while($p = $productos->fetch_assoc()):
-                                        ?>
-                                            <tr>
-                                                <td class="text-left"><?= htmlspecialchars($p['nombre_producto']) ?></td>
-                                                <td>
-                                                    <span class="badge badge-info"> <?= $p['cantidad_original'] ?? 0 ?> </span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge badge-success"> <?= $p['cantidad_solventada'] ?? 0 ?> </span>
-                                                </td>
-                                                <td>
-                                                    <?= $p['fecha'] ? date("d/m/Y H:i", strtotime($p['fecha'])) : '-' ?> 
-                                                </td>
-                                            </tr>
-                                        <?php endwhile; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endwhile; ?>
+<div id="pendientesContainer">
+    <?php if($foliosPendientes->num_rows > 0): ?>
+        <?php while($f = $foliosPendientes->fetch_assoc()): 
+            $productosQuery = $conn->query("SELECT id, nombre_producto, cantidad_pedida, faltante, estado FROM pedidos WHERE id_orden = {$f['id_orden']}");
+            $productosList = [];
+            $todosCompletados = true;
+            while($p = $productosQuery->fetch_assoc()) {
+                $productosList[] = $p;
+                if($p['estado'] !== 'completado') $todosCompletados = false;
+            }
+        ?>
+            <div class="pedido-card" data-estado="pendiente" data-search="<?= strtolower($f['id_orden'] . ' ' . $f['solicitado_por']) ?>">
+                <div class="pedido-header bg-warning d-flex justify-content-between align-items-center" data-toggle="collapse" data-target="#collapsePendiente<?= $f['id_orden'] ?>" style="cursor:pointer;">
+                    <div class="pedido-info">
+                        <i class="fas fa-chevron-right flecha" style="font-size: 14px;"></i>
+                        <strong><i class="fas fa-hashtag"></i> Folio #<?= $f['id_orden'] ?></strong>
+                        <span><i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?></span>
+                        <span><i class="fas fa-calendar-alt"></i> <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?></span>
+                        <?php if($todosCompletados): ?>
+                            <span class="badge-completado-header"><i class="fas fa-check-circle"></i> Completado</span>
+                        <?php else: ?>
+                            <span class="badge-pendiente-header"><i class="fas fa-clock"></i> Pendiente</span>
+                        <?php endif; ?>
                     </div>
+                    <div class="pedido-actions">
+                        <button class="btn-historial" onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
+                            <i class="fas fa-history"></i> Historial
+                        </button>
+                        <?php if(!$todosCompletados): ?>
+                            <button class="btn-completar-pedido" onclick="event.stopPropagation(); completarPedido(<?= $f['id_orden'] ?>)">
+                                <i class="fas fa-check-double"></i> Completar todo
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div id="collapsePendiente<?= $f['id_orden'] ?>" class="collapse pedido-body">
+                    <table class="pedido-table table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center">Pedido</th>
+                                <th class="text-center">Faltante</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-center">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($productosList as $p): 
+                                $isCompletado = $p['estado'] === 'completado';
+                            ?>
+                                <tr class="<?= $isCompletado ? 'producto-completado' : '' ?>">
+                                    <td>
+                                        <?= htmlspecialchars($p['nombre_producto']) ?>
+                                        <?php if($isCompletado): ?>
+                                            <span class="badge-completado-producto ms-2"><i class="fas fa-check-circle"></i> Completado</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center fw-bold"><?= $p['cantidad_pedida'] ?></td>
+                                    <td class="text-center <?= $p['faltante'] > 0 ? 'text-danger fw-bold' : 'text-success' ?>">
+                                        <?= $p['faltante'] ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if($isCompletado): ?>
+                                            <span class="badge-estado-completado"><i class="fas fa-check"></i> Completado</span>
+                                        <?php elseif($p['faltante'] == 0): ?>
+                                            <span class="badge-estado-stock">Stock suficiente</span>
+                                        <?php elseif($p['faltante'] > 0 && $p['faltante'] < $p['cantidad_pedida']): ?>
+                                            <span class="badge-estado-parcial">Parcial</span>
+                                        <?php else: ?>
+                                            <span class="badge-estado-sinstock">Sin stock</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if(!$isCompletado): ?>
+                                            <button class="btn-completar-producto" onclick="event.stopPropagation(); completarProducto(<?= $p['id'] ?>)">
+                                                <i class="fas fa-check"></i> Completar
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn-disabled" disabled style="opacity:0.5;">
+                                                <i class="fas fa-check-circle"></i> Completado
+                                            </button>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php if($todosCompletados): ?>
+                        <div class="alert-success-pedido mt-3 mb-0 text-center">
+                            <i class="fas fa-check-circle"></i> Este pedido ha sido completado completamente
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fas fa-clock"></i></div>
+            <div class="empty-state-title">No hay pedidos pendientes</div>
+            <div class="empty-state-text">Todos los pedidos están completados</div>
+        </div>
+    <?php endif; ?>
+</div>
+
+<div id="completadosContainer" style="display: none;">
+    <?php if($foliosCompletados->num_rows > 0): ?>
+        <?php while($f = $foliosCompletados->fetch_assoc()): ?>
+            <div class="pedido-card" data-estado="completado" data-search="<?= strtolower($f['id_orden'] . ' ' . $f['solicitado_por']) ?>">
+                <div class="pedido-header bg-success d-flex justify-content-between align-items-center" data-toggle="collapse" data-target="#collapseCompletado<?= $f['id_orden'] ?>" style="cursor:pointer;">
+                    <div class="pedido-info">
+                        <i class="fas fa-chevron-right flecha" style="font-size: 14px;"></i>
+                        <strong><i class="fas fa-hashtag"></i> Folio #<?= $f['id_orden'] ?></strong>
+                        <span><i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?></span>
+                        <span><i class="fas fa-calendar-alt"></i> <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?></span>
+                        <span class="badge-completado-header"><i class="fas fa-check-circle"></i> Completado</span>
+                    </div>
+                    <button class="btn-historial" onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
+                        <i class="fas fa-history"></i> Historial
+                    </button>
+                </div>
+                <div id="collapseCompletado<?= $f['id_orden'] ?>" class="collapse pedido-body">
+                    <table class="pedido-table table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center">Cantidad pedida</th>
+                                <th class="text-center">Completado</th>
+                                <th class="text-center">Fecha completado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php 
+                            // CONSULTA CORREGIDA - Usando fecha_completado de la tabla pedidos
+                            $productosCompletados = $conn->query("
+                                SELECT nombre_producto, cantidad_pedida, fecha_completado
+                                FROM pedidos 
+                                WHERE id_orden = {$f['id_orden']} AND estado = 'completado'
+                            ");
+                            while($p = $productosCompletados->fetch_assoc()): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($p['nombre_producto']) ?></td>
+                                    <td class="text-center fw-bold"><?= $p['cantidad_pedida'] ?></td>
+                                    <td class="text-center">
+                                        <span class="badge-estado-completado">
+                                            <i class="fas fa-check-circle"></i> <?= $p['cantidad_pedida'] ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <?= $p['fecha_completado'] ? date('d/m/Y H:i', strtotime($p['fecha_completado'])) : date('d/m/Y H:i', strtotime($f['fecha'])) ?>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                    <div class="alert-success-pedido mt-3 mb-0 text-center">
+                        <i class="fas fa-calendar-check"></i> Pedido completado el <?= date('d/m/Y H:i', strtotime($f['ultima_fecha_completado'] ?? $f['fecha'])) ?>
+                    </div>
+                </div>
+            </div>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="empty-state-title">No hay pedidos completados</div>
+            <div class="empty-state-text">Aún no se han completado pedidos</div>
+        </div>
+    <?php endif; ?>
+</div>
+<div id="canceladosContainer" style="display: none;">
+    <?php if($foliosCancelados && $foliosCancelados->num_rows > 0): ?>
+        <?php while($f = $foliosCancelados->fetch_assoc()): 
+            // Obtener fecha de cancelación desde ordenes_pedido
+            $fechaCancelacion = $f['fecha_cancelacion'] ?? $f['fecha'];
+        ?>
+            <div class="pedido-card" data-estado="cancelado" data-search="<?= strtolower($f['id_orden'] . ' ' . $f['solicitado_por']) ?>">
+                <div class="pedido-header bg-danger d-flex justify-content-between align-items-center" data-toggle="collapse" data-target="#collapseCancelado<?= $f['id_orden'] ?>" style="cursor:pointer;">
+                    <div class="pedido-info">
+                        <i class="fas fa-chevron-right flecha" style="font-size: 14px;"></i>
+                        <strong><i class="fas fa-hashtag"></i> Folio #<?= $f['id_orden'] ?></strong>
+                        <span><i class="fas fa-user"></i> <?= htmlspecialchars($f['solicitado_por']) ?></span>
+                        <span><i class="fas fa-calendar-alt"></i> <?= date('d/m/Y H:i', strtotime($f['fecha'])) ?></span>
+                        <span class="badge-cancelado-header"><i class="fas fa-ban"></i> Cancelado</span>
+                    </div>
+                    <div class="pedido-actions">
+                        <button class="btn-historial" onclick="event.stopPropagation(); verHistorial(<?= $f['id_orden'] ?>)">
+                            <i class="fas fa-history"></i> Historial
+                        </button>
+                    </div>
+                </div>
+                <div id="collapseCancelado<?= $f['id_orden'] ?>" class="collapse pedido-body">
+                    <table class="pedido-table table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center">Cantidad pedida</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-center">Fecha cancelación</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php 
+                            $productosCancelados = $conn->query("
+                                SELECT id, nombre_producto, cantidad_pedida, estado, fecha
+                                FROM pedidos 
+                                WHERE id_orden = {$f['id_orden']}
+                            ");
+                            while($p = $productosCancelados->fetch_assoc()): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($p['nombre_producto']) ?></td>
+                                    <td class="text-center fw-bold"><?= $p['cantidad_pedida'] ?></td>
+                                    <td class="text-center">
+                                        <span class="badge-estado-cancelado">
+                                            <i class="fas fa-ban"></i> Cancelado
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <?= date('d/m/Y H:i', strtotime($fechaCancelacion)) ?>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                    <div class="alert-danger-pedido mt-3 mb-0 text-center">
+                        <i class="fas fa-ban"></i> Este pedido fue cancelado el <?= date('d/m/Y H:i', strtotime($fechaCancelacion)) ?>
+                    </div>
+                </div>
+            </div>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fas fa-ban"></i></div>
+            <div class="empty-state-title">No hay pedidos cancelados</div>
+            <div class="empty-state-text">No se han cancelado pedidos</div>
+        </div>
+    <?php endif; ?>
+</div>
+
+<div id="todosContainer" style="display: none;"></div>
+
                 </div>
             </div>
         </div>
@@ -592,38 +525,33 @@ $ordenes = $conn->query("SELECT p.id_orden, MAX(p.solicitado_por) as solicitado_
 </div>
 
 <!-- MODALES -->
-<div class="modal fade" id="modalSolicitante">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary">
-        <h5 class="modal-title text-white">¿Para quién es el pedido?</h5>
-        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <input type="text" id="nombreSolicitante" class="form-control form-control-lg"
-               placeholder="Ej: Juan Pérez">
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-success" onclick="confirmarGuardado()">Confirmar Pedido</button>
-      </div>
+<div class="modal fade" id="modalSolicitante" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">¿Para quién es el pedido?</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="nombreSolicitante" class="form-control" placeholder="Ej: Juan Pérez">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="confirmarGuardado()">Guardar</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
-<div class="modal fade" id="modalHistorial">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title">
-            <i class="fas fa-history"></i> Historial del pedido
-        </h5>
-        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
-      </div>
-      <div class="modal-body" id="contenidoHistorial">
-        <div class="text-center text-muted">Cargando historial...</div>
-      </div>
+<div class="modal fade" id="modalHistorial" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-history"></i> Historial del pedido</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="contenidoHistorial">Cargando...</div>
+        </div>
     </div>
-  </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
@@ -634,420 +562,509 @@ $ordenes = $conn->query("SELECT p.id_orden, MAX(p.solicitado_por) as solicitado_
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
 <script>
+let productosData = <?= json_encode($productosData) ?>;
 let pedidosTemp = [];
+let currentPage = 1;
+let rowsPerPage = 10;
+let currentFilter = '';
 
-$(document).ready(function(){
-
-    // Activar Select2
-    $('#filtroSolicitante').select2({ width:'100%' });
-    $('#filtroOrden').select2({ width:'100%' });
-
-    $('#tipoReporte').on('change', function(){
-        const tipo = $(this).val();
-
-        // Siempre ocultar y limpiar
-        $('#divSolicitante').hide();
-        $('#divOrden').hide();
-        $('#filtroSolicitante').val('').trigger('change');
-        $('#filtroOrden').val('').trigger('change');
-
-        if(tipo === 'solicitante'){
-            $('#divSolicitante').show();
-        }
-
-        if(tipo === 'orden'){
-            $('#divOrden').show();
-        }
-    });
-
-    // Forzar filtro al cargar
-    $('.filtro-estado.active').click();
+$(document).ready(function() {
+    $('#filtroSolicitante, #filtroOrden').select2({ width: '100%' });
     
-    // Verificar stock crítico
-    verificarStockCritico();
-    setInterval(verificarStockCritico, 30000);
+    $('#tipoReporte').change(function() {
+        $('#divSolicitante, #divOrden').hide();
+        if ($(this).val() === 'solicitante') $('#divSolicitante').show();
+        if ($(this).val() === 'orden') $('#divOrden').show();
+    });
+    
+    $('#rowsPerPage').change(function() { rowsPerPage = parseInt($(this).val()); currentPage = 1; renderTable(); });
+    renderTable();
+    
+$('.filtro-estado').click(function() {
+    $('.filtro-estado').removeClass('active');
+    $(this).addClass('active');
+    let estado = $(this).data('estado');
+    
+    // Ocultar todos los contenedores
+    $('#pendientesContainer, #completadosContainer, #todosContainer, #canceladosContainer').hide();
+    
+    if (estado === 'pendiente') {
+        $('#pendientesContainer').show();
+        $('#tituloPedidos').html('<i class="fas fa-clock"></i> Pedidos pendientes');
+        aplicarBusquedaPedidos();
+    } else if (estado === 'completado') {
+        $('#completadosContainer').show();
+        $('#tituloPedidos').html('<i class="fas fa-check-circle"></i> Pedidos completados');
+        aplicarBusquedaPedidos();
+    } else if (estado === 'cancelado') {
+        $('#canceladosContainer').show();
+        $('#tituloPedidos').html('<i class="fas fa-ban"></i> Pedidos cancelados');
+        aplicarBusquedaPedidos();
+    } else {
+        // Para "Todos", construir el contenido dinámicamente
+        $('#todosContainer').show();
+        $('#tituloPedidos').html('<i class="fas fa-list"></i> Todos los pedidos');
+        
+        // Construir contenido de todos los pedidos
+        const $todosContainer = $('#todosContainer');
+        $todosContainer.empty();
+        
+        // Clonar todos los pedidos de los tres contenedores
+        const $pendientesCards = $('#pendientesContainer .pedido-card').clone();
+        const $completadosCards = $('#completadosContainer .pedido-card').clone();
+        const $canceladosCards = $('#canceladosContainer .pedido-card').clone();
+        
+        if ($pendientesCards.length === 0 && $completadosCards.length === 0 && $canceladosCards.length === 0) {
+            $todosContainer.html(`
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-inbox"></i></div>
+                    <div class="empty-state-title">No hay pedidos registrados</div>
+                    <div class="empty-state-text">Realiza tu primer pedido desde la lista de productos</div>
+                </div>
+            `);
+        } else {
+            // Agregar pedidos pendientes
+            if ($pendientesCards.length > 0) {
+                $pendientesCards.each(function() {
+                    $todosContainer.append($(this));
+                });
+            }
+            // Agregar pedidos completados
+            if ($completadosCards.length > 0) {
+                $completadosCards.each(function() {
+                    $todosContainer.append($(this));
+                });
+            }
+            // Agregar pedidos cancelados
+            if ($canceladosCards.length > 0) {
+                $canceladosCards.each(function() {
+                    $todosContainer.append($(this));
+                });
+            }
+        }
+        
+        // Restaurar funcionalidad collapse
+        $todosContainer.find('[data-toggle="collapse"]').off('click').on('click', function(e) {
+            if (!$(e.target).closest('button').length) {
+                const target = $(this).data('target');
+                $(target).collapse('toggle');
+                $(this).find('.flecha').toggleClass('abierta');
+            }
+        });
+        
+        aplicarBusquedaPedidos();
+    }
 });
 
-function calcular(input){
-    const tr = input.closest('tr');
-    const stock = parseInt(tr.dataset.stock);
-    const pedido = parseInt(input.value) || 0;
-
-    let nuevoStock = stock - pedido;
-    if(nuevoStock < 0) nuevoStock = 0;
-    tr.querySelector('.stock').innerText = nuevoStock;
-
-    let faltante = pedido - stock;
-    if(faltante < 0) faltante = 0;
-    tr.querySelector('.faltante').innerText = faltante;
-
-    const estado = tr.querySelector('.estado');
-    tr.classList.remove('table-warning','table-danger','table-success');
-
-    if(pedido === 0){
-        estado.innerHTML = '<span class="badge badge-secondary">Sin pedido</span>';
-    } else if(faltante === 0){
-        estado.innerHTML = '<span class="badge badge-success">Stock suficiente</span>';
-        tr.classList.add('table-success');
-    } else if(stock === 0){
-        estado.innerHTML = '<span class="badge badge-danger">Sin stock</span>';
-        tr.classList.add('table-danger');
+    // Función auxiliar para aplicar búsqueda al contenedor visible
+function aplicarBusquedaPedidos() {
+    const texto = $('#buscadorPedidos').val().toLowerCase();
+    const containerVisible = $('#pendientesContainer:visible, #completadosContainer:visible, #todosContainer:visible, #canceladosContainer:visible');
+    containerVisible.find('.pedido-card').each(function() {
+        const search = $(this).attr('data-search') || '';
+        $(this).toggle(search.toLowerCase().includes(texto));
+    });
+}
+    
+    // ========== AYUDA: Recuperar estado guardado ==========
+    const ayudaOculta = localStorage.getItem('ocultarAyudaReporte');
+    const noMostrarGuardado = localStorage.getItem('noMostrarAyudaCheckbox');
+    
+    if (ayudaOculta !== 'true') {
+        $('#ayudaReporte').show();
     } else {
-        estado.innerHTML = '<span class="badge badge-warning">Faltante parcial</span>';
-        tr.classList.add('table-warning');
+        $('#ayudaReporte').hide();
+    }
+    
+    if (noMostrarGuardado === 'true') {
+        $('#noMostrarAyuda').prop('checked', true);
+    }
+    
+    // Guardar estado del checkbox cuando cambie
+    $('#noMostrarAyuda').on('change', function() {
+        if ($(this).is(':checked')) {
+            localStorage.setItem('noMostrarAyudaCheckbox', 'true');
+        } else {
+            localStorage.removeItem('noMostrarAyudaCheckbox');
+            localStorage.removeItem('ocultarAyudaReporte');
+        }
+    });
+});
+
+function calcular(input) {
+    let tr = $(input).closest('tr');
+    let stock = parseInt(tr.data('stock'));
+    let pedido = parseInt(input.value) || 0;
+    let nuevoStock = Math.max(0, stock - pedido);
+    let faltante = Math.max(0, pedido - stock);
+    
+    tr.find('.stock').text(nuevoStock);
+    tr.find('.faltante').text(faltante);
+    
+    let estadoSpan = tr.find('.estado span');
+    tr.removeClass('table-warning table-danger table-success');
+    
+    if (pedido === 0) estadoSpan.html('Sin pedido').attr('class', 'badge badge-secondary');
+    else if (faltante === 0) estadoSpan.html('Stock suficiente').attr('class', 'badge badge-success');
+    else if (stock === 0) estadoSpan.html('Sin stock').attr('class', 'badge badge-danger');
+    else estadoSpan.html('Faltante parcial').attr('class', 'badge badge-warning');
+}
+
+function renderTable() {
+    let filtrados = productosData.filter(p => p.nombre.toLowerCase().includes(currentFilter));
+    let totalPages = Math.ceil(filtrados.length / rowsPerPage);
+    let start = (currentPage - 1) * rowsPerPage;
+    let productosPagina = filtrados.slice(start, start + rowsPerPage);
+    
+    $('#contadorProductos').text(filtrados.length);
+    let tbody = $('#tablaProductosBody');
+    
+    if (filtrados.length === 0) {
+        tbody.html('<tr><td colspan="5" class="text-center"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-box-open"></i></div><div class="empty-state-title">No hay productos</div><div class="empty-state-text">No se encontraron productos</div></div></td></tr>');
+        $('#paginationControls').html('');
+        return;
+    }
+    
+    let html = '';
+    productosPagina.forEach(p => {
+        html += `<tr data-id="${p.id}" data-nombre="${p.nombre}" data-stock="${p.cantidad}">
+                    <td data-label="Producto">${p.nombre}</td>
+                    <td class="text-center" data-label="Stock"><span class="badge badge-info stock">${p.cantidad}</span></td>
+                    <td class="text-center" data-label="Pedir"><input type="number" min="0" class="form-control form-control-sm pedir" style="width:80px;margin:0 auto;" oninput="calcular(this)"></td>
+                    <td class="text-center faltante fw-bold" data-label="Faltante">0</span></td>
+                    <td class="text-center estado" data-label="Estado"><span class="badge badge-secondary">Sin pedido</span></td>
+                </tr>`;
+    });
+    tbody.html(html);
+    
+    if (totalPages > 1) {
+        let pagHtml = '';
+        pagHtml += `<button onclick="changePage(1)" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-angle-double-left"></i></button>`;
+        pagHtml += `<button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-angle-left"></i></button>`;
+        for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+            pagHtml += `<button onclick="changePage(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
+        }
+        pagHtml += `<button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-angle-right"></i></button>`;
+        pagHtml += `<button onclick="changePage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-angle-double-right"></i></button>`;
+        $('#paginationControls').html(pagHtml);
+    } else {
+        $('#paginationControls').html('');
     }
 }
 
-function abrirModalSolicitante(){
+function changePage(page) { currentPage = page; renderTable(); }
+
+$('#buscadorProductos').on('keyup', function() { currentFilter = $(this).val().toLowerCase(); currentPage = 1; renderTable(); });
+
+function abrirModalSolicitante() {
     pedidosTemp = [];
-    document.querySelectorAll('#tablaPedidos tbody tr').forEach(f => {
-        const pedido = parseInt(f.querySelector('.pedir').value) || 0;
-        if(pedido > 0){
-            pedidosTemp.push({
-                id: f.dataset.id,
-                nombre: f.dataset.nombre,
-                stock: f.dataset.stock,
-                pedido: pedido,
-                faltante: f.querySelector('.faltante').innerText
-            });
+    
+    // Recorrer todas las filas de la tabla de productos
+    $('#tablaProductosBody tr').each(function() {
+        const $row = $(this);
+        const pedidoInput = $row.find('.pedir');
+        
+        if (pedidoInput.length) {
+            const pedido = parseInt(pedidoInput.val()) || 0;
+            
+            if (pedido > 0) {
+                // Obtener datos desde los atributos data o desde las celdas
+                const id = $row.data('id');
+                const nombre = $row.data('nombre');
+                const stock = $row.data('stock');
+                const faltante = $row.find('.faltante').text();
+                
+                if (id && nombre) {
+                    pedidosTemp.push({
+                        id: id,
+                        nombre: nombre,
+                        stock: stock,
+                        pedido: pedido,
+                        faltante: faltante
+                    });
+                }
+            }
         }
     });
-
-    if(pedidosTemp.length === 0){
-        Swal.fire('Sin pedidos','No has solicitado ningún producto','info');
+    
+    console.log('Pedidos a guardar:', pedidosTemp); // Para depuración
+    
+    if (pedidosTemp.length === 0) {
+        Swal.fire({
+            icon: 'info',
+            title: 'Sin pedidos',
+            text: 'No has solicitado ningún producto',
+            confirmButtonColor: '#f97316'
+        });
         return;
     }
-
+    
     $('#modalSolicitante').modal('show');
 }
 
-function confirmarGuardado(){
+function confirmarGuardado() {
     const nombre = $('#nombreSolicitante').val().trim();
-    if(nombre === ''){
-        Swal.fire('Error','Escribe para quién es el pedido','error');
+    
+    if (nombre === '') {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Escribe para quién es el pedido',
+            confirmButtonColor: '#f97316'
+        });
         return;
     }
-
-    fetch('guardar_pedido.php',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ solicitado_por:nombre, pedidos:pedidosTemp })
-    }).then(()=> {
-        $('#modalSolicitante').modal('hide');
-        Swal.fire('Correcto','Pedido guardado','success').then(()=>location.reload());
+    
+    // Mostrar loading
+    Swal.fire({
+        title: 'Guardando pedido...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    fetch('guardar_pedido.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            solicitado_por: nombre, 
+            pedidos: pedidosTemp 
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        Swal.close();
+        
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: '¡Pedido guardado!',
+                text: 'El pedido se ha registrado correctamente',
+                confirmButtonColor: '#f97316',
+                timer: 2000
+            }).then(() => {
+                location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.message || 'No se pudo guardar el pedido',
+                confirmButtonColor: '#f97316'
+            });
+        }
+    })
+    .catch(error => {
+        Swal.close();
+        console.error('Error:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error de conexión',
+            text: 'No se pudo conectar con el servidor',
+            confirmButtonColor: '#f97316'
+        });
     });
 }
 
-function construirURL(base){
+function exportarExcel() {
+    // Contar pedidos visibles según el filtro activo
+    const estadoActivo = $('.filtro-estado.active').data('estado');
+    let totalPedidos = 0;
+    
+    if (estadoActivo === 'pendiente') {
+        totalPedidos = $('#pendientesContainer .pedido-card:visible').length;
+    } else if (estadoActivo === 'completado') {
+        totalPedidos = $('#completadosContainer .pedido-card:visible').length;
+    } else {
+        totalPedidos = $('#pendientesContainer .pedido-card:visible').length + 
+                       $('#completadosContainer .pedido-card:visible').length;
+    }
+    
+    if (totalPedidos === 0) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'No hay datos para exportar',
+            html: 'No se encontraron pedidos con los filtros actuales.<br><br>Prueba cambiando el <strong>tipo de reporte</strong> o el <strong>estado</strong> del pedido.',
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Entendido',
+            iconColor: '#f97316'
+        });
+        return;
+    }
+    
     const tipo = $('#tipoReporte').val();
-    if(tipo === 'solicitante'){
-        const s = $('#filtroSolicitante').val();
-        return base + '?solicitado_por=' + encodeURIComponent(s);
-    }
-    if(tipo === 'orden'){
-        const o = $('#filtroOrden').val();
-        return base + '?id_orden=' + o;
-    }
-    return base;
-}
-
-function exportarExcel(){
-    const url = construirURL('exportar_excel_pedidos.php');
-
-    fetch(url)
-    .then(res => res.json())
-    .then(data => {
-        if(data.sin_pedidos){
+    let url = 'exportar_excel_pedidos.php';
+    
+    if (tipo === 'solicitante') {
+        const solicitante = $('#filtroSolicitante').val();
+        if (!solicitante) {
             Swal.fire({
                 icon: 'info',
-                text: data.mensaje,
-                confirmButtonText: 'Entendido'
+                title: 'Selecciona un solicitante',
+                text: 'Para exportar por solicitante, primero elige uno de la lista',
+                confirmButtonColor: '#f97316'
             });
-        }else{
-            window.open(url, '_blank');
+            return;
         }
-    })
-    .catch(() => {
-        window.open(url, '_blank');
-    });
-}
-
-function exportarPDF(){
-    const url = construirURL('exportar_pdf_pedidos.php');
-
-    fetch(url)
-    .then(res => res.json())
-    .then(data => {
-        if(data.sin_pedidos){
+        url += '?solicitado_por=' + encodeURIComponent(solicitante);
+    } else if (tipo === 'orden') {
+        const folio = $('#filtroOrden').val();
+        if (!folio) {
             Swal.fire({
                 icon: 'info',
-                text: data.mensaje,
-                confirmButtonText: 'Entendido'
+                title: 'Selecciona un folio',
+                text: 'Para exportar por folio, primero elige un número de folio',
+                confirmButtonColor: '#f97316'
             });
-        }else{
-            window.open(url, '_blank');
+            return;
         }
-    })
-    .catch(() => {
-        window.open(url, '_blank');
-    });
+        url += '?id_orden=' + folio;
+    }
+    
+    window.open(url, '_blank');
 }
 
-function cerrarAyuda(){
-    if($('#noMostrarAyuda').is(':checked')){
-        localStorage.setItem('ocultarAyudaReporte', 'true');
+function exportarPDF() {
+    // Contar pedidos visibles según el filtro activo
+    const estadoActivo = $('.filtro-estado.active').data('estado');
+    let totalPedidos = 0;
+    
+    if (estadoActivo === 'pendiente') {
+        totalPedidos = $('#pendientesContainer .pedido-card:visible').length;
+    } else if (estadoActivo === 'completado') {
+        totalPedidos = $('#completadosContainer .pedido-card:visible').length;
+    } else {
+        totalPedidos = $('#pendientesContainer .pedido-card:visible').length + 
+                       $('#completadosContainer .pedido-card:visible').length;
     }
+    
+    if (totalPedidos === 0) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'No hay datos para exportar',
+            html: 'No se encontraron pedidos con los filtros actuales.<br><br>Prueba cambiando el <strong>tipo de reporte</strong> o el <strong>estado</strong> del pedido.',
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Entendido',
+            iconColor: '#f97316'
+        });
+        return;
+    }
+    
+    const tipo = $('#tipoReporte').val();
+    let url = 'exportar_pdf_pedidos.php';
+    
+    if (tipo === 'solicitante') {
+        const solicitante = $('#filtroSolicitante').val();
+        if (!solicitante) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Selecciona un solicitante',
+                text: 'Para exportar por solicitante, primero elige uno de la lista',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+        url += '?solicitado_por=' + encodeURIComponent(solicitante);
+    } else if (tipo === 'orden') {
+        const folio = $('#filtroOrden').val();
+        if (!folio) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Selecciona un folio',
+                text: 'Para exportar por folio, primero elige un número de folio',
+                confirmButtonColor:'#f97316'
+            });
+            return;
+        }
+        url += '?id_orden=' + folio;
+    }
+    
+    window.open(url, '_blank');
+}
+
+function cerrarAyuda() {
+    if ($('#noMostrarAyuda').is(':checked')) localStorage.setItem('ocultarAyudaReporte', 'true');
     $('#ayudaReporte').fadeOut();
 }
 
-function mostrarAyuda(){
-    $('#ayudaReporte').fadeIn();
+function mostrarAyuda() { $('#ayudaReporte').fadeIn(); }
+
+function completarPedido(folio) {
+    Swal.fire({ title: '¿Completar pedido?', text: 'Se marcarán todos los productos', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí' })
+        .then(r => { if (r.isConfirmed) fetch('completar_pedido.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folio: folio }) }).then(() => location.reload()); });
 }
 
-function completarPedido(folio){
-    Swal.fire({
-        title: '¿Completar TODO el pedido?',
-        text: 'Todos los productos del folio se marcarán como completados',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, completar',
-        cancelButtonText: 'Cancelar'
-    }).then(r=>{
-        if(r.isConfirmed){
-            fetch('completar_pedido.php',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({folio:folio})
-            }).then(()=>location.reload());
-        }
-    });
+function completarProducto(id) {
+    Swal.fire({ title: '¿Completar producto?', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí' })
+        .then(r => { if (r.isConfirmed) fetch('completar_producto.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) }).then(() => location.reload()); });
 }
 
-function completarProducto(id){
-    Swal.fire({
-        title: '¿Completar este producto?',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí',
-        cancelButtonText: 'Cancelar'
-    }).then(r=>{
-        if(r.isConfirmed){
-            fetch('completar_producto.php',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({id:id})
-            }).then(()=>location.reload());
-        }
-    });
-}
-
-document.addEventListener('click', function(e){
-
-    // buscamos si el click fue en algo que abre el collapse
-    const header = e.target.closest('[data-toggle="collapse"]');
-    if(!header) return;
-
-    // buscamos la flecha más cercana aunque esté fuera
-    const flecha = header.querySelector('.flecha');
-    if(!flecha) return;
-
-    setTimeout(()=>{
-        flecha.classList.toggle('abierta');
-    },150);
-
-});
-
-// Buscador de pedidos
-document.getElementById('buscadorPedidos').addEventListener('input', function(){
-    const texto = this.value.toLowerCase();
-
-    document.querySelectorAll('.pedido-card').forEach(card=>{
-        const contenido = card.dataset.search;
-
-        if(contenido.includes(texto)){
-            card.style.display = '';
-        }else{
-            card.style.display = 'none';
-        }
-    });
-});
-
-// Buscador de productos
-const filasProductos = document.querySelectorAll('#tablaPedidos tbody tr');
-const contador = document.getElementById('contadorProductos');
-
-function actualizarContador(){
-    let visibles = 0;
-    filasProductos.forEach(f => {
-        if(f.style.display !== 'none') visibles++;
-    });
-    contador.innerText = visibles;
-}
-
-document.getElementById('buscadorProductos').addEventListener('keyup', function(){
-    const texto = this.value.toLowerCase();
-
-    filasProductos.forEach(fila => {
-        const nombre = fila.dataset.nombre.toLowerCase();
-
-        if(nombre.includes(texto)){
-            fila.style.display = '';
-        }else{
-            fila.style.display = 'none';
-        }
-    });
-
-    actualizarContador();
-});
-
-actualizarContador();
-
-// Filtro de estados
-$('.filtro-estado').click(function(){
-    $('.filtro-estado').removeClass('active');
-    $(this).addClass('active');
-
-    const estado = $(this).data('estado');
-    const titulo = document.getElementById('tituloPedidos');
-
-    // Cambiar título dinámico
-    if(estado === 'pendiente'){
-        titulo.innerHTML = '<i class="fas fa-clipboard-list"></i> Pedidos pendientes por completar';
-    }
-    if(estado === 'completado'){
-        titulo.innerHTML = '<i class="fas fa-check-circle text-success"></i> Pedidos completados';
-    }
-    if(estado === 'todos'){
-        titulo.innerHTML = '<i class="fas fa-list"></i> Todos los pedidos';
-    }
-
-    // Filtrar tarjetas
-    $('.pedido-card').each(function(){
-        const e = $(this).data('estado');
-
-        if(estado === 'todos' || estado === e){
-            $(this).show();
-        }else{
-            $(this).hide();
-        }
-    }); 
-});
-
-function verHistorial(idOrden){
+function verHistorial(idOrden) {
     $('#modalHistorial').modal('show');
-
-    fetch('ver_historial_pedido.php?id_orden=' + idOrden)
-    .then(res => res.json())
-    .then(data => {
-
-        const cont = document.getElementById('contenidoHistorial');
-
-        if(!data || data.length === 0){
-            cont.innerHTML = `
-                <div class="alert alert-info text-center">
-                    <i class="fas fa-info-circle"></i>
-                    Este pedido no tiene historial registrado.
-                </div>`;
-            return;
-        }
-
-        let html = `
-            <ul class="timeline list-unstyled">
-        `;
-
-        data.forEach(l => {
-
-            let icono = 'fa-file-alt';
-            let color = 'secondary';
-
-            if (l.accion.includes('CREADO')) {
-                icono = 'fa-plus-circle';
-                color = 'primary';
-            } else if (l.accion.includes('AGREGADO')) {
-                icono = 'fa-box';
-                color = 'info';
-            } else if (l.accion.includes('STOCK')) {
-                icono = 'fa-warehouse';
-                color = 'warning';
-            } else if (l.accion.includes('completado')) {
-                icono = 'fa-check-circle';
-                color = 'success';
-            } else if (l.accion.includes('cancelado')) {
-                icono = 'fa-times-circle';
-                color = 'danger';
-            }
-
-            html += `
-                <li class="timeline-item mb-4">
-                    <div class="d-flex align-items-start">
-                        <div class="timeline-icon bg-${color}">
-                            <i class="fas ${icono}"></i>
-                        </div>
-                        <div class="timeline-content ml-3">
-                            <div class="card shadow-sm">
-                                <div class="card-body p-2">
-                                    <strong>${l.accion}</strong>
-                                    <div class="small text-muted mb-1">
-                                        ${l.fecha} · ${l.usuario}
-                                    </div>
-                                    <div>${l.descripcion}</div>
-                                </div>
+    fetch('ver_historial_pedido.php?id_orden=' + idOrden).then(res => res.json()).then(data => {
+        let html = '<div class="timeline">';
+        if (data && data.length > 0) {
+            data.forEach(l => {
+                let icono = l.accion.includes('CREADO') ? 'fa-plus-circle' : (l.accion.includes('completado') ? 'fa-check-circle' : 'fa-file-alt');
+                let color = l.accion.includes('CREADO') ? '#0d6efd' : (l.accion.includes('completado') ? '#28a745' : '#6c757d');
+                html += `<div class="timeline-item">
+                            <div class="timeline-icon" style="background: ${color};"><i class="fas ${icono}"></i></div>
+                            <div class="timeline-content">
+                                <strong>${l.accion}</strong>
+                                <div class="small text-muted">${l.fecha} · ${l.usuario}</div>
+                                <div>${l.descripcion}</div>
                             </div>
-                        </div>
-                    </div>
-                </li>
-            `;
-        });
-
-        html += '</ul>';
-
-        cont.innerHTML = html;
+                        </div>`;
+            });
+        } else {
+            html = '<div class="text-center p-4">No hay historial registrado</div>';
+        }
+        html += '</div>';
+        $('#contenidoHistorial').html(html);
     });
 }
 
-let ultimaCantidadCriticos = -1;
+// ALERTA DE STOCK BAJO - EN ROJO
+let tiempoUltimaAlerta = 0;
 
 toastr.options = {
     closeButton: true,
     progressBar: true,
     positionClass: "toast-top-right",
-    timeOut: 4000,
+    timeOut: 5000,
     extendedTimeOut: 2000,
     showMethod: "fadeIn",
     hideMethod: "fadeOut"
 };
 
-function verificarStockCritico(){
-
+function verificarStockCritico() {
     fetch('ajax_stock_critico.php')
     .then(res => res.json())
     .then(data => {
-
-        if(data.error) return;
-
-        if(data.length > 0){
-
-            if(data.length !== ultimaCantidadCriticos){
-
-                let mensaje = '';
-
-                data.forEach(p => {
-                    mensaje += `<strong>${p.nombre}</strong> — Stock: ${p.cantidad}<br>`;
-                });
-
-                toastr.error(
-                    mensaje,
-                    "⚠ Stock crítico detectado"
-                );
-
-            }
+        if (data.error || !data.length) return;
+        const ahora = Date.now();
+        if (ahora - tiempoUltimaAlerta > 300000) {
+            let mensaje = '';
+            const productosMostrar = data.slice(0, 3);
+            productosMostrar.forEach(p => { mensaje += `<strong>${p.nombre}</strong> — Stock: ${p.cantidad}<br>`; });
+            if (data.length > 3) mensaje += `<br><span class="small">...y ${data.length - 3} productos más</span>`;
+            
+            // Usar toastr.error para color ROJO
+            toastr.error(mensaje, "⚠ Stock crítico detectado");
+            tiempoUltimaAlerta = ahora;
         }
-
-        ultimaCantidadCriticos = data.length;
-
     })
-    .catch(err => {
-        console.log("Error stock crítico:", err);
-    });
+    .catch(err => console.log("Error:", err));
 }
+
+verificarStockCritico();
+setInterval(verificarStockCritico, 60000);
+
+document.addEventListener('click', function(e) {
+    let header = e.target.closest('[data-toggle="collapse"]');
+    if (header) setTimeout(() => $(header).find('.flecha').toggleClass('abierta'), 150);
+});
 </script>
+
+<?php include 'includes/footer.php'; ?>

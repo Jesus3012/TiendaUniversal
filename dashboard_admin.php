@@ -220,6 +220,14 @@ $diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 
 for ($i = 0; $i < 7; $i++) {
     $ventasPorDiaSemana[] = ['dia' => $diasSemana[$i], 'total' => $ventasPorDia[$i]];
 }
+
+// Obtener imagen del dashboard desde configuración
+$result_config = $conn->query("SELECT imagen_dashboard FROM configuracion_galeria WHERE id = 1");
+$config_data = $result_config->fetch_assoc();
+$imagen_dashboard = isset($config_data['imagen_dashboard']) && file_exists($config_data['imagen_dashboard']) 
+    ? $config_data['imagen_dashboard'] 
+    : '';
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -520,15 +528,24 @@ for ($i = 0; $i < 7; $i++) {
 
     <div class="container-fluid px-4">
         
-        <!-- HERO SECTION -->
-        <div class="hero-premium hero-modern">
-            <div class="hero-overlay"></div>
-            <div class="hero-content text-center">
-                <div class="hero-badge"><i class="fas fa-fish"></i><span>PESCADORES DE LA PREHISTORIA</span></div>
-                <div class="hero-text"><span class="hero-hello"><?= $saludo ?></span><span class="hero-user"><?= htmlspecialchars($nombre_completo) ?></span></div>   
-                <div class="hero-cta"><i class="fas fa-hand-peace"></i><span>¿Qué haremos hoy?</span></div>
+<!-- HERO SECTION -->
+<div class="hero-premium hero-modern" <?php if($imagen_dashboard): ?>style="background-image: url('<?= $imagen_dashboard ?>?v=<?= time() ?>'); background-size: cover; background-position: center;"<?php endif; ?>>
+    <div class="hero-overlay"></div>
+    <div class="hero-content text-center">
+        <?php if($imagen_dashboard): ?>
+            <div class="hero-logo mb-3">
+                <?php 
+                $logo_path = $config_general['logo'] ?? '';
+                if($logo_path && file_exists($logo_path)): ?>
+                    <img src="<?= $logo_path ?>?v=<?= time() ?>" alt="Logo" class="hero-logo-img" style="height: 80px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));">
+                <?php endif; ?>
             </div>
-        </div>
+        <?php endif; ?>
+        <div class="hero-badge"><i class="fas fa-fish"></i><span>PESCADORES DE LA PREHISTORIA</span></div>
+        <div class="hero-text"><span class="hero-hello"><?= $saludo ?></span><span class="hero-user"><?= htmlspecialchars($nombre_completo) ?></span></div>   
+        <div class="hero-cta"><i class="fas fa-hand-peace"></i><span>¿Qué haremos hoy?</span></div>
+    </div>
+</div>
 
         <!-- ACCIONES RÁPIDAS -->
         <div class="white-container">
