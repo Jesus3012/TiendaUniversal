@@ -16,6 +16,53 @@ $busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
 $proveedor = isset($_GET['proveedor']) ? trim($_GET['proveedor']) : '';
 $categoria = isset($_GET['categoria']) ? trim($_GET['categoria']) : '';
 
+// Obtener datos de la tienda
+$sqlConfig = "SELECT nombre, logo FROM configuracion_galeria LIMIT 1";
+$resultConfig = $conn->query($sqlConfig);
+$configTienda = $resultConfig->fetch_assoc();
+$nombreTienda = $configTienda['nombre'] ?? 'TIENDA PESCADORES';
+$logoTiendaPath = $configTienda['logo'] ?? '';
+
+// Buscar logo tienda
+if (empty($logoTiendaPath) || !file_exists($logoTiendaPath)) {
+    $rutasPosibles = [
+        '../img/logo.png', '../img/logo.jpg', '../img/panel_principal.jpg',
+        '../img/panel_principal.png', '../dist/img/logo.png', '../dist/img/logo.jpg',
+        'img/logo.png', 'img/logo.jpg'
+    ];
+    foreach ($rutasPosibles as $ruta) {
+        if (file_exists($ruta)) {
+            $logoTiendaPath = $ruta;
+            break;
+        }
+    }
+}
+
+// Obtener logo del proveedor (si hay filtro)
+$logoProveedorPath = '';
+$inicialesProveedor = '';
+if ($proveedor !== '') {
+    $sqlLogoProveedor = "SELECT logo FROM proveedores WHERE nombre = ? LIMIT 1";
+    $stmtLogo = $conn->prepare($sqlLogoProveedor);
+    $stmtLogo->bind_param("s", $proveedor);
+    $stmtLogo->execute();
+    $resultLogo = $stmtLogo->get_result();
+    if ($resultLogo && $row = $resultLogo->fetch_assoc()) {
+        $logoProveedorPath = $row['logo'] ?? '';
+        if (!empty($logoProveedorPath) && !file_exists($logoProveedorPath)) {
+            $logoProveedorPath = '';
+        }
+    }
+    
+    // Iniciales del proveedor (para cuando no tiene logo)
+    $palabras = explode(' ', $proveedor);
+    if (count($palabras) >= 2) {
+        $inicialesProveedor = strtoupper(substr($palabras[0], 0, 1) . substr($palabras[1], 0, 1));
+    } else {
+        $inicialesProveedor = strtoupper(substr($proveedor, 0, 2));
+    }
+}
+
 // Consulta 1: Productos con stock mayor a 0 (ordenados de mayor a menor)
 $queryConStock = "SELECT nombre, proveedor, cantidad, tipo_inventario, categoria 
                   FROM productos 
@@ -116,9 +163,34 @@ while ($row = $resultSin->fetch_assoc()) {
     $productosSinStock[] = $row;
 }
 
+// Calcular estadísticas
+$totalConStock = count($productosConStock);
+$totalSinStock = count($productosSinStock);
+$stockTotalGeneral = 0;
+
+foreach ($productosConStock as $producto) {
+    $stockTotalGeneral += floatval($producto['cantidad']);
+}
+
 // Crear PDF con diseño mejorado
 class PDF extends FPDF
 {
+    var $logoTiendaPath;
+    var $logoProveedorPath;
+    var $inicialesProveedor;
+    var $nombreTienda;
+    var $proveedorNombre;
+    var $colorPrimary;
+    
+    function SetLogos($logoTienda, $logoProveedor, $iniciales, $nombreTienda, $proveedorNombre) {
+        $this->logoTiendaPath = $logoTienda;
+        $this->logoProveedorPath = $logoProveedor;
+        $this->inicialesProveedor = $iniciales;
+        $this->nombreTienda = $nombreTienda;
+        $this->proveedorNombre = $proveedorNombre;
+        $this->colorPrimary = [255, 140, 0];
+    }
+    
     function __construct()
     {
         parent::__construct('L', 'mm', 'A4');
@@ -126,35 +198,61 @@ class PDF extends FPDF
         $this->SetAutoPageBreak(true, 15);
     }
     
-    // Cabecera personalizada
+    // Cabecera personalizada con logos
     function Header()
     {
+        $pageWidth = $this->GetPageWidth();
+        $logoY = 8;
+        $logoSize = 22;
+        
+        // Logo Tienda (izquierda)
+        if (!empty($this->logoTiendaPath) && file_exists($this->logoTiendaPath)) {
+            $this->Image($this->logoTiendaPath, 12, $logoY, $logoSize, $logoSize);
+        }
+        
+        // Logo Proveedor o Iniciales (derecha) - solo si hay filtro de proveedor
+        if (!empty($this->proveedorNombre)) {
+            if (!empty($this->logoProveedorPath) && file_exists($this->logoProveedorPath)) {
+                $this->Image($this->logoProveedorPath, $pageWidth - 35, $logoY, $logoSize, $logoSize);
+            } else {
+                // Solo texto con las iniciales, sin cuadro
+                $textX = $pageWidth - 50;
+                $textY = $logoY + 10;
+                $this->SetFont('Arial', 'B', 24);
+                $this->SetTextColor($this->colorPrimary[0], $this->colorPrimary[1], $this->colorPrimary[2]);
+                $this->Text($textX, $textY, $this->inicialesProveedor);
+                $this->SetTextColor(0, 0, 0);
+            }
+        }
+        
+        // Nombre Tienda centrado
+        $this->SetY($logoY + 5);
+        $this->SetFont('Arial', 'B', 12);
+        $this->SetTextColor(60, 60, 60);
+        $this->Cell(0, 8, utf8_decode(strtoupper($this->nombreTienda)), 0, 1, 'C');
+        
         // Línea decorativa superior naranja
         $this->SetDrawColor(255, 140, 0);
-        $this->SetLineWidth(2);
-        $this->Line($this->GetX(), 8, $this->GetPageWidth() - $this->GetX(), 8);
+        $this->SetLineWidth(1.5);
+        $this->Line(12, $logoY + $logoSize + 6, $pageWidth - 12, $logoY + $logoSize + 6);
         
         // Título principal
-        $this->SetY(15);
-        $this->SetFont('Arial', 'B', 24);
+        $this->SetY($logoY + $logoSize + 14);
+        $this->SetFont('Arial', 'B', 20);
         $this->SetTextColor(255, 140, 0);
-        $this->Cell(0, 12, 'REPORTE DE INVENTARIO', 0, 1, 'C');
+        $this->Cell(0, 10, 'REPORTE DE INVENTARIO', 0, 1, 'C');
         
         // Subtítulo
-        $this->SetFont('Arial', '', 11);
+        $this->SetFont('Arial', '', 10);
         $this->SetTextColor(100, 100, 100);
         $this->Cell(0, 6, 'Control de stock - Productos con y sin inventario', 0, 1, 'C');
         
         // Fecha de generación
         $this->SetFont('Arial', 'I', 9);
         $this->SetTextColor(120, 120, 120);
-        $this->Cell(0, 5, 'Generado: ' . date('d/m/Y H:i:s'), 0, 1, 'C');
+        $this->Cell(0, 5, 'Generado: ' . date('d/m/Y H:i'), 0, 1, 'C');
         
-        // Línea decorativa inferior naranja
-        $this->SetDrawColor(255, 140, 0);
-        $this->SetLineWidth(0.5);
-        $this->Line($this->GetX(), $this->GetY() + 2, $this->GetPageWidth() - $this->GetX(), $this->GetY() + 2);
-        $this->Ln(10);
+        $this->Ln(8);
     }
     
     function Footer()
@@ -215,19 +313,19 @@ class PDF extends FPDF
             $colorFondo = [255, 140, 0];
         }
         
-        $this->SetFont('Arial', 'B', 12);
+        $this->SetFont('Arial', 'B', 11);
         $this->SetFillColor($colorFondo[0], $colorFondo[1], $colorFondo[2]);
         $this->SetTextColor(255, 255, 255);
         
         // Anchos de columna - PROVEEDOR PRIMERO
         $anchoTotal = $this->GetPageWidth() - ($this->GetX() * 2);
-        $anchoProveedor = $anchoTotal * 0.30; // 30% para proveedor
-        $anchoNombre = $anchoTotal * 0.55;    // 55% para nombre
-        $anchoCantidad = $anchoTotal * 0.15;  // 15% para cantidad
+        $anchoProveedor = $anchoTotal * 0.30;
+        $anchoNombre = $anchoTotal * 0.55;
+        $anchoCantidad = $anchoTotal * 0.15;
         
-        $this->Cell($anchoProveedor, 12, 'PROVEEDOR', 1, 0, 'C', true);
-        $this->Cell($anchoNombre, 12, 'NOMBRE DEL PRODUCTO', 1, 0, 'C', true);
-        $this->Cell($anchoCantidad, 12, $titulo, 1, 1, 'C', true);
+        $this->Cell($anchoProveedor, 10, 'PROVEEDOR', 1, 0, 'C', true);
+        $this->Cell($anchoNombre, 10, 'NOMBRE DEL PRODUCTO', 1, 0, 'C', true);
+        $this->Cell($anchoCantidad, 10, $titulo, 1, 1, 'C', true);
         
         $this->SetTextColor(0, 0, 0);
         
@@ -238,9 +336,8 @@ class PDF extends FPDF
     {
         list($anchoProveedor, $anchoNombre, $anchoCantidad) = $anchos;
         
-        $this->SetFont('Arial', '', 10);
+        $this->SetFont('Arial', '', 9);
         
-        // Alternar colores de fila
         static $alternar = 0;
         $fill = ($alternar % 2 == 0);
         if ($fill) {
@@ -251,36 +348,33 @@ class PDF extends FPDF
         
         $this->SetTextColor(0, 0, 0);
         
-        // Proveedor (primera columna)
+        // Proveedor
         $proveedor_texto = $proveedor ? utf8_decode($proveedor) : 'No especificado';
-        $this->Cell($anchoProveedor, 10, $proveedor_texto, 1, 0, 'L', $fill);
+        $this->Cell($anchoProveedor, 9, $proveedor_texto, 1, 0, 'L', $fill);
         
-        // Nombre del producto (segunda columna)
-        $nombre_corto = utf8_decode($nombre);
-        $this->Cell($anchoNombre, 10, $nombre_corto, 1, 0, 'L', $fill);
+        // Nombre del producto
+        $nombre_corto = utf8_decode(substr($nombre, 0, 50));
+        $this->Cell($anchoNombre, 9, $nombre_corto, 1, 0, 'L', $fill);
         
-        // Cantidad con formato (tercera columna)
+        // Cantidad
         if ($esAgotado) {
-            $this->SetFont('Arial', 'B', 11);
-            $this->SetTextColor(220, 53, 69); // Rojo para agotados
-            $cantidadDisplay = 'AGOTADO';
-            $this->Cell($anchoCantidad, 10, $cantidadDisplay, 1, 1, 'C', $fill);
+            $this->SetFont('Arial', 'B', 10);
+            $this->SetTextColor(220, 53, 69);
+            $this->Cell($anchoCantidad, 9, 'AGOTADO', 1, 1, 'C', $fill);
         } else {
             if ($tipo_inventario == 'insumo') {
-                $cantidadDisplay = number_format($cantidad, 2);
-                $unidad = ' m';
+                $cantidadDisplay = number_format($cantidad, 2) . ' m';
             } else {
                 $cantidadDisplay = number_format($cantidad, 0);
-                $unidad = ' piezas';
             }
             
-            $this->SetFont('Arial', 'B', 11);
-            $this->SetTextColor(40, 167, 69); // Verde para productos con stock
-            $this->Cell($anchoCantidad, 10, $cantidadDisplay . $unidad, 1, 1, 'R', $fill);
+            $this->SetFont('Arial', 'B', 10);
+            $this->SetTextColor(40, 167, 69);
+            $this->Cell($anchoCantidad, 9, $cantidadDisplay, 1, 1, 'R', $fill);
         }
         
         $this->SetTextColor(0, 0, 0);
-        $this->SetFont('Arial', '', 10);
+        $this->SetFont('Arial', '', 9);
         
         $alternar++;
     }
@@ -291,30 +385,25 @@ class PDF extends FPDF
             return false;
         }
         
-        // Título de sección con fondo
-        $this->Ln(8);
-        $this->SetFont('Arial', 'B', 14);
+        $this->Ln(6);
+        $this->SetFont('Arial', 'B', 13);
         $this->SetTextColor($colorHeader[0], $colorHeader[1], $colorHeader[2]);
-        $this->Cell(0, 10, $titulo, 0, 1, 'L');
+        $this->Cell(0, 8, $titulo, 0, 1, 'L');
         
-        // Línea decorativa
         $this->SetDrawColor($colorHeader[0], $colorHeader[1], $colorHeader[2]);
         $this->SetLineWidth(0.5);
         $this->Line($this->GetX(), $this->GetY(), $this->GetPageWidth() - $this->GetX(), $this->GetY());
-        $this->Ln(5);
+        $this->Ln(4);
         
-        // Cabecera de tabla
         if ($esSeccionAgotados) {
             $anchos = $this->TablaHeader('ESTADO', $colorHeader);
         } else {
             $anchos = $this->TablaHeader('CANTIDAD', $colorHeader);
         }
         
-        // Variable para acumular el total de cantidad
         $totalCantidadSeccion = 0;
         $totalRegistros = 0;
         
-        // Filas de la tabla
         foreach ($productos as $producto) {
             if (!$esSeccionAgotados) {
                 $totalCantidadSeccion += floatval($producto['cantidad']);
@@ -330,127 +419,80 @@ class PDF extends FPDF
                 $esSeccionAgotados
             );
             
-            // Control de salto de página
-            if ($this->GetY() > 200) {
+            if ($this->GetY() > 220) {
                 $this->AddPage();
                 $anchos = $this->TablaHeader($esSeccionAgotados ? 'ESTADO' : 'CANTIDAD', $colorHeader);
             }
         }
         
-        // Línea separadora
         $this->SetDrawColor(200, 200, 200);
         $this->Line($this->GetX(), $this->GetY(), $this->GetPageWidth() - $this->GetX(), $this->GetY());
-        $this->Ln(3);
-    
+        $this->Ln(2);
         
-        // Mostrar contador de registros
         $this->SetFont('Arial', 'I', 9);
         $this->SetTextColor(100, 100, 100);
-        $this->Cell(0, 6, 'Total de registros: ' . $totalRegistros, 0, 1, 'R');
+        $this->Cell(0, 5, 'Total de registros: ' . $totalRegistros, 0, 1, 'R');
         
         return $totalCantidadSeccion;
     }
     
-    function TarjetaResumen($totalConStock, $totalSinStock, $totalCantidadConStock, $stockTotalGeneral)
+    function TarjetaResumen($totalConStock, $totalSinStock, $stockTotalGeneral)
     {
-        $this->Ln(10);
+        $this->Ln(8);
         
-        // Fondo naranja suave
         $this->SetFillColor(255, 245, 235);
-        $this->Rect($this->GetX(), $this->GetY(), $this->GetPageWidth() - ($this->GetX() * 2), 70, 'F');
+        $this->Rect($this->GetX(), $this->GetY(), $this->GetPageWidth() - ($this->GetX() * 2), 55, 'F');
         
-        $this->SetFont('Arial', 'B', 14);
+        $this->SetFont('Arial', 'B', 13);
         $this->SetTextColor(255, 140, 0);
         $this->SetY($this->GetY() + 5);
-        $this->Cell(0, 10, 'RESUMEN DEL INVENTARIO', 0, 1, 'C');
+        $this->Cell(0, 8, 'RESUMEN DEL INVENTARIO', 0, 1, 'C');
         
-        $this->SetFont('Arial', '', 11);
+        $this->SetFont('Arial', '', 10);
         $this->SetTextColor(80, 80, 80);
         
-        // Calcular ancho para distribución
-        $anchoTotal = $this->GetPageWidth() - ($this->GetX() * 2);
-        $anchoColumna = $anchoTotal / 2;
-        
+        // Distribución en dos filas
         $this->SetY($this->GetY() + 5);
         
-        // Fila 1: Productos con stock
-        $this->SetX($this->GetX() + 10);
-        $this->Cell($anchoColumna - 10, 10, 'Productos con stock:', 0, 0, 'R');
-        $this->SetFont('Arial', 'B', 13);
+        // Fila 1
+        $this->SetX($this->GetX() + 20);
+        $this->Cell(50, 8, 'Productos con stock:', 0, 0, 'L');
+        $this->SetFont('Arial', 'B', 12);
         $this->SetTextColor(40, 167, 69);
-        $this->Cell(30, 10, number_format($totalConStock), 0, 0, 'L');
+        $this->Cell(40, 8, number_format($totalConStock), 0, 0, 'L');
         
-        // Cantidad total en stock
-        $this->SetFont('Arial', '', 11);
+        $this->SetX($this->GetX() + 60);
+        $this->SetFont('Arial', '', 10);
         $this->SetTextColor(80, 80, 80);
-        $this->Cell(10, 10, '', 0, 0);
-        $this->SetFont('Arial', 'B', 13);
-        $this->SetTextColor(40, 167, 69);
-        $this->Cell(30, 10, '', 0, 1, 'L');
-        
-        $this->SetY($this->GetY() + 5);
-        
-        // Fila 2: Productos agotados
-        $this->SetX($this->GetX() + 10);
-        $this->SetFont('Arial', '', 11);
-        $this->SetTextColor(80, 80, 80);
-        $this->Cell($anchoColumna - 10, 10, 'Productos agotados:', 0, 0, 'R');
-        $this->SetFont('Arial', 'B', 13);
+        $this->Cell(50, 8, 'Productos agotados:', 0, 0, 'L');
+        $this->SetFont('Arial', 'B', 12);
         $this->SetTextColor(220, 53, 69);
-        $this->Cell(30, 10, number_format($totalSinStock), 0, 0, 'L');
-        
-        // Cantidad agotada (siempre 0)
-        $this->SetFont('Arial', '', 11);
-        $this->SetTextColor(80, 80, 80);
-        $this->Cell(10, 10, '', 0, 0);
-        $this->SetFont('Arial', 'B', 13);
-        $this->SetTextColor(220, 53, 69);
-        $this->Cell(30, 10, '', 0, 1, 'L');
+        $this->Cell(40, 8, number_format($totalSinStock), 0, 1, 'L');
         
         $this->SetY($this->GetY() + 5);
         
         // Línea separadora
         $this->SetDrawColor(255, 140, 0);
-        $this->SetLineWidth(0.5);
-        $this->Line($this->GetX() + 10, $this->GetY(), $this->GetPageWidth() - $this->GetX() - 10, $this->GetY());
+        $this->SetLineWidth(0.3);
+        $this->Line($this->GetX() + 15, $this->GetY(), $this->GetPageWidth() - $this->GetX() - 15, $this->GetY());
         $this->Ln(5);
         
-         // Fila 3: Inventario total (más a la izquierda)
-        $this->SetX($this->GetX() + 15);
-        $this->SetFont('Arial', 'B', 13);
+        // Inventario total
+        $this->SetX($this->GetX() + 20);
+        $this->SetFont('Arial', 'B', 12);
         $this->SetTextColor(80, 80, 80);
-        $this->Cell($anchoColumna + 20, 10, 'INVENTARIO TOTAL:', 0, 0, 'L');
-        $this->SetFont('Arial', 'B', 18);
+        $this->Cell(70, 8, 'INVENTARIO TOTAL:', 0, 0, 'L');
+        $this->SetFont('Arial', 'B', 16);
         $this->SetTextColor(255, 140, 0);
-        $this->Cell(80, 10, number_format($stockTotalGeneral) . ' unidades', 0, 1, 'L');
+        $this->Cell(80, 8, number_format($stockTotalGeneral) . ' unidades', 0, 1, 'L');
         
-        $this->SetY($this->GetY() + 5);
+        $this->Ln(5);
     }
-    
-    function MensajeSinDatos($mensaje)
-    {
-        $this->SetFont('Arial', 'I', 10);
-        $this->SetTextColor(150, 150, 150);
-        $this->Cell(0, 20, $mensaje, 0, 1, 'C');
-    }
-    
-    function getPageWidth()
-    {
-        return $this->w;
-    }
-}
-
-// Calcular estadísticas
-$totalConStock = count($productosConStock);
-$totalSinStock = count($productosSinStock);
-$stockTotalGeneral = 0;
-
-foreach ($productosConStock as $producto) {
-    $stockTotalGeneral += floatval($producto['cantidad']);
 }
 
 // Crear instancia del PDF
 $pdf = new PDF();
+$pdf->SetLogos($logoTiendaPath, $logoProveedorPath, $inicialesProveedor, $nombreTienda, $proveedor);
 $pdf->AddPage();
 
 // Mostrar filtros aplicados
@@ -462,32 +504,26 @@ $filtros = [
 ];
 $pdf->FiltrosAplicados($filtros);
 
-// Sección 1: Productos con stock (verde)
-$totalCantidadConStock = $pdf->SeccionTabla(
-    'PRODUCTOS CON STOCK (Mayor a menor)',
-    $productosConStock,
-    [40, 167, 69], // Verde
-    false
-);
+// Sección 1: Productos con stock
+if (!empty($productosConStock)) {
+    $pdf->SeccionTabla('PRODUCTOS CON STOCK', $productosConStock, [40, 167, 69], false);
+}
 
-// Sección 2: Productos sin stock (rojo)
-$pdf->SeccionTabla(
-    'PRODUCTOS AGOTADOS (Stock = 0)',
-    $productosSinStock,
-    [220, 53, 69], // Rojo
-    true
-);
+// Sección 2: Productos sin stock
+if (!empty($productosSinStock)) {
+    $pdf->SeccionTabla('PRODUCTOS AGOTADOS', $productosSinStock, [220, 53, 69], true);
+}
 
-// Mostrar resumen con cantidades
-$pdf->TarjetaResumen($totalConStock, $totalSinStock, $totalCantidadConStock, $stockTotalGeneral);
+// Mostrar resumen
+$pdf->TarjetaResumen($totalConStock, $totalSinStock, $stockTotalGeneral);
 
 // Información adicional
-$pdf->SetY($pdf->GetY() + 8);
+$pdf->SetY($pdf->GetY() + 5);
 $pdf->SetFont('Arial', 'I', 8);
 $pdf->SetTextColor(150, 150, 150);
 $pdf->Cell(0, 5, 'Este reporte muestra los productos ordenados por cantidad disponible.', 0, 1, 'C');
 $pdf->Cell(0, 5, 'Los productos en rojo requieren reabastecimiento inmediato.', 0, 1, 'C');
 
 // Salida del PDF
-$pdf->Output('I', 'reporte_inventario_' . date('Ymd_His') . '.pdf');
+$pdf->Output('I', 'reporte_inventario_' . date('Ymd') . '.pdf');
 ?>

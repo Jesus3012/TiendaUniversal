@@ -446,73 +446,285 @@ function generarPDFCodigos($conn, $nombre, $producto_id, $cantidad, $tipo_codigo
 
 // ========================= PDF CON TODOS LOS CÓDIGOS =========================
 if (isset($_GET['action']) && $_GET['action'] === 'todos_codigos') {
+    // Limpiar cualquier salida previa
+    ob_clean();
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="todos_codigos_barras.pdf"');
+    
     generarPDFTodosCodigos($conn);
+    exit;
 }
 
 function generarPDFTodosCodigos($conn) {
     $generator = new BarcodeGeneratorPNG();
-    $pdf = new FPDF();
-    $pdf->SetAutoPageBreak(false);
-    $pdf->SetFont('Arial', '', 8);
-
-    $query = "SELECT cb.codigo, p.nombre FROM codigos_barras cb 
-              JOIN productos p ON cb.producto_id = p.id 
+    $pdf = new FPDF('P', 'mm', 'A4');
+    $pdf->SetAutoPageBreak(false); // 🔥 DESACTIVAR auto page break
+    $pdf->SetMargins(8, 15, 8);
+    
+    // Obtener datos de la tienda
+    $sqlConfig = "SELECT nombre, logo, telefono, direccion FROM configuracion_galeria LIMIT 1";
+    $resultConfig = $conn->query($sqlConfig);
+    $configTienda = $resultConfig->fetch_assoc();
+    $nombreTienda = $configTienda['nombre'] ?? 'TIENDA PESCADORES';
+    $telefono = $configTienda['telefono'] ?? '';
+    $direccion = $configTienda['direccion'] ?? '';
+    $logoTiendaPath = $configTienda['logo'] ?? '';
+    
+    // Buscar logo tienda
+    $logoPathAbsoluto = '';
+    if (!empty($logoTiendaPath) && file_exists($logoTiendaPath)) {
+        $logoPathAbsoluto = $logoTiendaPath;
+    } else {
+        $rutasPosibles = [
+            '../img/logo.png', '../img/logo.jpg', '../img/panel_principal.jpg',
+            '../img/panel_principal.png', '../dist/img/logo.png', '../dist/img/logo.jpg',
+            'img/logo.png', 'img/logo.jpg'
+        ];
+        foreach ($rutasPosibles as $ruta) {
+            if (file_exists($ruta)) {
+                $logoPathAbsoluto = $ruta;
+                break;
+            }
+        }
+    }
+    
+    // Consulta para obtener productos
+    $query = "SELECT 
+                p.id,
+                p.nombre, 
+                p.imagen,
+                p.categoria,
+                p.proveedor,
+                GROUP_CONCAT(cb.codigo ORDER BY cb.codigo SEPARATOR ',') as codigos
+              FROM productos p
+              JOIN codigos_barras cb ON p.id = cb.producto_id
               WHERE p.activo = 1 AND p.tipo_inventario = 'producto'
-              ORDER BY p.nombre ASC, cb.codigo ASC";
+              GROUP BY p.id, p.nombre, p.imagen, p.categoria, p.proveedor
+              ORDER BY p.nombre ASC";
     $res = $conn->query($query);
-
+    
     if ($res->num_rows === 0) {
         $pdf->AddPage();
         $pdf->SetFont('Arial', 'B', 16);
         $pdf->Cell(0, 10, 'No hay códigos de barras para mostrar', 0, 1, 'C');
-        $pdf->SetFont('Arial', '', 12);
-        $pdf->Cell(0, 10, 'Solo los productos generan códigos de barras.', 0, 1, 'C');
-    } else {
+        $pdf->Output('I', 'todos_codigos_barras.pdf');
+        exit;
+    }
+    
+    $productos = [];
+    while ($row = $res->fetch_assoc()) {
+        $row['codigos_array'] = explode(',', $row['codigos']);
+        $productos[] = $row;
+    }
+    
+    // Colores
+    $colorNaranja = [255, 140, 0];
+    $colorGris = [100, 100, 100];
+    
+    // Configuración de página
+    $anchoCard = 92;
+    $altoCard = 85;
+    $margenX = 10;
+    $margenY = 68;
+    $espaciadoX = 97;
+    $espaciadoY = 90;
+    $codigosPorPagina = 4;
+    
+    $totalProductos = count($productos);
+    $productoIndex = 0;
+    $paginaActual = 1;
+    $totalPaginas = ceil($totalProductos / $codigosPorPagina);
+    
+    // Función para dibujar el encabezado
+    function drawHeader($pdf, $nombreTienda, $direccion, $telefono, $logoPathAbsoluto, $colorNaranja, $colorGris) {
+        if (!empty($logoPathAbsoluto) && file_exists($logoPathAbsoluto)) {
+            $pdf->Image($logoPathAbsoluto, 12, 8, 22, 22);
+        }
+        
+        $pdf->SetY(10);
+        $pdf->SetFont('Arial', 'B', 13);
+        $pdf->SetTextColor($colorNaranja[0], $colorNaranja[1], $colorNaranja[2]);
+        $pdf->Cell(0, 6, utf8_decode(strtoupper($nombreTienda)), 0, 1, 'C');
+        
+        $pdf->SetFont('Arial', '', 7);
+        $pdf->SetTextColor($colorGris[0], $colorGris[1], $colorGris[2]);
+        if (!empty($direccion)) {
+            $pdf->Cell(0, 4, utf8_decode($direccion), 0, 1, 'C');
+        }
+        if (!empty($telefono)) {
+            $pdf->Cell(0, 4, 'Tel: ' . $telefono, 0, 1, 'C');
+        }
+        
+        $pdf->SetDrawColor($colorNaranja[0], $colorNaranja[1], $colorNaranja[2]);
+        $pdf->SetLineWidth(0.5);
+        $pdf->Line(10, 38, 200, 38);
+        
+        $pdf->SetY(44);
+        $pdf->SetFont('Arial', 'B', 14);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->Cell(0, 7, 'CODIGOS DE BARRAS POR PRODUCTO', 0, 1, 'C');
+        
+        $pdf->SetFont('Arial', 'I', 7);
+        $pdf->SetTextColor(128, 128, 128);
+        $pdf->Cell(0, 4, 'Generado: ' . date('d/m/Y H:i'), 0, 1, 'C');
+        $pdf->Ln(6);
+    }
+    
+    // Función para dibujar el pie de página
+    function drawFooter($pdf, $nombreTienda, $paginaActual, $totalPaginas, $colorNaranja) {
+        $pdf->SetDrawColor(220, 220, 220);
+        $pdf->Line(10, 260, 200, 260);
+        
+        $pdf->SetFont('Arial', 'I', 7);
+        $pdf->SetTextColor(128, 128, 128);
+        $pdf->SetY(263);
+        $pdf->Cell(0, 4, utf8_decode($nombreTienda) . ' - Sistema de Inventario', 0, 0, 'C');
+        $pdf->Cell(0, 4, 'Página ' . $paginaActual . ' de ' . $totalPaginas, 0, 1, 'R');
+        
+        $pdf->SetY(270);
+        $pdf->SetFont('Arial', 'I', 6);
+        $pdf->Cell(0, 3, 'Escanee el código de barras para registrar la venta del producto.', 0, 1, 'C');
+        $pdf->Cell(0, 3, 'Productos ordenados alfabéticamente de la A a la Z.', 0, 1, 'C');
+    }
+    
+    // Bucle para crear páginas
+    while ($productoIndex < $totalProductos) {
         $pdf->AddPage();
-        $margen_x = 20;
-        $margen_y = 15;
-        $espaciado_x = 45;
-        $espaciado_y = 40;
-        $ancho_codigo = 40;
-        $alto_codigo = 20;
-        $col = 0;
-        $fila = 0;
-
-        while ($row = $res->fetch_assoc()) {
-            if ($fila >= 6) {
-                $pdf->AddPage();
-                $fila = 0;
-                $col = 0;
+        
+        // Dibujar encabezado
+        drawHeader($pdf, $nombreTienda, $direccion, $telefono, $logoPathAbsoluto, $colorNaranja, $colorGris);
+        
+        // Dibujar productos en esta página (máximo 4)
+        $productosEnPagina = min($codigosPorPagina, $totalProductos - $productoIndex);
+        
+        for ($i = 0; $i < $productosEnPagina; $i++) {
+            $producto = $productos[$productoIndex];
+            $col = $i % 2;
+            $fila = floor($i / 2);
+            $x = $margenX + ($col * $espaciadoX);
+            $y = $margenY + ($fila * $espaciadoY);
+            
+            // Fondo de tarjeta
+            $pdf->SetDrawColor(220, 220, 220);
+            $pdf->SetFillColor(255, 255, 255);
+            $pdf->Rect($x, $y, $anchoCard, $altoCard, 'DF');
+            
+            // Borde superior naranja
+            $pdf->SetDrawColor($colorNaranja[0], $colorNaranja[1], $colorNaranja[2]);
+            $pdf->SetLineWidth(1.5);
+            $pdf->Line($x, $y, $x + $anchoCard, $y);
+            $pdf->SetLineWidth(0.2);
+            
+            // ==== IMAGEN O INICIALES ====
+            $imgX = $x + 6;
+            $imgY = $y + 6;
+            $imgSize = 38;
+            
+            $pdf->SetDrawColor(230, 230, 230);
+            $pdf->SetFillColor(250, 250, 250);
+            $pdf->Rect($imgX, $imgY, $imgSize, $imgSize, 'DF');
+            
+            // Buscar imagen
+            $rutaImagen = '';
+            $imageFound = false;
+            
+            if (!empty($producto['imagen']) && file_exists($producto['imagen'])) {
+                $rutaImagen = $producto['imagen'];
+                $imageFound = true;
             }
-
-            $x = $margen_x + ($col * $espaciado_x);
-            $y = $margen_y + ($fila * $espaciado_y);
-            $pngData = $generator->getBarcode($row['codigo'], $generator::TYPE_CODE_128);
+            
+            if (!$imageFound) {
+                $nombreImagenBase = strtolower(str_replace(' ', '_', $producto['nombre']));
+                $extensiones = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                $rutasBuscar = ['uploads/productos/', '../uploads/productos/'];
+                
+                foreach ($rutasBuscar as $rutaBase) {
+                    foreach ($extensiones as $ext) {
+                        $ruta = $rutaBase . $nombreImagenBase . '.' . $ext;
+                        if (file_exists($ruta)) {
+                            $rutaImagen = $ruta;
+                            $imageFound = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            
+            if (!$imageFound) {
+                foreach ($rutasBuscar as $rutaBase) {
+                    foreach ($extensiones as $ext) {
+                        $ruta = $rutaBase . $producto['id'] . '.' . $ext;
+                        if (file_exists($ruta)) {
+                            $rutaImagen = $ruta;
+                            $imageFound = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            
+            if ($imageFound && file_exists($rutaImagen)) {
+                $pdf->Image($rutaImagen, $imgX + 2, $imgY + 2, $imgSize - 4, $imgSize - 4);
+            } else {
+                $iniciales = strtoupper(substr($producto['nombre'], 0, 2));
+                $pdf->SetFont('Arial', 'B', 20);
+                $pdf->SetTextColor($colorNaranja[0], $colorNaranja[1], $colorNaranja[2]);
+                $pdf->SetXY($imgX + $imgSize/2 - 8, $imgY + $imgSize/2 - 8);
+                $pdf->Cell(16, 16, $iniciales, 0, 0, 'C');
+                $pdf->SetTextColor(0, 0, 0);
+            }
+            
+            // ==== INFORMACIÓN ====
+            $infoX = $x + 50;
+            $infoY = $y + 8;
+            
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->SetTextColor(40, 40, 40);
+            $pdf->SetXY($infoX, $infoY);
+            $nombre = utf8_decode(substr($producto['nombre'], 0, 28));
+            $pdf->Cell(36, 5, $nombre, 0, 1);
+            
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->SetTextColor($colorGris[0], $colorGris[1], $colorGris[2]);
+            $pdf->SetXY($infoX, $infoY + 7);
+            $pdf->Cell(36, 4, 'Cat: ' . utf8_decode(substr($producto['categoria'], 0, 20)), 0, 1);
+            
+            if (!empty($producto['proveedor'])) {
+                $pdf->SetXY($infoX, $infoY + 12);
+                $pdf->Cell(36, 4, 'Prov: ' . utf8_decode(substr($producto['proveedor'], 0, 18)), 0, 1);
+            }
+            
+            // ==== CÓDIGO DE BARRAS ====
+            $codigoPrincipal = $producto['codigos_array'][0];
+            $pngData = $generator->getBarcode($codigoPrincipal, $generator::TYPE_CODE_128);
             $tmp = tempnam(sys_get_temp_dir(), 'bc_') . '.png';
             file_put_contents($tmp, $pngData);
-
-            $pdf->SetXY($x, $y);
-            $pdf->Cell($ancho_codigo, 4, utf8_decode(substr($row['nombre'], 0, 20)), 0, 2, 'C');
-            $pdf->Image($tmp, $x + 2, $y + 5, $ancho_codigo - 4, $alto_codigo, 'PNG');
-            $pdf->SetXY($x, $y + $alto_codigo + 8);
-            $pdf->Cell($ancho_codigo, 4, $row['codigo'], 0, 0, 'C');
-
+            
+            $barcodeX = $x + ($anchoCard / 2) - 35;
+            $barcodeY = $y + 48;
+            $pdf->Image($tmp, $barcodeX, $barcodeY, 70, 18, 'PNG');
             @unlink($tmp);
-
-            $col++;
-            if ($col >= 4) {
-                $col = 0;
-                $fila++;
-            }
+            
+            $pdf->SetFont('Arial', '', 7);
+            $pdf->SetTextColor($colorGris[0], $colorGris[1], $colorGris[2]);
+            $pdf->SetXY($x + 10, $barcodeY + 20);
+            $pdf->Cell($anchoCard - 20, 5, $codigoPrincipal, 0, 1, 'C');
+            
+            $totalCodigos = count($producto['codigos_array']);
+            $pdf->SetFont('Arial', 'I', 6);
+            $pdf->SetTextColor(150, 150, 150);
+            $pdf->SetXY($x + 10, $barcodeY + 26);
+            $pdf->Cell($anchoCard - 20, 4, $totalCodigos . ' código(s)', 0, 1, 'C');
+            
+            $productoIndex++;
         }
+        
+        // Dibujar pie de página
+        drawFooter($pdf, $nombreTienda, $paginaActual, $totalPaginas, $colorNaranja);
+        $paginaActual++;
     }
-
-    $codigos_dir = __DIR__ . '/uploads/codigos/';
-    if (!is_dir($codigos_dir)) mkdir($codigos_dir, 0777, true);
     
-    $file = $codigos_dir . 'todos_codigos.pdf';
-    $pdf->Output('F', $file);
-    header("Location: uploads/codigos/todos_codigos.pdf");
+    $pdf->Output('I', 'todos_codigos_barras.pdf');
     exit;
 }
 
@@ -733,7 +945,7 @@ if (!empty($errors)) {
 
                         <div class="p-3 d-flex justify-content-between align-items-center border-top">
                             <div>
-                                <a href="inventario.php?action=todos_codigos" target="_blank" class="btn btn-primary btn-sm">
+                                <a href="?action=todos_codigos" target="_blank" class="btn btn-primary btn-sm">
                                     <i class="fas fa-file-pdf mr-1"></i> PDF con todos los códigos
                                 </a>
                             </div>

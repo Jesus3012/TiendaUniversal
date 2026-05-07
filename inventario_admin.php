@@ -296,26 +296,119 @@ $proveedores = obtenerProveedores($conn);
                         $inicial = strtoupper(substr($producto['nombre'], 0, 2));
                     ?>
                     <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-3 producto-item"
-                         data-id="<?= $producto['id'] ?>"
-                         data-nombre="<?= strtolower(htmlspecialchars($producto['nombre'])) ?>"
-                         data-categoria="<?= strtolower(htmlspecialchars($producto['categoria'] ?? '')) ?>"
-                         data-proveedor="<?= strtolower(htmlspecialchars($producto['proveedor'] ?? '')) ?>"
-                         data-stock="<?= $stock ?>"
-                         data-tipo="producto">
+                        data-id="<?= $producto['id'] ?>"
+                        data-nombre="<?= strtolower(htmlspecialchars($producto['nombre'])) ?>"
+                        data-categoria="<?= strtolower(htmlspecialchars($producto['categoria'] ?? '')) ?>"
+                        data-proveedor="<?= strtolower(htmlspecialchars($producto['proveedor'] ?? '')) ?>"
+                        data-stock="<?= $stock ?>"
+                        data-tipo="producto">
                         
-                        <div class="product-card producto">
+                        <?php 
+                        // Determinar color e ícono según categoría o proveedor
+                        $categoriaSlug = strtolower(str_replace(' ', '-', $producto['categoria'] ?? ''));
+                        $proveedorSlug = strtolower(str_replace(' ', '-', $producto['proveedor'] ?? ''));
+                        
+                        // Asignar color e ícono dinámico
+                        $colorClase = '';
+                        $colorHex = '#f97316'; // Color por defecto naranja
+                        $iconoProducto = 'fa-box'; // Icono por defecto
+                        $iconoCard = 'fa-box';
+                        
+                        if($categoriaSlug == 'figuras') {
+                            $colorClase = 'categoria-figuras';
+                            $colorHex = '#3b82f6'; // Azul
+                            $iconoProducto = 'fa-dragon';
+                            $iconoCard = 'fa-dragon';
+                        } elseif($categoriaSlug == 'impresion-3d' || $categoriaSlug == 'impresión-3d') {
+                            $colorClase = 'categoria-impresion-3d';
+                            $colorHex = '#8b5cf6'; // Morado
+                            $iconoProducto = 'fa-cube';
+                            $iconoCard = 'fa-cube';
+                        } elseif($categoriaSlug == 'dinosaurios') {
+                            $colorClase = 'categoria-dinosaurios';
+                            $colorHex = '#10b981'; // Verde esmeralda
+                            $iconoProducto = 'fa-dragon';
+                            $iconoCard = 'fa-dragon';
+                        } elseif($categoriaSlug == 'marinos') {
+                            $colorClase = 'categoria-marinos';
+                            $colorHex = '#06b6d4'; // Celeste
+                            $iconoProducto = 'fa-fish';
+                            $iconoCard = 'fa-fish';
+                        } elseif($categoriaSlug == 'reptiles') {
+                            $colorClase = 'categoria-reptiles';
+                            $colorHex = '#84cc16'; // Verde lima
+                            $iconoProducto = 'fa-lizard';
+                            $iconoCard = 'fa-lizard';
+                        } elseif($categoriaSlug == 'aves') {
+                            $colorClase = 'categoria-aves';
+                            $colorHex = '#f59e0b'; // Ámbar
+                            $iconoProducto = 'fa-dove';
+                            $iconoCard = 'fa-dove';
+                        } elseif($proveedorSlug == 'nevaris-3d') {
+                            $colorClase = 'proveedor-nevaris';
+                            $colorHex = '#ec489a'; // Rosa
+                            $iconoProducto = 'fa-star';
+                            $iconoCard = 'fa-star';
+                        } elseif($proveedorSlug == 'artesanias-gloria') {
+                            $colorClase = 'proveedor-artesanias';
+                            $colorHex = '#14b8a6'; // Turquesa
+                            $iconoProducto = 'fa-hands';
+                            $iconoCard = 'fa-hands';
+                        } elseif($categoriaSlug == 'herramientas') {
+                            $colorClase = 'categoria-herramientas';
+                            $colorHex = '#ef4444'; // Rojo
+                            $iconoProducto = 'fa-tools';
+                            $iconoCard = 'fa-tools';
+                        } elseif($categoriaSlug == 'accesorios') {
+                            $colorClase = 'categoria-accesorios';
+                            $colorHex = '#a855f7'; // Morado claro
+                            $iconoProducto = 'fa-ring';
+                            $iconoCard = 'fa-ring';
+                        }
+                        
+                        // Determinar insignia según el stock
+                        $insigniaIcono = '';
+                        $insigniaTexto = '';
+                        if($stock <= 0) {
+                            $insigniaIcono = 'fa-skull';
+                            $insigniaTexto = 'AGOTADO';
+                        } elseif($stock <= 5) {
+                            $insigniaIcono = 'fa-exclamation-triangle';
+                            $insigniaTexto = 'STOCK CRÍTICO';
+                        } elseif($stock <= 15) {
+                            $insigniaIcono = 'fa-chart-line';
+                            $insigniaTexto = 'STOCK BAJO';
+                        } else {
+                            $insigniaIcono = 'fa-check-circle';
+                            $insigniaTexto = 'DISPONIBLE';
+                        }
+                        ?>
+                        
+                        <div class="product-card producto <?= $colorClase ?>" style="border-top: 3px solid <?= $colorHex ?>;">
                             <div class="product-image">
                                 <?php if(!empty($producto['imagen']) && file_exists($producto['imagen'])): ?>
                                     <img src="<?= htmlspecialchars($producto['imagen']) ?>" alt="<?= htmlspecialchars($producto['nombre']) ?>">
                                 <?php else: ?>
-                                    <div class="no-image">
-                                        <i class="fas fa-box"></i>
-                                        <span><?= $inicial ?></span>
+                                    <div class="no-image" style="color: <?= $colorHex ?>; border-color: <?= $colorHex ?>;">
+                                        <i class="fas <?= $iconoProducto ?>" style="color: <?= $colorHex ?>; font-size: 3rem;"></i>
+                                        <span style="color: <?= $colorHex ?>;"><?= $inicial ?></span>
                                     </div>
                                 <?php endif; ?>
-                                <div class="product-badge producto">
-                                    <i class="fas fa-box"></i> Producto
+                                
+                                <!-- Badge de tipo de producto -->
+                                <div class="product-badge producto" style="background: <?= $colorHex ?>;">
+                                    <i class="fas <?= $iconoCard ?>"></i>
+                                    <span>Producto</span>
                                 </div>
+                                
+                                <!-- Badge de estado de stock -->
+                                <?php if($stock <= 5): ?>
+                                <div class="stock-warning-badge" style="background: <?= $colorHex ?>;">
+                                    <i class="fas <?= $insigniaIcono ?>"></i>
+                                    <span><?= $insigniaTexto ?></span>
+                                </div>
+                                <?php endif; ?>
+                                
                                 <?php if($producto['codigos_disponibles'] > 0): ?>
                                 <div class="barcode-badge">
                                     <i class="fas fa-barcode"></i> <?= $producto['codigos_disponibles'] ?>
@@ -328,10 +421,14 @@ $proveedores = obtenerProveedores($conn);
                                 
                                 <div class="product-meta">
                                     <?php if($producto['categoria']): ?>
-                                    <span class="meta-badge categoria"><i class="fas fa-tag"></i> <?= htmlspecialchars($producto['categoria']) ?></span>
+                                    <span class="meta-badge categoria" style="background: <?= $colorHex ?>20; color: <?= $colorHex ?>;">
+                                        <i class="fas <?= $iconoCard ?>"></i> <?= htmlspecialchars($producto['categoria']) ?>
+                                    </span>
                                     <?php endif; ?>
                                     <?php if($producto['proveedor']): ?>
-                                    <span class="meta-badge proveedor"><i class="fas fa-truck"></i> <?= htmlspecialchars($producto['proveedor']) ?></span>
+                                    <span class="meta-badge proveedor">
+                                        <i class="fas fa-truck"></i> <?= htmlspecialchars($producto['proveedor']) ?>
+                                    </span>
                                     <?php endif; ?>
                                 </div>
                                 
@@ -343,28 +440,31 @@ $proveedores = obtenerProveedores($conn);
                                     <?php if(isset($producto['atributos_array']['talla'])): ?>
                                     <span class="attr-badge"><i class="fas fa-ruler"></i> <?= htmlspecialchars($producto['atributos_array']['talla']) ?></span>
                                     <?php endif; ?>
+                                    <?php if(isset($producto['atributos_array']['material'])): ?>
+                                    <span class="attr-badge"><i class="fas fa-cube"></i> <?= htmlspecialchars($producto['atributos_array']['material']) ?></span>
+                                    <?php endif; ?>
                                 </div>
                                 <?php endif; ?>
                                 
                                 <div class="prices prices-producto">
                                     <div class="price-item">
                                         <small><i class="fas fa-arrow-down"></i> Compra</small>
-                                        <span class="text-danger">$<?= number_format($producto['precio_compra'], 0) ?></span>
+                                        <span class="price-value" style="color: #dc2626;">$<?= number_format($producto['precio_compra'], 0) ?></span>
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-arrow-up"></i> Venta</small>
-                                        <span class="text-success">$<?= number_format($producto['precio_venta'], 0) ?></span>
+                                        <span class="price-value" style="color: #16a34a;">$<?= number_format($producto['precio_venta'], 0) ?></span>
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-chart-line"></i> Utilidad</small>
-                                        <span class="text-primary">$<?= number_format($producto['utilidad'], 0) ?></span>
+                                        <span class="price-value" style="color: <?= $colorHex ?>;">$<?= number_format($producto['utilidad'], 0) ?></span>
                                     </div>
                                 </div>
                                 
                                 <div class="stock-info">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="stock-status <?= $stockClass ?>">
-                                            <i class="fas <?= $stock <= 0 ? 'fa-times-circle' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle') ?>"></i>
+                                            <i class="fas <?= $stock <= 0 ? 'fa-skull' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle') ?>"></i>
                                             <?= $stockStatus ?>
                                         </span>
                                         <span class="stock-number"><?= number_format($stock) ?> unidades</span>

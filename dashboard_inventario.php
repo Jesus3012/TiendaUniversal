@@ -489,17 +489,13 @@ while ($row = $query->fetch_assoc()) {
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
 // Función para abrir el modal
 function abrirModalReporte() {
-    // Limpiar el formulario
     document.getElementById('formGenerarReporte').reset();
-    
-    // Resetear el resumen
     document.getElementById('resumenTexto').innerHTML = 'Ningún filtro seleccionado';
-    
-    // Abrir el modal
     const modal = new bootstrap.Modal(document.getElementById('modalReporteProveedor'));
     modal.show();
 }
@@ -537,7 +533,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Limpiar todos los filtros
     if (btnLimpiar) {
         btnLimpiar.addEventListener('click', function() {
             proveedorSelect.value = '';
@@ -554,21 +549,71 @@ document.addEventListener('DOMContentLoaded', function() {
     actualizarResumen();
 });
 
-// Feedback al generar
+// Feedback al generar - CON DESCARGA AUTOMÁTICA
 const formGenerar = document.getElementById('formGenerarReporte');
 if (formGenerar) {
     formGenerar.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
         const btn = document.getElementById('btnGenerarReporte');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Generando...';
         btn.disabled = true;
         
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }, 3000);
+        const formData = new FormData(formGenerar);
+        const params = new URLSearchParams(formData);
+        const url = 'reporte_inventario_filtrado.php?' + params.toString();
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error HTTP: ' + response.status);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // Descargar
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                const fecha = new Date().toISOString().slice(0, 10);
+                link.download = `reporte_inventario_${fecha}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Abrir en nueva ventana
+                window.open(blobUrl, '_blank');
+                
+                setTimeout(() => {
+                    URL.revokeObjectURL(blobUrl);
+                }, 3000);
+                
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Reporte generado',
+                    text: 'El archivo se ha descargado y se ha abierto en una nueva ventana',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    toast: true,
+                    position: 'top-end'
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'No se pudo generar el reporte',
+                    confirmButtonColor: '#f97316'
+                });
+            });
     });
 }
 </script>
-
-<?php include 'includes/footer.php'; ?>

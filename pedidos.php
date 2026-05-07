@@ -876,19 +876,38 @@ function exportarExcel() {
         totalPedidos = $('#pendientesContainer .pedido-card:visible').length;
     } else if (estadoActivo === 'completado') {
         totalPedidos = $('#completadosContainer .pedido-card:visible').length;
+    } else if (estadoActivo === 'cancelado') {
+        totalPedidos = $('#canceladosContainer .pedido-card:visible').length;
     } else {
         totalPedidos = $('#pendientesContainer .pedido-card:visible').length + 
-                       $('#completadosContainer .pedido-card:visible').length;
+                       $('#completadosContainer .pedido-card:visible').length +
+                       $('#canceladosContainer .pedido-card:visible').length;
     }
     
     if (totalPedidos === 0) {
+        let titulo = '';
+        let mensaje = '';
+        
+        if (estadoActivo === 'pendiente') {
+            titulo = 'No hay pedidos pendientes';
+            mensaje = 'No existen pedidos pendientes para generar el reporte.';
+        } else if (estadoActivo === 'completado') {
+            titulo = 'No hay pedidos completados';
+            mensaje = 'No existen pedidos completados para generar el reporte.';
+        } else if (estadoActivo === 'cancelado') {
+            titulo = 'No hay pedidos cancelados';
+            mensaje = 'No existen pedidos cancelados para generar el reporte.';
+        } else {
+            titulo = 'No hay pedidos registrados';
+            mensaje = 'No existen pedidos registrados para generar el reporte.';
+        }
+        
         Swal.fire({
-            icon: 'warning',
-            title: 'No hay datos para exportar',
-            html: 'No se encontraron pedidos con los filtros actuales.<br><br>Prueba cambiando el <strong>tipo de reporte</strong> o el <strong>estado</strong> del pedido.',
+            icon: 'info',
+            title: titulo,
+            text: mensaje,
             confirmButtonColor: '#f97316',
-            confirmButtonText: 'Entendido',
-            iconColor: '#f97316'
+            confirmButtonText: 'Entendido'
         });
         return;
     }
@@ -900,7 +919,7 @@ function exportarExcel() {
         const solicitante = $('#filtroSolicitante').val();
         if (!solicitante) {
             Swal.fire({
-                icon: 'info',
+                icon: 'warning',
                 title: 'Selecciona un solicitante',
                 text: 'Para exportar por solicitante, primero elige uno de la lista',
                 confirmButtonColor: '#f97316'
@@ -912,7 +931,7 @@ function exportarExcel() {
         const folio = $('#filtroOrden').val();
         if (!folio) {
             Swal.fire({
-                icon: 'info',
+                icon: 'warning',
                 title: 'Selecciona un folio',
                 text: 'Para exportar por folio, primero elige un número de folio',
                 confirmButtonColor: '#f97316'
@@ -926,61 +945,148 @@ function exportarExcel() {
 }
 
 function exportarPDF() {
-    // Contar pedidos visibles según el filtro activo
     const estadoActivo = $('.filtro-estado.active').data('estado');
     let totalPedidos = 0;
+    let containerVisible = '';
     
+    // Identificar qué contenedor está visible según el estado
     if (estadoActivo === 'pendiente') {
-        totalPedidos = $('#pendientesContainer .pedido-card:visible').length;
+        containerVisible = '#pendientesContainer';
+        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
     } else if (estadoActivo === 'completado') {
-        totalPedidos = $('#completadosContainer .pedido-card:visible').length;
-    } else {
-        totalPedidos = $('#pendientesContainer .pedido-card:visible').length + 
-                       $('#completadosContainer .pedido-card:visible').length;
+        containerVisible = '#completadosContainer';
+        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
+    } else if (estadoActivo === 'cancelado') {
+        containerVisible = '#canceladosContainer';
+        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
+    } else if (estadoActivo === 'todos') {
+        containerVisible = '#todosContainer';
+        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
+        
+        if (totalPedidos === 0) {
+            totalPedidos = $('#pendientesContainer .pedido-card').length + 
+                           $('#completadosContainer .pedido-card').length +
+                           $('#canceladosContainer .pedido-card').length;
+        }
     }
     
+    console.log('Estado activo:', estadoActivo);
+    console.log('Total pedidos encontrados:', totalPedidos);
+    
     if (totalPedidos === 0) {
+        let titulo = '';
+        let mensaje = '';
+        
+        if (estadoActivo === 'pendiente') {
+            titulo = 'No hay pedidos pendientes';
+            mensaje = 'No existen pedidos pendientes para generar el reporte.';
+        } else if (estadoActivo === 'completado') {
+            titulo = 'No hay pedidos completados';
+            mensaje = 'No existen pedidos completados para generar el reporte.';
+        } else if (estadoActivo === 'cancelado') {
+            titulo = 'No hay pedidos cancelados';
+            mensaje = 'No existen pedidos cancelados para generar el reporte.';
+        } else {
+            titulo = 'No hay pedidos registrados';
+            mensaje = 'No existen pedidos registrados para generar el reporte.';
+        }
+        
         Swal.fire({
-            icon: 'warning',
-            title: 'No hay datos para exportar',
-            html: 'No se encontraron pedidos con los filtros actuales.<br><br>Prueba cambiando el <strong>tipo de reporte</strong> o el <strong>estado</strong> del pedido.',
+            icon: 'info',
+            title: titulo,
+            text: mensaje,
             confirmButtonColor: '#f97316',
-            confirmButtonText: 'Entendido',
-            iconColor: '#f97316'
+            confirmButtonText: 'Entendido'
         });
         return;
     }
     
     const tipo = $('#tipoReporte').val();
-    let url = 'exportar_pdf_pedidos.php';
+    let url = 'exportar_pdf_pedidos.php?estado=' + encodeURIComponent(estadoActivo);
     
     if (tipo === 'solicitante') {
         const solicitante = $('#filtroSolicitante').val();
         if (!solicitante) {
             Swal.fire({
-                icon: 'info',
+                icon: 'warning',
                 title: 'Selecciona un solicitante',
                 text: 'Para exportar por solicitante, primero elige uno de la lista',
                 confirmButtonColor: '#f97316'
             });
             return;
         }
-        url += '?solicitado_por=' + encodeURIComponent(solicitante);
+        url += '&solicitado_por=' + encodeURIComponent(solicitante);
     } else if (tipo === 'orden') {
         const folio = $('#filtroOrden').val();
         if (!folio) {
             Swal.fire({
-                icon: 'info',
+                icon: 'warning',
                 title: 'Selecciona un folio',
                 text: 'Para exportar por folio, primero elige un número de folio',
-                confirmButtonColor:'#f97316'
+                confirmButtonColor: '#f97316'
             });
             return;
         }
-        url += '?id_orden=' + folio;
+        url += '&id_orden=' + folio;
     }
     
-    window.open(url, '_blank');
+    // Mostrar loading antes de abrir
+    Swal.fire({
+        title: 'Generando reporte...',
+        text: 'Por favor espera',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // Hacer una petición fetch para obtener el PDF y descargarlo
+    fetch(url)
+        .then(response => response.blob())
+        .then(blob => {
+            // Crear URL del blob
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // 1. DESCARGAR automáticamente
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            const fecha = new Date().toISOString().slice(0, 10);
+            const nombreArchivo = `Reporte_Pedidos_${estadoActivo}_${fecha}.pdf`;
+            link.download = nombreArchivo;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // 2. ABRIR en nueva ventana
+            window.open(blobUrl, '_blank');
+            
+            // 3. Limpiar la URL después de un tiempo
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 3000);
+            
+            // Cerrar loading
+            Swal.close();
+            Swal.fire({
+                icon: 'success',
+                title: 'Reporte generado',
+                text: 'El archivo se ha descargado y se ha abierto en una nueva ventana',
+                timer: 2000,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Swal.close();
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'No se pudo generar el reporte',
+                confirmButtonColor: '#f97316'
+            });
+        });
 }
 
 function cerrarAyuda() {
@@ -991,13 +1097,45 @@ function cerrarAyuda() {
 function mostrarAyuda() { $('#ayudaReporte').fadeIn(); }
 
 function completarPedido(folio) {
-    Swal.fire({ title: '¿Completar pedido?', text: 'Se marcarán todos los productos', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí' })
-        .then(r => { if (r.isConfirmed) fetch('completar_pedido.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folio: folio }) }).then(() => location.reload()); });
+    Swal.fire({
+        title: '¿Completar pedido?',
+        text: 'Se marcarán todos los productos',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#dc3545',
+        confirmButtonText: '¡Sí!',
+        cancelButtonText: 'No'
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch('completar_pedido.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folio: folio })
+            }).then(() => location.reload());
+        }
+    });
 }
 
 function completarProducto(id) {
-    Swal.fire({ title: '¿Completar producto?', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí' })
-        .then(r => { if (r.isConfirmed) fetch('completar_producto.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) }).then(() => location.reload()); });
+    Swal.fire({
+        title: '¿Completar producto?',
+        text: 'Este producto se marcará como completado',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#dc3545',
+        confirmButtonText: '¡Sí!',
+        cancelButtonText: 'No'
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch('completar_producto.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            }).then(() => location.reload());
+        }
+    });
 }
 
 function verHistorial(idOrden) {
@@ -1066,5 +1204,3 @@ document.addEventListener('click', function(e) {
     if (header) setTimeout(() => $(header).find('.flecha').toggleClass('abierta'), 150);
 });
 </script>
-
-<?php include 'includes/footer.php'; ?>
