@@ -1803,12 +1803,15 @@ function generarPDFGeneral() {
         $logoTiendaExt = $ext === 'jpg' ? 'jpeg' : $ext;
     }
     
-    // Logo del proveedor (si hay filtro)
+    // Logo del proveedor con redimensionado automático (si hay filtro)
     $logoProveedorBase64 = '';
     $logoProveedorExt = 'png';
     $logoProveedorPath = '';
+    $logoProveedorWidth = 25;
+    $logoProveedorHeight = 25;
     $nombreProveedor = '';
     $inicialesProveedor = '';
+    
     if ($filtroProveedor !== '') {
         $nombreProveedor = $filtroProveedor;
         $sqlLogoProv = "SELECT logo, nombre FROM proveedores WHERE nombre = '" . $conn->real_escape_string($filtroProveedor) . "' LIMIT 1";
@@ -1816,11 +1819,41 @@ function generarPDFGeneral() {
         if ($resultLogoProv && $row = $resultLogoProv->fetch_assoc()) {
             $logoProveedorPath = $row['logo'];
             if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
+                // Obtener dimensiones de la imagen
+                $size = getimagesize($logoProveedorPath);
+                $anchoOriginal = $size[0];
+                $altoOriginal = $size[1];
+                $ratio = $anchoOriginal / $altoOriginal;
+                
                 $tipo = mime_content_type($logoProveedorPath);
                 $data = file_get_contents($logoProveedorPath);
                 $logoProveedorBase64 = "data:" . $tipo . ";base64," . base64_encode($data);
                 $ext = pathinfo($logoProveedorPath, PATHINFO_EXTENSION);
                 $logoProveedorExt = $ext === 'jpg' ? 'jpeg' : $ext;
+                
+                // USAR EL LADO MÁS PEQUEÑO para decidir el tamaño
+                $ladoMenor = min($anchoOriginal, $altoOriginal);
+                
+                if ($ladoMenor < 310) {
+                    $maxSize = 45;  // Logo muy pequeño (menos de 300px en su lado menor)
+                } elseif ($ladoMenor < 500) {
+                    $maxSize = 35;  // Logo pequeño (300-500px)
+                } elseif ($ladoMenor > 800) {
+                    $maxSize = 20;  // Logo muy grande (más de 800px)
+                } else {
+                    $maxSize = 25;  // Tamaño normal (500-800px)
+                }
+                
+                // Calcular tamaño proporcional
+                if ($anchoOriginal > $altoOriginal) {
+                    // Logo horizontal (más ancho que alto)
+                    $logoProveedorWidth = $maxSize;
+                    $logoProveedorHeight = $maxSize / $ratio;
+                } else {
+                    // Logo vertical o cuadrado
+                    $logoProveedorHeight = $maxSize;
+                    $logoProveedorWidth = $maxSize * $ratio;
+                }
             }
         }
         // Obtener iniciales del proveedor (primeras dos letras en mayúscula)
@@ -1834,17 +1867,17 @@ function generarPDFGeneral() {
     ?>
 
     // ============================================
-    // ENCABEZADO - LOGO IZQUIERDA, NOMBRE CENTRADO, INICIALES DERECHA
+    // ENCABEZADO - LOGO IZQUIERDA, NOMBRE CENTRADO, LOGO DERECHA PROPORCIONAL
     // ============================================
     
     const logoY = 12;
-    const logoSize = 25;
+    const logoTiendaSize = 25;
     
     <?php if ($filtroProveedor !== ''): ?>
     // Logo izquierdo (Tienda)
     <?php if (!empty($logoTiendaBase64)): ?>
     try {
-        docAdmin.addImage('<?= $logoTiendaBase64 ?>', '<?= $logoTiendaExt ?>', 15, logoY, logoSize, logoSize);
+        docAdmin.addImage('<?= $logoTiendaBase64 ?>', '<?= $logoTiendaExt ?>', 15, logoY, logoTiendaSize, logoTiendaSize);
     } catch(e) {}
     <?php endif; ?>
     
@@ -1852,26 +1885,33 @@ function generarPDFGeneral() {
     docAdmin.setFontSize(12);
     docAdmin.setTextColor(60, 60, 60);
     docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("<?= strtoupper($nombreTienda) ?>", pageWidth / 2, logoY + logoSize/2 + 4, { align: "center" });
+    docAdmin.text("<?= strtoupper($nombreTienda) ?>", pageWidth / 2, logoY + logoTiendaSize/2 + 4, { align: "center" });
     
     <?php if (!empty($logoProveedorBase64)): ?>
-    // Logo derecho real del proveedor
+    // Logo derecho del proveedor CON TAMAÑO PROPORCIONAL AUTOMÁTICO
+    const logoX = pageWidth - <?= $logoProveedorWidth ?> - 15;
     try {
-        docAdmin.addImage('<?= $logoProveedorBase64 ?>', '<?= $logoProveedorExt ?>', pageWidth - 40, logoY, logoSize, logoSize);
-    } catch(e) {}
+        docAdmin.addImage('<?= $logoProveedorBase64 ?>', '<?= $logoProveedorExt ?>', logoX, logoY, <?= $logoProveedorWidth ?>, <?= $logoProveedorHeight ?>);
+    } catch(e) {
+        // Si falla la imagen, mostrar iniciales
+        docAdmin.setFontSize(26);
+        docAdmin.setTextColor(52, 152, 219);
+        docAdmin.setFont("helvetica", "bold");
+        docAdmin.text("<?= $inicialesProveedor ?>", pageWidth - 50, logoY + logoTiendaSize/2 + 6);
+    }
     <?php else: ?>
-    // INICIALES GRANDES del proveedor (tamaño 18)
+    // INICIALES GRANDES del proveedor
     docAdmin.setFontSize(26);
     docAdmin.setTextColor(52, 152, 219);
     docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("<?= $inicialesProveedor ?>", pageWidth - 50, logoY + logoSize/2 + 6);
+    docAdmin.text("<?= $inicialesProveedor ?>", pageWidth - 50, logoY + logoTiendaSize/2 + 6);
     <?php endif; ?>
     
     <?php else: ?>
     // UN LOGO (sin filtro de proveedor)
     <?php if (!empty($logoTiendaBase64)): ?>
     try {
-        docAdmin.addImage('<?= $logoTiendaBase64 ?>', '<?= $logoTiendaExt ?>', 15, logoY, logoSize, logoSize);
+        docAdmin.addImage('<?= $logoTiendaBase64 ?>', '<?= $logoTiendaExt ?>', 15, logoY, logoTiendaSize, logoTiendaSize);
     } catch(e) {}
     <?php endif; ?>
     
@@ -1879,12 +1919,12 @@ function generarPDFGeneral() {
     docAdmin.setFontSize(14);
     docAdmin.setTextColor(60, 60, 60);
     docAdmin.setFont("helvetica", "bold");
-    docAdmin.text("<?= strtoupper($nombreTienda) ?>", pageWidth / 2, logoY + logoSize/2 + 4, { align: "center" });
+    docAdmin.text("<?= strtoupper($nombreTienda) ?>", pageWidth / 2, logoY + logoTiendaSize/2 + 4, { align: "center" });
     <?php endif; ?>
     
     // Línea decorativa sutil
     docAdmin.setDrawColor(230, 230, 230);
-    docAdmin.line(15, logoY + logoSize + 8, pageWidth - 15, logoY + logoSize + 8);
+    docAdmin.line(15, logoY + logoTiendaSize + 8, pageWidth - 15, logoY + logoTiendaSize + 8);
 
     function addFooter(doc, pageNum, totalPages) {
         doc.setPage(pageNum);
@@ -2195,33 +2235,68 @@ function generarPDFProveedores() {
         $logoTiendaExt = $ext === 'jpg' ? 'jpeg' : $ext;
     }
     
-    // Logo del proveedor
-    $logoProveedorBase64 = '';
-    $logoProveedorExt = 'png';
-    $nombreProveedor = '';
-    $inicialesProveedor = '';
-    if ($filtroProveedor !== '') {
-        $nombreProveedor = $filtroProveedor;
-        $sqlLogoProveedor = "SELECT logo, nombre FROM proveedores WHERE nombre = '" . $conn->real_escape_string($filtroProveedor) . "' LIMIT 1";
-        $resultLogoProveedor = $conn->query($sqlLogoProveedor);
-        if ($resultLogoProveedor && $row = $resultLogoProveedor->fetch_assoc()) {
-            $logoProveedorPath = $row['logo'];
-            if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
-                $tipo = mime_content_type($logoProveedorPath);
-                $data = file_get_contents($logoProveedorPath);
-                $logoProveedorBase64 = "data:" . $tipo . ";base64," . base64_encode($data);
-                $ext = pathinfo($logoProveedorPath, PATHINFO_EXTENSION);
-                $logoProveedorExt = $ext === 'jpg' ? 'jpeg' : $ext;
+// Logo del proveedor
+$logoProveedorBase64 = '';
+$logoProveedorExt = 'png';
+$logoProveedorPath = '';
+$logoProveedorWidth = 25;
+$logoProveedorHeight = 25;
+$nombreProveedor = '';
+$inicialesProveedor = '';
+
+if ($filtroProveedor !== '') {
+    $nombreProveedor = $filtroProveedor;
+    $sqlLogoProveedor = "SELECT logo, nombre FROM proveedores WHERE nombre = '" . $conn->real_escape_string($filtroProveedor) . "' LIMIT 1";
+    $resultLogoProveedor = $conn->query($sqlLogoProveedor);
+    if ($resultLogoProveedor && $row = $resultLogoProveedor->fetch_assoc()) {
+        $logoProveedorPath = $row['logo'];
+        if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
+            // Obtener dimensiones de la imagen
+            $size = getimagesize($logoProveedorPath);
+            $anchoOriginal = $size[0];
+            $altoOriginal = $size[1];
+            $ratio = $anchoOriginal / $altoOriginal;
+            
+            $tipo = mime_content_type($logoProveedorPath);
+            $data = file_get_contents($logoProveedorPath);
+            $logoProveedorBase64 = "data:" . $tipo . ";base64," . base64_encode($data);
+            $ext = pathinfo($logoProveedorPath, PATHINFO_EXTENSION);
+            $logoProveedorExt = $ext === 'jpg' ? 'jpeg' : $ext;
+            
+            // 🔥 USAR EL LADO MÁS PEQUEÑO para decidir el tamaño 🔥
+            $ladoMenor = min($anchoOriginal, $altoOriginal);
+            
+            if ($ladoMenor < 310) {
+                $maxSize = 45;  // Logo muy pequeño (menos de 300px en su lado menor)
+            } elseif ($ladoMenor < 500) {
+                $maxSize = 35;  // Logo pequeño (300-500px)
+            } elseif ($ladoMenor > 800) {
+                $maxSize = 20;  // Logo muy grande (más de 800px)
+            } else {
+                $maxSize = 25;  // Tamaño normal (500-800px)
+            }
+            
+            // Calcular tamaño proporcional
+            if ($anchoOriginal > $altoOriginal) {
+                // Logo horizontal (más ancho que alto)
+                $logoProveedorWidth = $maxSize;
+                $logoProveedorHeight = $maxSize / $ratio;
+            } else {
+                // Logo vertical o cuadrado
+                $logoProveedorHeight = $maxSize;
+                $logoProveedorWidth = $maxSize * $ratio;
             }
         }
-        // Obtener iniciales del proveedor (primeras dos letras en mayúscula)
-        $palabras = explode(' ', $nombreProveedor);
-        if (count($palabras) >= 2) {
-            $inicialesProveedor = strtoupper(substr($palabras[0], 0, 1) . substr($palabras[1], 0, 1));
-        } else {
-            $inicialesProveedor = strtoupper(substr($nombreProveedor, 0, 2));
-        }
     }
+    
+    // Obtener iniciales del proveedor
+    $palabras = explode(' ', $nombreProveedor);
+    if (count($palabras) >= 2) {
+        $inicialesProveedor = strtoupper(substr($palabras[0], 0, 1) . substr($palabras[1], 0, 1));
+    } else {
+        $inicialesProveedor = strtoupper(substr($nombreProveedor, 0, 2));
+    }
+}
     ?>
 
     function addProvFooter(doc, pageNum, totalPages) {
@@ -2267,12 +2342,18 @@ function generarPDFProveedores() {
     docProv.text("<?= strtoupper($nombreTienda) ?>", provPageWidth / 2, logoY + logoSize/2 + 4, { align: "center" });
     
     <?php if (!empty($logoProveedorBase64)): ?>
-    // Logo derecho real del proveedor
+    // Logo con tamaño proporcional
+    const logoX = provPageWidth - <?= $logoProveedorWidth ?> - 15;
     try {
-        docProv.addImage('<?= $logoProveedorBase64 ?>', '<?= $logoProveedorExt ?>', provPageWidth - 40, logoY, logoSize, logoSize);
-    } catch(e) {}
+        docProv.addImage('<?= $logoProveedorBase64 ?>', '<?= $logoProveedorExt ?>', logoX, logoY, <?= $logoProveedorWidth ?>, <?= $logoProveedorHeight ?>);
+    } catch(e) {
+        // Si falla la imagen, mostrar iniciales
+        docProv.setFontSize(26);
+        docProv.setTextColor(245, 64, 29);
+        docProv.setFont("helvetica", "bold");
+        docProv.text("<?= $inicialesProveedor ?>", provPageWidth - 50, logoY + logoSize/2 + 6);
+    }
     <?php else: ?>
-    // INICIALES GRANDES del proveedor (tamaño 18)
     docProv.setFontSize(26);
     docProv.setTextColor(245, 64, 29);
     docProv.setFont("helvetica", "bold");
