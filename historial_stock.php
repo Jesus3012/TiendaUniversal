@@ -235,7 +235,7 @@ $fecha_actual = date('Y-m-d');
                                         </select>
                                     </div>
                                 </div>
-                                <span class="badge-total" id="totalRegistros">Total: 0 registros</span>
+                                <span class="badge-total" id="totalRegistros" style="color: white !important;">Total: 0 registros</span>
                             </div>
                         </div>
                     </div>

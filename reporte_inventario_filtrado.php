@@ -38,9 +38,14 @@ if (empty($logoTiendaPath) || !file_exists($logoTiendaPath)) {
     }
 }
 
-// Obtener logo del proveedor (si hay filtro)
+// ============================================
+// LOGO DEL PROVEEDOR CON REDIMENSIONADO AUTOMÁTICO
+// ============================================
 $logoProveedorPath = '';
+$logoProveedorWidth = 22;  // Ancho calculado
+$logoProveedorHeight = 22; // Alto calculado
 $inicialesProveedor = '';
+
 if ($proveedor !== '') {
     $sqlLogoProveedor = "SELECT logo FROM proveedores WHERE nombre = ? LIMIT 1";
     $stmtLogo = $conn->prepare($sqlLogoProveedor);
@@ -49,8 +54,40 @@ if ($proveedor !== '') {
     $resultLogo = $stmtLogo->get_result();
     if ($resultLogo && $row = $resultLogo->fetch_assoc()) {
         $logoProveedorPath = $row['logo'] ?? '';
-        if (!empty($logoProveedorPath) && !file_exists($logoProveedorPath)) {
-            $logoProveedorPath = '';
+        if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
+            // Obtener dimensiones de la imagen
+            $size = getimagesize($logoProveedorPath);
+            if ($size !== false) {
+                $anchoOriginal = $size[0];
+                $altoOriginal = $size[1];
+                $ratio = $anchoOriginal / $altoOriginal;
+                
+                // USAR EL LADO MÁS PEQUEÑO para decidir el tamaño
+                $ladoMenor = min($anchoOriginal, $altoOriginal);
+                
+                if ($ladoMenor < 310) {
+                    $maxSize = 45;  // Logo muy pequeño (menos de 300px)
+                } elseif ($ladoMenor < 500) {
+                    $maxSize = 28;  // Logo pequeño (300-500px)
+                } elseif ($ladoMenor > 800) {
+                    $maxSize = 18;  // Logo muy grande (más de 800px)
+                } else {
+                    $maxSize = 22;  // Tamaño normal (500-800px)
+                }
+                
+                // Calcular tamaño proporcional
+                if ($anchoOriginal > $altoOriginal) {
+                    // Logo horizontal (más ancho que alto)
+                    $logoProveedorWidth = $maxSize;
+                    $logoProveedorHeight = $maxSize / $ratio;
+                } else {
+                    // Logo vertical o cuadrado
+                    $logoProveedorHeight = $maxSize;
+                    $logoProveedorWidth = $maxSize * $ratio;
+                }
+            }
+        } else {
+            $logoProveedorPath = ''; // No existe el archivo
         }
     }
     
@@ -177,14 +214,18 @@ class PDF extends FPDF
 {
     var $logoTiendaPath;
     var $logoProveedorPath;
+    var $logoProveedorWidth;
+    var $logoProveedorHeight;
     var $inicialesProveedor;
     var $nombreTienda;
     var $proveedorNombre;
     var $colorPrimary;
     
-    function SetLogos($logoTienda, $logoProveedor, $iniciales, $nombreTienda, $proveedorNombre) {
+    function SetLogos($logoTienda, $logoProveedor, $logoWidth, $logoHeight, $iniciales, $nombreTienda, $proveedorNombre) {
         $this->logoTiendaPath = $logoTienda;
         $this->logoProveedorPath = $logoProveedor;
+        $this->logoProveedorWidth = $logoWidth;
+        $this->logoProveedorHeight = $logoHeight;
         $this->inicialesProveedor = $iniciales;
         $this->nombreTienda = $nombreTienda;
         $this->proveedorNombre = $proveedorNombre;
@@ -203,19 +244,21 @@ class PDF extends FPDF
     {
         $pageWidth = $this->GetPageWidth();
         $logoY = 8;
-        $logoSize = 22;
+        $logoTiendaSize = 22;
         
-        // Logo Tienda (izquierda)
+        // Logo Tienda (izquierda) - tamaño fijo
         if (!empty($this->logoTiendaPath) && file_exists($this->logoTiendaPath)) {
-            $this->Image($this->logoTiendaPath, 12, $logoY, $logoSize, $logoSize);
+            $this->Image($this->logoTiendaPath, 12, $logoY, $logoTiendaSize, $logoTiendaSize);
         }
         
-        // Logo Proveedor o Iniciales (derecha) - solo si hay filtro de proveedor
+        // Logo Proveedor o Iniciales (derecha) - CON TAMAÑO PROPORCIONAL
         if (!empty($this->proveedorNombre)) {
             if (!empty($this->logoProveedorPath) && file_exists($this->logoProveedorPath)) {
-                $this->Image($this->logoProveedorPath, $pageWidth - 35, $logoY, $logoSize, $logoSize);
+                // Posición X: borde derecho - ancho del logo - margen
+                $logoX = $pageWidth - $this->logoProveedorWidth - 12;
+                $this->Image($this->logoProveedorPath, $logoX, $logoY, $this->logoProveedorWidth, $this->logoProveedorHeight);
             } else {
-                // Solo texto con las iniciales, sin cuadro
+                // Solo texto con las iniciales
                 $textX = $pageWidth - 50;
                 $textY = $logoY + 10;
                 $this->SetFont('Arial', 'B', 24);
@@ -234,10 +277,10 @@ class PDF extends FPDF
         // Línea decorativa superior naranja
         $this->SetDrawColor(255, 140, 0);
         $this->SetLineWidth(1.5);
-        $this->Line(12, $logoY + $logoSize + 6, $pageWidth - 12, $logoY + $logoSize + 6);
+        $this->Line(12, $logoY + $logoTiendaSize + 6, $pageWidth - 12, $logoY + $logoTiendaSize + 6);
         
         // Título principal
-        $this->SetY($logoY + $logoSize + 14);
+        $this->SetY($logoY + $logoTiendaSize + 14);
         $this->SetFont('Arial', 'B', 20);
         $this->SetTextColor(255, 140, 0);
         $this->Cell(0, 10, 'REPORTE DE INVENTARIO', 0, 1, 'C');
@@ -466,7 +509,7 @@ class PDF extends FPDF
         $this->SetTextColor(80, 80, 80);
         $this->Cell(50, 8, 'Productos agotados:', 0, 0, 'L');
         $this->SetFont('Arial', 'B', 12);
-        $this->SetTextColor(220, 53, 69);
+        $this->SetTextColor(220, 53, 69);  // ← CORREGIDO: solo números, sin caracteres extraños
         $this->Cell(40, 8, number_format($totalSinStock), 0, 1, 'L');
         
         $this->SetY($this->GetY() + 5);
@@ -492,7 +535,7 @@ class PDF extends FPDF
 
 // Crear instancia del PDF
 $pdf = new PDF();
-$pdf->SetLogos($logoTiendaPath, $logoProveedorPath, $inicialesProveedor, $nombreTienda, $proveedor);
+$pdf->SetLogos($logoTiendaPath, $logoProveedorPath, $logoProveedorWidth, $logoProveedorHeight, $inicialesProveedor, $nombreTienda, $proveedor);
 $pdf->AddPage();
 
 // Mostrar filtros aplicados

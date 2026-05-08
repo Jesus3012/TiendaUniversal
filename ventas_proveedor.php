@@ -209,7 +209,6 @@ while ($p = $provResult->fetch_assoc()) {
                                             </li>
                                         </ul>
                                     </div>
-
                                     <!-- Botón PDF -->
                                     <div class="dropdown">
                                         <button class="btn btn-pdf dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #ef4444; border: none; color: white; border-radius: 40px; padding: 8px 18px; font-size: 0.75rem; font-weight: 600; transition: all 0.3s;">
@@ -217,7 +216,7 @@ while ($p = $provResult->fetch_assoc()) {
                                         </button>
                                         <ul class="dropdown-menu p-3" style="min-width: 280px; border-radius: 16px; border: none; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
                                             <li>
-                                                <form id="pdfForm" action="reporte_pdf.php" method="GET" target="_blank">
+                                                <form id="pdfForm" action="reporte_pdf.php" method="GET">
                                                     <input type="hidden" name="proveedor" value="<?= htmlspecialchars($proveedorSeleccionado) ?>">
                                                     <div class="mb-3">
                                                         <label class="small fw-bold text-muted mb-1">Fecha inicio</label>
@@ -227,7 +226,7 @@ while ($p = $provResult->fetch_assoc()) {
                                                         <label class="small fw-bold text-muted mb-1">Fecha fin</label>
                                                         <input type="date" name="fecha_fin" class="form-control form-control-sm" required style="border-radius: 10px; border: 1px solid #e2e8f0;">
                                                     </div>
-                                                    <button type="submit" class="btn w-100 mt-2" style="background: #ef4444; color: white; border-radius: 40px; padding: 8px; font-size: 0.75rem; font-weight: 600;">
+                                                    <button type="button" id="btnGenerarPDF" class="btn w-100 mt-2" style="background: #ef4444; color: white; border-radius: 40px; padding: 8px; font-size: 0.75rem; font-weight: 600;">
                                                         <i class="fas fa-download me-1"></i> Exportar a PDF
                                                     </button>
                                                 </form>
@@ -715,6 +714,67 @@ document.addEventListener('DOMContentLoaded', function() {
     setDefaultDates();
 
 });
+
+// Función para generar PDF con descarga automática + nueva ventana
+document.getElementById('btnGenerarPDF')?.addEventListener('click', function() {
+    const form = document.getElementById('pdfForm');
+    const fechaInicio = form.querySelector('input[name="fecha_inicio"]').value;
+    const fechaFin = form.querySelector('input[name="fecha_fin"]').value;
+    const proveedor = form.querySelector('input[name="proveedor"]').value;
+    
+    if (!fechaInicio || !fechaFin) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Fechas requeridas',
+            text: 'Por favor selecciona ambas fechas',
+            confirmButtonColor: '#ef4444'
+        });
+        return;
+    }
+    
+    // Mostrar loading
+    Swal.fire({
+        title: 'Generando PDF...',
+        text: 'Por favor espera',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // Construir URL con parámetros
+    const url = `reporte_pdf.php?proveedor=${encodeURIComponent(proveedor)}&fecha_inicio=${encodeURIComponent(fechaInicio)}&fecha_fin=${encodeURIComponent(fechaFin)}`;
+    
+    // Opción 1: Abrir en nueva ventana y descargar automáticamente
+    // Esto funciona si el PHP envía los headers correctos (Content-Disposition: attachment)
+    
+    // Crear un enlace temporal para descargar
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.download = `reporte_${proveedor}_${fechaInicio}_${fechaFin}.pdf`;
+    
+    // Simular clic para descargar
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // También abrir en nueva ventana
+    window.open(url, '_blank');
+    
+    // Cerrar SweetAlert después de un momento
+    setTimeout(() => {
+        Swal.close();
+        Swal.fire({
+            icon: 'success',
+            title: 'PDF Generado',
+            text: 'El PDF se ha descargado y abierto en una nueva pestaña',
+            timer: 2000,
+            showConfirmButton: false
+        });
+    }, 1500);
+});
+
 </script>
 
 <?php include('includes/footer.php'); ?>
