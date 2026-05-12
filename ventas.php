@@ -87,7 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 
                 try {
                     // ================= GENERAR FOLIO NUMÉRICO SECUENCIAL =================
-                    // Obtener el último folio con formato 'Venta_codigo_X' de la tabla ventas
                     $folioQuery = $conn->query("
                         SELECT folio_ticket FROM ventas 
                         WHERE folio_ticket LIKE 'Venta_codigo_%' 
@@ -310,6 +309,7 @@ include('includes/navbar.php');
 
 // Pasar el carrito de sesión a JavaScript
 $carrito_json = json_encode($_SESSION['carrito']);
+$rol_usuario = $_SESSION['rol'] ?? 'vendedor';
 ?>
 
 <!-- ESTILOS EXTERNOS -->
@@ -318,7 +318,8 @@ $carrito_json = json_encode($_SESSION['carrito']);
 <div class="content-wrapper">
     <div class="container-fluid">
         
-        <!-- BREADCRUMB BLANCO -->
+        <!-- BREADCRUMB BLANCO - SOLO PARA ADMINISTRADOR -->
+        <?php if ($rol_usuario === 'administrador'): ?>
         <div class="custom-breadcrumb">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
@@ -338,6 +339,7 @@ $carrito_json = json_encode($_SESSION['carrito']);
                 </ol>
             </nav>
         </div>
+        <?php endif; ?>
 
         <div class="row justify-content-center">
             <div class="col-12">
@@ -387,10 +389,10 @@ $carrito_json = json_encode($_SESSION['carrito']);
                                 <input type="email" class="form-control pos-input" name="correo_cliente" id="correo_cliente" placeholder="cliente@ejemplo.com">
                                 <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> Opcional - enviaremos el ticket por correo</small>
                             </div>
-
+                            
                             <!-- MÉTODOS DE PAGO -->
                             <div class="metodos-container">
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this)">
+                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
                                     <input type="radio" name="metodo_pago" value="efectivo" checked>
                                     <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
                                     <div class="metodo-content">
@@ -399,7 +401,7 @@ $carrito_json = json_encode($_SESSION['carrito']);
                                     </div>
                                 </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this)">
+                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
                                     <input type="radio" name="metodo_pago" value="transferencia">
                                     <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
                                     <div class="metodo-content">
@@ -408,16 +410,16 @@ $carrito_json = json_encode($_SESSION['carrito']);
                                     </div>
                                 </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this)">
+                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
                                     <input type="radio" name="metodo_pago" value="tarjeta_debito">
                                     <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
                                     <div class="metodo-content">
-                                        <img src="https://upload.wikimedia.org/wikipedia/commons/4/41/Visa_Logo.png" class="icono-metodo">
+                                        <img src="https://brandeps.com/logo-download/V/Visa-logo-vector-01.svg" class="icono-metodo visa-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/349/349221.png'">
                                         <span>Tarjeta Débito</span>
                                     </div>
                                 </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this)">
+                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
                                     <input type="radio" name="metodo_pago" value="tarjeta_credito">
                                     <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
                                     <div class="metodo-content">
@@ -426,7 +428,7 @@ $carrito_json = json_encode($_SESSION['carrito']);
                                     </div>
                                 </label>
                             </div>
-
+                            
                             <div id="extraCampos"></div>
 
                             <button type="button" class="pos-btn-venta" onclick="confirmarVenta()" id="btnConfirmar">
@@ -541,7 +543,7 @@ async function agregarProducto() {
 function renderCarrito() {
     const body = document.getElementById('carritoBody');
     if (carrito.length === 0) { 
-        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></td>'; 
+        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></tr>'; 
         document.getElementById('total').value = '0.00'; 
         document.getElementById('cambio').value = '0.00'; 
         return; 

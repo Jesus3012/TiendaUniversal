@@ -149,7 +149,6 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
           <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
-          <a href="cambiar_password.php"><i class="fas fa-key"></i> Cambiar contraseña</a>
         <?php endif; ?>
         
         <a href="logout.php" style="margin-top: 12px;"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
@@ -207,7 +206,6 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
         <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
-        <a href="cambiar_password.php"><i class="fas fa-key"></i><span>Cambiar contraseña</span></a>
       <?php endif; ?>
     </div>
 

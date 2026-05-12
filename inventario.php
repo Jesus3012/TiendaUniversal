@@ -7,6 +7,7 @@ include 'includes/navbar.php';
 /* ================== CONSTANTES Y CONFIGURACIÓN ================== */
 define('STOCK_BAJO_LIMITE', 5);
 define('IMAGEN_POR_DEFECTO', 'uploads/no-image.png');
+define('PRODUCTOS_POR_PAGINA', 12);
 
 // Verificar si la imagen por defecto existe
 $imagen_default_path = $_SERVER['DOCUMENT_ROOT'] . '/uploads/no-image.png';
@@ -16,92 +17,52 @@ if (!file_exists($imagen_default_path)) {
     define('IMAGEN_POR_DEFECTO_URL', '/uploads/no-image.png');
 }
 
-// Función para determinar icono según categoría (solo para productos sin imagen)
+// Función para determinar icono según categoría
 function getProductIcon($nombre, $categoria = null) {
     $nombre_lower = strtolower($nombre);
     $categoria_lower = $categoria ? strtolower($categoria) : '';
-    
     $texto_busqueda = $categoria_lower ?: $nombre_lower;
     
-    // Electrónica
-    if (preg_match('/(electronica|telefono|celular|smartphone|tablet|computadora|laptop|pc|monitor|teclado|mouse|audifonos|pantalla|impresora|cargador|cable|adaptador|bateria|pila|usb|memoria|disco|tarjeta)/', $texto_busqueda)) {
-        return 'fas fa-microchip';
-    }
-    // Ropa
-    if (preg_match('/(ropa|camisa|pantalon|vestido|chaqueta|sueter|short|falda|jean|blusa|camiseta)/', $texto_busqueda)) {
-        return 'fas fa-tshirt';
-    }
-    // Calzado
-    if (preg_match('/(calzado|zapato|tenis|sandalia|botas|zapatilla|chancla)/', $texto_busqueda)) {
-        return 'fas fa-shoe-prints';
-    }
-    // Alimentos
-    if (preg_match('/(alimento|comida|bebida|refresco|agua|snack|galleta|pan|leche|jugo|gaseosa|cerveza|vino)/', $texto_busqueda)) {
-        return 'fas fa-utensils';
-    }
-    // Hogar
-    if (preg_match('/(hogar|mueble|silla|mesa|escritorio|estante|cocina|baño|sofa|cama|ropero|armario)/', $texto_busqueda)) {
-        return 'fas fa-couch';
-    }
-    // Papelería
-    if (preg_match('/(papeleria|oficina|papel|lapiz|pluma|cuaderno|libreta|escritura|marcador|borrador|regla|folder|carpeta)/', $texto_busqueda)) {
-        return 'fas fa-pen';
-    }
-    // Herramientas
-    if (preg_match('/(herramienta|martillo|destornillador|pinza|taladro|sierra|llave|alicate|nivel|cincel)/', $texto_busqueda)) {
-        return 'fas fa-tools';
-    }
-    // Belleza
-    if (preg_match('/(belleza|shampoo|jabon|crema|maquillaje|perfume|cosmetico|desodorante|pasta|cepillo|peine)/', $texto_busqueda)) {
-        return 'fas fa-spa';
-    }
-    // Deportes
-    if (preg_match('/(deporte|pelota|bicicleta|pesa|gimnasio|balon|raqueta|casco|guante)/', $texto_busqueda)) {
-        return 'fas fa-futbol';
-    }
-    // Libros
-    if (preg_match('/(libro|revista|lectura|texto|manual|guia|diccionario|enciclopedia)/', $texto_busqueda)) {
-        return 'fas fa-book';
-    }
-    // Juguetes
-    if (preg_match('/(juguete|muñeca|carro|peluche|lego|rompecabezas|bloques|consola|videojuego)/', $texto_busqueda)) {
-        return 'fas fa-gamepad';
-    }
-    // Limpieza
-    if (preg_match('/(limpieza|limpia|detergente|cloro|escoba|trapeador|recogedor|bolsa)/', $texto_busqueda)) {
-        return 'fas fa-pump-soap';
-    }
+    if (preg_match('/(electronica|telefono|celular|smartphone|tablet|computadora|laptop|pc|monitor|teclado|mouse|audifonos|pantalla|impresora|cargador|cable|adaptador|bateria|pila|usb|memoria|disco|tarjeta)/', $texto_busqueda)) return 'fas fa-microchip';
+    if (preg_match('/(ropa|camisa|pantalon|vestido|chaqueta|sueter|short|falda|jean|blusa|camiseta)/', $texto_busqueda)) return 'fas fa-tshirt';
+    if (preg_match('/(calzado|zapato|tenis|sandalia|botas|zapatilla|chancla)/', $texto_busqueda)) return 'fas fa-shoe-prints';
+    if (preg_match('/(alimento|comida|bebida|refresco|agua|snack|galleta|pan|leche|jugo|gaseosa|cerveza|vino)/', $texto_busqueda)) return 'fas fa-utensils';
+    if (preg_match('/(hogar|mueble|silla|mesa|escritorio|estante|cocina|baño|sofa|cama|ropero|armario)/', $texto_busqueda)) return 'fas fa-couch';
+    if (preg_match('/(papeleria|oficina|papel|lapiz|pluma|cuaderno|libreta|escritura|marcador|borrador|regla|folder|carpeta)/', $texto_busqueda)) return 'fas fa-pen';
+    if (preg_match('/(herramienta|martillo|destornillador|pinza|taladro|sierra|llave|alicate|nivel|cincel)/', $texto_busqueda)) return 'fas fa-tools';
+    if (preg_match('/(belleza|shampoo|jabon|crema|maquillaje|perfume|cosmetico|desodorante|pasta|cepillo|peine)/', $texto_busqueda)) return 'fas fa-spa';
+    if (preg_match('/(deporte|pelota|bicicleta|pesa|gimnasio|balon|raqueta|casco|guante)/', $texto_busqueda)) return 'fas fa-futbol';
+    if (preg_match('/(libro|revista|lectura|texto|manual|guia|diccionario|enciclopedia)/', $texto_busqueda)) return 'fas fa-book';
+    if (preg_match('/(juguete|muñeca|carro|peluche|lego|rompecabezas|bloques|consola|videojuego)/', $texto_busqueda)) return 'fas fa-gamepad';
+    if (preg_match('/(limpieza|limpia|detergente|cloro|escoba|trapeador|recogedor|bolsa)/', $texto_busqueda)) return 'fas fa-pump-soap';
     
     return 'fas fa-box';
 }
 
-// Función para obtener color del icono
 function getIconColor($iconClass) {
     $colors = [
-        'fa-microchip' => 'primary',
-        'fa-tshirt' => 'info',
-        'fa-shoe-prints' => 'warning',
-        'fa-utensils' => 'success',
-        'fa-couch' => 'secondary',
-        'fa-pen' => 'indigo',
-        'fa-tools' => 'danger',
-        'fa-spa' => 'pink',
-        'fa-futbol' => 'teal',
-        'fa-book' => 'purple',
-        'fa-gamepad' => 'orange',
-        'fa-pump-soap' => 'cyan',
-        'fa-box' => 'gray'
+        'fa-microchip' => 'primary', 'fa-tshirt' => 'info', 'fa-shoe-prints' => 'warning',
+        'fa-utensils' => 'success', 'fa-couch' => 'secondary', 'fa-pen' => 'indigo',
+        'fa-tools' => 'danger', 'fa-spa' => 'pink', 'fa-futbol' => 'teal',
+        'fa-book' => 'purple', 'fa-gamepad' => 'orange', 'fa-pump-soap' => 'cyan', 'fa-box' => 'gray'
     ];
-    
     foreach ($colors as $icon => $color) {
-        if (strpos($iconClass, $icon) !== false) {
-            return $color;
-        }
+        if (strpos($iconClass, $icon) !== false) return $color;
     }
     return 'gray';
 }
 
-/* ================== CONSULTA ================== */
+// Obtener página actual
+$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_actual - 1) * PRODUCTOS_POR_PAGINA;
+
+// Contar total de productos
+$count_query = "SELECT COUNT(*) as total FROM productos WHERE tipo_inventario = 'producto' OR tipo_inventario IS NULL OR tipo_inventario = ''";
+$count_result = $conn->query($count_query);
+$total_productos = $count_result ? $count_result->fetch_assoc()['total'] : 0;
+$total_paginas = ceil($total_productos / PRODUCTOS_POR_PAGINA);
+
+// Consulta con paginación
 $query = "
     SELECT 
         p.*,
@@ -116,8 +77,7 @@ $query = "
             ELSE 1 
         END,
         p.nombre ASC
-    LIMIT 50
-";
+    LIMIT " . PRODUCTOS_POR_PAGINA . " OFFSET " . $offset;
 
 $result = $conn->query($query);
 if (!$result) {
@@ -131,15 +91,10 @@ if (!$result) {
     }
     $error_db = false;
 }
-
-// Contar total de productos
-$count_query = "SELECT COUNT(*) as total FROM productos WHERE tipo_inventario = 'producto' OR tipo_inventario IS NULL OR tipo_inventario = ''";
-$count_result = $conn->query($count_query);
-$total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count($productos);
 ?>
 
 <style>
-/* ================== FONDO GENERAL (IGUAL AL ORIGINAL) ================== */
+/* ================== ESTILOS EXISTENTES ================== */
 .content-wrapper {
     background: linear-gradient(180deg, #FFF4E6, #FFFFFF);
     min-height: 100vh;
@@ -147,14 +102,12 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     border-radius: 18px 0 0 18px;
 }
 
-/* ================== HEADER (IGUAL AL ORIGINAL) ================== */
 .page-title {
     font-size: 1.9rem;
     font-weight: 700;
     color: #2c2c2c;
 }
 
-/* ================== BUSCADOR (IGUAL AL ORIGINAL) ================== */
 .buscador-box {
     max-width: 360px;
 }
@@ -173,7 +126,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     color: white;
 }
 
-/* ================== CARD PRODUCTO MEJORADA ================== */
 .product-card-pro {
     background: #fff;
     border-radius: 18px;
@@ -191,7 +143,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     box-shadow: 0 18px 45px rgba(0,0,0,0.12);
 }
 
-/* ================== IMAGEN ================== */
 .product-image-wrapper {
     height: 190px;
     overflow: hidden;
@@ -211,7 +162,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     transform: scale(1.08);
 }
 
-/* ================== ICONO (PARA PRODUCTOS SIN IMAGEN) ================== */
 .product-icon-wrapper {
     height: 190px;
     display: flex;
@@ -226,7 +176,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
 }
 
-/* Colores de iconos */
 .icon-primary { color: #007bff; }
 .icon-info { color: #17a2b8; }
 .icon-warning { color: #ffc107; }
@@ -241,7 +190,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 .icon-cyan { color: #17a2b8; }
 .icon-gray { color: #6c757d; }
 
-/* ================== BADGE STOCK ================== */
 .badge-stock {
     position: absolute;
     top: 14px;
@@ -258,7 +206,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 .badge-warning { background: #ffc107; color: #212529; }
 .badge-danger { background: #dc3545; color: white; }
 
-/* ================== CONTENIDO DE LA CARD ================== */
 .card-content {
     padding: 18px;
     flex: 1;
@@ -290,7 +237,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     color: #adb5bd;
 }
 
-/* ================== MÉTRICAS MEJORADAS ================== */
 .product-metrics {
     display: flex;
     flex-wrap: wrap;
@@ -341,9 +287,7 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 .metric-value.text-success { color: #28a745; }
 .metric-value.text-danger { color: #dc3545; }
 .metric-value.text-primary { color: #007bff; }
-.metric-value.text-warning { color: #ffc107; }
 
-/* ================== CÓDIGOS ================== */
 .codigo-container {
     margin-top: auto;
     padding-top: 15px;
@@ -356,11 +300,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 .codigo-label {
     font-size: 0.8rem;
     color: #6c757d;
-}
-
-.codigo-label i {
-    margin-right: 4px;
-    color: #adb5bd;
 }
 
 .codigo-toggle {
@@ -379,11 +318,87 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     color: white;
 }
 
-/* ================== SKELETON LOADING ================== */
+/* ================== PAGINACIÓN ================== */
+.pagination-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 40px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.pagination-btn {
+    padding: 10px 20px;
+    background: white;
+    border: 2px solid #007bff;
+    border-radius: 40px;
+    color: #007bff;
+    font-weight: 600;
+    transition: all 0.3s;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #007bff;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-info {
+    background: #f8f9fa;
+    padding: 8px 20px;
+    border-radius: 40px;
+    color: #6c757d;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.page-number {
+    min-width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    color: #495057;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 0 3px;
+}
+
+.page-number:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.page-number.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+.page-number.disabled {
+    cursor: default;
+    background: transparent;
+    border: none;
+}
+
+/* Skeleton loading */
 .skeleton-card {
     background: #fff;
     border-radius: 18px;
-    padding: 0;
     overflow: hidden;
     box-shadow: 0 10px 26px rgba(0,0,0,0.08);
 }
@@ -412,28 +427,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     100% { background-position: -200% 0; }
 }
 
-/* ================== BOTÓN CARGAR MÁS ================== */
-.btn-load-more {
-    background: #fff;
-    border: 2px solid #007bff;
-    color: #007bff;
-    padding: 12px 35px;
-    border-radius: 30px;
-    font-weight: 600;
-    transition: all 0.3s;
-    margin: 20px 0;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,123,255,0.1);
-}
-
-.btn-load-more:hover {
-    background: #007bff;
-    color: white;
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(0,123,255,0.3);
-}
-
-/* ================== MENSAJE SIN RESULTADOS ================== */
 .sin-resultados {
     text-align: center;
     padding: 60px 20px;
@@ -449,12 +442,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     margin-bottom: 20px;
 }
 
-.sin-resultados h4 {
-    color: #495057;
-    margin-bottom: 10px;
-}
-
-/* ================== TOAST PERSONALIZADO ================== */
 .toast-custom {
     position: fixed;
     bottom: 20px;
@@ -474,7 +461,6 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
     to { transform: translateX(0); opacity: 1; }
 }
 
-/* ================== MODAL DE CÓDIGOS ================== */
 .codigo-chip {
     background: #f1f3f5;
     border-radius: 8px;
@@ -489,19 +475,16 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 .codigo-chip:hover {
     background: #007bff;
     color: white;
-    border-color: #0056b3;
     transform: scale(1.02);
 }
 
 .codigo-chip.copiado {
     background: #28a745;
     color: white;
-    border-color: #1e7e34;
 }
 </style>
 
 <div class="content-wrapper">
-    <!-- Content Header -->
     <section class="content-header mb-4">
         <div class="container-fluid">
             <div class="row align-items-center">
@@ -524,32 +507,28 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
                 </div>
             </div>
             
-            <!-- Contador de productos -->
             <div class="row mt-3">
                 <div class="col-12">
                     <small class="text-muted">
                         <i class="fas fa-cube mr-1"></i> 
-                        Mostrando <span id="productos-mostrados">0</span> de <span id="productos-totales"><?= $total_productos ?></span> productos
+                        Mostrando <span id="productos-mostrados"><?= count($productos) ?></span> de <span id="productos-totales"><?= $total_productos ?></span> productos
+                        (Página <span id="pagina-actual"><?= $pagina_actual ?></span> de <span id="total-paginas"><?= $total_paginas ?></span>)
                     </small>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
             
             <?php if ($error_db): ?>
-                <div class="alert alert-danger text-center" role="alert">
-                    <i class="fas fa-exclamation-triangle mr-2"></i>
-                    Error al cargar los productos. Por favor, intenta de nuevo.
-                </div>
+                <div class="alert alert-danger text-center">Error al cargar los productos.</div>
             <?php endif; ?>
             
             <!-- Skeleton loading -->
             <div id="skeletonLoader" class="row">
-                <?php for ($i = 0; $i < 8; $i++): ?>
+                <?php for ($i = 0; $i < PRODUCTOS_POR_PAGINA; $i++): ?>
                 <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4">
                     <div class="skeleton-card">
                         <div class="skeleton-image"></div>
@@ -564,390 +543,400 @@ $total_productos = $count_result ? $count_result->fetch_assoc()['total'] : count
 
             <!-- Productos grid -->
             <div class="row" id="listaProductos" style="display: none;">
-                
-                <?php if (!empty($productos)): ?>
-                    <?php foreach ($productos as $row): ?>
-                        <?php
-                            $nombre = htmlspecialchars($row['nombre']);
-                            $categoria = htmlspecialchars($row['categoria'] ?? 'Sin categoría');
-                            $stock  = (int)$row['cantidad'];
-                            $precio = number_format($row['precio_venta'], 2);
-                            $precio_compra = number_format($row['precio_compra'], 2);
-                            $codigo = $row['codigos_agrupados'] ?? '';
-                            $tiene_imagen = !empty($row['imagen']);
-                            $imagen = $tiene_imagen ? htmlspecialchars($row['imagen']) : IMAGEN_POR_DEFECTO_URL;
-                            
-                            // Badge de stock
-                            if ($stock == 0) {
-                                $badge_class = 'badge-danger';
-                                $badge_text = 'Sin stock';
-                                $badge_icon = 'fa-times-circle';
-                            } elseif ($stock <= STOCK_BAJO_LIMITE) {
-                                $badge_class = 'badge-warning';
-                                $badge_text = "Stock bajo ($stock)";
-                                $badge_icon = 'fa-exclamation-circle';
-                            } else {
-                                $badge_class = 'badge-success';
-                                $badge_text = "$stock disponibles";
-                                $badge_icon = 'fa-check-circle';
-                            }
-                            
-                            // Calcular margen
-                            $margen = (($row['precio_venta'] - $row['precio_compra']) / $row['precio_compra']) * 100;
-                            $margen_class = $margen > 30 ? 'text-success' : ($margen > 15 ? 'text-warning' : 'text-danger');
-                            
-                            // Icono para productos sin imagen
-                            $iconClass = getProductIcon($nombre, $categoria);
-                            $iconColor = getIconColor($iconClass);
-                        ?>
-
-                        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4 product-card"
-                             data-nombre="<?= strtolower($nombre); ?>"
-                             data-categoria="<?= strtolower($categoria); ?>"
-                             data-producto-id="<?= $row['id']; ?>">
-
-                            <div class="product-card-pro position-relative">
-                                <span class="badge <?= $badge_class; ?> badge-stock">
-                                    <i class="fas <?= $badge_icon ?> mr-1"></i>
-                                    <?= $badge_text; ?>
-                                </span>
-
-                                <?php if ($tiene_imagen): ?>
-                                    <!-- Mostrar imagen si existe -->
-                                    <div class="product-image-wrapper">
-                                        <img src="<?= $imagen ?>" 
-                                             class="product-image" 
-                                             loading="lazy"
-                                             alt="<?= $nombre ?>"
-                                             onerror="this.src='<?= IMAGEN_POR_DEFECTO_URL ?>'">
+                <?php foreach ($productos as $row): ?>
+                    <?php
+                        $nombre = htmlspecialchars($row['nombre']);
+                        $categoria = htmlspecialchars($row['categoria'] ?? 'Sin categoría');
+                        $stock = (int)$row['cantidad'];
+                        $precio = number_format($row['precio_venta'], 2);
+                        $precio_compra = number_format($row['precio_compra'], 2);
+                        $codigo = $row['codigos_agrupados'] ?? '';
+                        $tiene_imagen = !empty($row['imagen']);
+                        $imagen = $tiene_imagen ? htmlspecialchars($row['imagen']) : IMAGEN_POR_DEFECTO_URL;
+                        
+                        if ($stock == 0) {
+                            $badge_class = 'badge-danger';
+                            $badge_text = 'Sin stock';
+                            $badge_icon = 'fa-times-circle';
+                        } elseif ($stock <= STOCK_BAJO_LIMITE) {
+                            $badge_class = 'badge-warning';
+                            $badge_text = "Stock bajo ($stock)";
+                            $badge_icon = 'fa-exclamation-circle';
+                        } else {
+                            $badge_class = 'badge-success';
+                            $badge_text = "$stock disponibles";
+                            $badge_icon = 'fa-check-circle';
+                        }
+                        
+                        $margen = (($row['precio_venta'] - $row['precio_compra']) / max(0.01, $row['precio_compra'])) * 100;
+                        $margen_class = $margen > 30 ? 'text-success' : ($margen > 15 ? 'text-warning' : 'text-danger');
+                        $iconClass = getProductIcon($nombre, $categoria);
+                        $iconColor = getIconColor($iconClass);
+                    ?>
+                    <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4 product-card"
+                         data-nombre="<?= strtolower($nombre); ?>"
+                         data-categoria="<?= strtolower($categoria); ?>">
+                        <div class="product-card-pro position-relative">
+                            <span class="badge <?= $badge_class; ?> badge-stock">
+                                <i class="fas <?= $badge_icon ?> mr-1"></i> <?= $badge_text; ?>
+                            </span>
+                            <?php if ($tiene_imagen): ?>
+                                <div class="product-image-wrapper">
+                                    <img src="<?= $imagen ?>" class="product-image" loading="lazy" alt="<?= $nombre ?>"
+                                         onerror="this.src='<?= IMAGEN_POR_DEFECTO_URL ?>'">
+                                </div>
+                            <?php else: ?>
+                                <div class="product-icon-wrapper">
+                                    <i class="<?= $iconClass ?> product-icon icon-<?= $iconColor ?>"></i>
+                                </div>
+                            <?php endif; ?>
+                            <div class="card-content">
+                                <h5 class="product-title" title="<?= $nombre ?>"><?= $nombre ?></h5>
+                                <div class="product-categoria"><i class="fas fa-tag"></i> <?= $categoria ?></div>
+                                <div class="product-metrics">
+                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-tag"></i></div><div class="metric-content"><div class="metric-label">Venta</div><div class="metric-value text-primary">$<?= $precio ?></div></div></div>
+                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-cubes"></i></div><div class="metric-content"><div class="metric-label">Stock</div><div class="metric-value <?= $stock > 0 ? 'text-success' : 'text-danger' ?>"><?= $stock ?></div></div></div>
+                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-shopping-cart"></i></div><div class="metric-content"><div class="metric-label">Compra</div><div class="metric-value">$<?= $precio_compra ?></div></div></div>
+                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-chart-line"></i></div><div class="metric-content"><div class="metric-label">Margen</div><div class="metric-value <?= $margen_class ?>"><?= number_format($margen, 1) ?>%</div></div></div>
+                                </div>
+                                <?php if (!empty($codigo)): ?>
+                                    <?php $codigosArray = array_map('trim', explode(',', $codigo)); $codigoPrincipal = $codigosArray[0]; $tieneMultiples = count($codigosArray) > 1; ?>
+                                    <div class="codigo-container">
+                                        <span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span>
+                                        <span class="codigo-toggle" data-codigos='<?= htmlspecialchars(json_encode($codigosArray)) ?>' data-producto='<?= htmlspecialchars($nombre) ?>'>
+                                            <?= htmlspecialchars($codigoPrincipal) ?>
+                                            <?php if ($tieneMultiples): ?><span class="badge badge-info badge-pill ml-1">+<?= count($codigosArray)-1 ?></span><?php endif; ?>
+                                        </span>
                                     </div>
                                 <?php else: ?>
-                                    <!-- Mostrar icono si no hay imagen -->
-                                    <div class="product-icon-wrapper">
-                                        <i class="<?= $iconClass ?> product-icon icon-<?= $iconColor ?>"></i>
-                                    </div>
+                                    <div class="codigo-container"><span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span><span class="text-muted">---</span></div>
                                 <?php endif; ?>
-
-                                <div class="card-content">
-                                    <h5 class="product-title" title="<?= $nombre ?>">
-                                        <?= $nombre ?>
-                                    </h5>
-                                    
-                                    <div class="product-categoria">
-                                        <i class="fas fa-tag"></i> <?= $categoria ?>
-                                    </div>
-
-                                    <!-- Métricas en grid -->
-                                    <div class="product-metrics">
-                                        <div class="metric-item">
-                                            <div class="metric-icon">
-                                                <i class="fas fa-tag"></i>
-                                            </div>
-                                            <div class="metric-content">
-                                                <div class="metric-label">Venta</div>
-                                                <div class="metric-value text-primary">$<?= $precio ?></div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="metric-item">
-                                            <div class="metric-icon">
-                                                <i class="fas fa-cubes"></i>
-                                            </div>
-                                            <div class="metric-content">
-                                                <div class="metric-label">Stock</div>
-                                                <div class="metric-value <?= $stock > 0 ? 'text-success' : 'text-danger' ?>">
-                                                    <?= $stock ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="metric-item">
-                                            <div class="metric-icon">
-                                                <i class="fas fa-shopping-cart"></i>
-                                            </div>
-                                            <div class="metric-content">
-                                                <div class="metric-label">Compra</div>
-                                                <div class="metric-value">$<?= $precio_compra ?></div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="metric-item">
-                                            <div class="metric-icon">
-                                                <i class="fas fa-chart-line"></i>
-                                            </div>
-                                            <div class="metric-content">
-                                                <div class="metric-label">Margen</div>
-                                                <div class="metric-value <?= $margen_class ?>">
-                                                    <?= number_format($margen, 1) ?>%
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Códigos de barras -->
-                                    <?php if (!empty($codigo)): ?>
-                                        <?php
-                                        $codigosArray = array_map('trim', explode(',', $codigo));
-                                        $codigoPrincipal = $codigosArray[0];
-                                        $tieneMultiples = count($codigosArray) > 1;
-                                        ?>
-                                        <div class="codigo-container">
-                                            <span class="codigo-label">
-                                                <i class="fas fa-barcode"></i> Código:
-                                            </span>
-                                            <span class="codigo-toggle"
-                                                  data-codigos='<?= htmlspecialchars(json_encode($codigosArray)) ?>'
-                                                  data-producto='<?= htmlspecialchars($nombre) ?>'
-                                                  title="Haz clic para ver detalles">
-                                                <?= htmlspecialchars($codigoPrincipal) ?>
-                                                <?php if ($tieneMultiples): ?>
-                                                    <span class="badge badge-info badge-pill ml-1">+<?= count($codigosArray)-1 ?></span>
-                                                <?php endif; ?>
-                                            </span>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="codigo-container">
-                                            <span class="codigo-label">
-                                                <i class="fas fa-barcode"></i> Código:
-                                            </span>
-                                            <span class="text-muted">---</span>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
                             </div>
                         </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="col-12">
-                        <div class="sin-resultados">
-                            <i class="fas fa-box-open"></i>
-                            <h4>No hay productos disponibles</h4>
-                            <p class="text-muted mb-0">Agrega productos para comenzar a ver el inventario</p>
-                        </div>
                     </div>
-                <?php endif; ?>
-
+                <?php endforeach; ?>
             </div>
 
-            <!-- Load more button -->
-            <?php if ($total_productos > count($productos) && count($productos) > 0): ?>
-            <div class="text-center mt-4">
-                <button id="btnCargarMas" class="btn-load-more">
-                    <i class="fas fa-chevron-down mr-2"></i>
-                    Cargar más productos
+            <!-- Paginación -->
+            <?php if ($total_paginas > 1): ?>
+            <div class="pagination-wrapper">
+                <button class="pagination-btn" id="btnPrimera" data-page="1" <?= $pagina_actual == 1 ? 'disabled' : '' ?>>
+                    <i class="fas fa-angle-double-left"></i> Primera
+                </button>
+                <button class="pagination-btn" id="btnAnterior" data-page="<?= $pagina_actual - 1 ?>" <?= $pagina_actual == 1 ? 'disabled' : '' ?>>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                
+                <div class="pagination-pages" id="paginationPages">
+                    <?php
+                    $rango = 2;
+                    $inicio = max(1, $pagina_actual - $rango);
+                    $fin = min($total_paginas, $pagina_actual + $rango);
+                    if ($inicio > 1) echo '<span class="page-number" data-page="1">1</span>';
+                    if ($inicio > 2) echo '<span class="page-number disabled">...</span>';
+                    for ($i = $inicio; $i <= $fin; $i++):
+                    ?>
+                        <span class="page-number <?= $i == $pagina_actual ? 'active' : '' ?>" data-page="<?= $i ?>"><?= $i ?></span>
+                    <?php endfor;
+                    if ($fin < $total_paginas - 1) echo '<span class="page-number disabled">...</span>';
+                    if ($fin < $total_paginas) echo '<span class="page-number" data-page="' . $total_paginas . '">' . $total_paginas . '</span>';
+                    ?>
+                </div>
+                
+                <button class="pagination-btn" id="btnSiguiente" data-page="<?= $pagina_actual + 1 ?>" <?= $pagina_actual == $total_paginas ? 'disabled' : '' ?>>
+                    Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+                <button class="pagination-btn" id="btnUltima" data-page="<?= $total_paginas ?>" <?= $pagina_actual == $total_paginas ? 'disabled' : '' ?>>
+                    Última <i class="fas fa-angle-double-right"></i>
                 </button>
             </div>
             <?php endif; ?>
 
-            <!-- No results message -->
             <div id="sinResultados" class="sin-resultados" style="display: none;">
                 <i class="fas fa-search"></i>
                 <h4>No se encontraron productos</h4>
                 <p class="text-muted mb-0">Intenta con otro término de búsqueda</p>
             </div>
-
         </div>
     </section>
 </div>
 
-<!-- Cargar librerías -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
 <script>
-// ================== VARIABLES ==================
-let productosCargados = <?= count($productos) ?>;
-let totalProductos = <?= $total_productos ?>;
-let paginaActual = 1;
-let cargando = false;
+let currentPage = <?= $pagina_actual ?>;
+let totalPages = <?= $total_paginas ?>;
+let searchTerm = '';
+let isLoading = false;
 
-// ================== INICIALIZACIÓN ==================
 document.addEventListener('DOMContentLoaded', function() {
-    actualizarContador();
-    
-    // Timeout para ocultar skeleton
     setTimeout(function() {
-        const skeleton = document.getElementById('skeletonLoader');
-        const lista = document.getElementById('listaProductos');
-        
-        if (skeleton) skeleton.style.display = 'none';
-        if (lista) lista.style.display = 'flex';
-        
-        initBuscador();
-    }, 400);
+        document.getElementById('skeletonLoader').style.display = 'none';
+        document.getElementById('listaProductos').style.display = 'flex';
+    }, 300);
+    
+    initBuscador();
+    initPagination();
 });
 
-function actualizarContador() {
-    const mostradosSpan = document.getElementById('productos-mostrados');
-    const totalSpan = document.getElementById('productos-totales');
-    
-    if (mostradosSpan) mostradosSpan.textContent = productosCargados;
-    if (totalSpan) totalSpan.textContent = totalProductos;
-}
-
-// ================== BUSCADOR ==================
 function initBuscador() {
     const buscador = document.getElementById("buscador");
     if (!buscador) return;
-    
     let timeoutId;
-    
     buscador.addEventListener("input", function() {
         clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => filtrarProductos(this.value), 200);
+        timeoutId = setTimeout(() => {
+            searchTerm = this.value;
+            cargarPagina(1);
+        }, 500);
     });
 }
 
-function filtrarProductos(texto) {
-    texto = texto.toLowerCase().trim();
-    const productos = document.querySelectorAll(".product-card");
-    let productosVisibles = 0;
-
-    productos.forEach(card => {
-        const nombre = card.dataset.nombre || '';
-        const categoria = card.dataset.categoria || '';
-        const visible = nombre.includes(texto) || categoria.includes(texto);
-        card.style.display = visible ? "block" : "none";
-        if (visible) productosVisibles++;
+function initPagination() {
+    const paginationButtons = document.querySelectorAll('.page-number, #btnPrimera, #btnAnterior, #btnSiguiente, #btnUltima');
+    paginationButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            if (isLoading) return;
+            const page = parseInt(this.dataset.page);
+            if (page && page !== currentPage && page >= 1 && page <= totalPages) {
+                cargarPagina(page);
+            }
+        });
     });
+}
 
-    const sinResultados = document.getElementById('sinResultados');
-    if (sinResultados) {
-        sinResultados.style.display = (productosVisibles === 0 && texto !== '') ? 'block' : 'none';
-    }
+function cargarPagina(page) {
+    if (isLoading) return;
+    isLoading = true;
+    currentPage = page;
     
-    const mostradosSpan = document.getElementById('productos-mostrados');
-    if (mostradosSpan) {
-        mostradosSpan.textContent = texto ? productosVisibles : productosCargados;
-    }
+    // Actualizar URL sin recargar
+    const url = new URL(window.location.href);
+    url.searchParams.set('pagina', page);
+    window.history.pushState({}, '', url);
+    
+    document.getElementById('skeletonLoader').style.display = 'flex';
+    document.getElementById('listaProductos').style.display = 'none';
+    
+    fetch(`ajax/cargar_productos.php?pagina=${page}&buscar=${encodeURIComponent(searchTerm)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                actualizarProductos(data.productos);
+                actualizarPaginacion(data.pagina_actual, data.total_paginas);
+                document.getElementById('productos-mostrados').textContent = data.total_mostrados;
+                document.getElementById('pagina-actual').textContent = data.pagina_actual;
+                document.getElementById('total-paginas').textContent = data.total_paginas;
+                document.getElementById('productos-totales').textContent = data.total_productos;
+            }
+        })
+        .catch(error => console.error('Error:', error))
+        .finally(() => {
+            setTimeout(() => {
+                document.getElementById('skeletonLoader').style.display = 'none';
+                document.getElementById('listaProductos').style.display = 'flex';
+                isLoading = false;
+            }, 300);
+        });
 }
 
-// ================== TOAST ==================
-function mostrarToast(mensaje, tipo = 'success') {
-    const toast = document.createElement('div');
-    toast.className = 'toast-custom';
-    toast.style.background = tipo === 'success' ? '#28a745' : '#dc3545';
-    toast.textContent = mensaje;
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.animation = 'slideIn 0.3s reverse';
-        setTimeout(() => {
-            if (toast.parentNode) document.body.removeChild(toast);
-        }, 300);
-    }, 2000);
-}
-
-// ================== COPIAR ==================
-async function copiarAlPortapapeles(texto) {
-    try {
-        await navigator.clipboard.writeText(texto);
-        mostrarToast('✓ Código copiado al portapapeles');
-    } catch (err) {
-        const textarea = document.createElement('textarea');
-        textarea.value = texto;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        mostrarToast('✓ Código copiado al portapapeles');
-    }
-}
-
-// ================== GENERAR CÓDIGO DE BARRAS ==================
-function generarCodigoBarras(contenedorId, codigo) {
-    const container = document.getElementById(contenedorId);
+function actualizarProductos(productos) {
+    const container = document.getElementById('listaProductos');
     if (!container) return;
-    
     container.innerHTML = '';
     
-    try {
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.id = 'barcode-' + Date.now();
-        svg.style.maxWidth = '100%';
-        container.appendChild(svg);
-        
-        JsBarcode(svg, codigo, {
-            format: "CODE128",
-            width: 2,
-            height: 50,
-            displayValue: true,
-            fontSize: 14,
-            margin: 10
-        });
-    } catch (e) {
-        console.error(e);
-        container.innerHTML = '<p class="text-muted">Error al generar código</p>';
+    if (productos.length === 0 && searchTerm !== '') {
+        document.getElementById('sinResultados').style.display = 'block';
+        return;
     }
+    document.getElementById('sinResultados').style.display = 'none';
+    
+    productos.forEach(p => {
+        const stock = parseInt(p.cantidad);
+        let badgeClass = stock === 0 ? 'badge-danger' : (stock <= 5 ? 'badge-warning' : 'badge-success');
+        let badgeText = stock === 0 ? 'Sin stock' : (stock <= 5 ? `Stock bajo (${stock})` : `${stock} disponibles`);
+        let badgeIcon = stock === 0 ? 'fa-times-circle' : (stock <= 5 ? 'fa-exclamation-circle' : 'fa-check-circle');
+        const margen = ((p.precio_venta - p.precio_compra) / Math.max(0.01, p.precio_compra)) * 100;
+        let margenClass = margen > 30 ? 'text-success' : (margen > 15 ? 'text-warning' : 'text-danger');
+        const tieneImagen = p.imagen && p.imagen !== '';
+        const imagenUrl = tieneImagen ? p.imagen : '<?= IMAGEN_POR_DEFECTO_URL ?>';
+        
+        // Obtener icono según categoría para productos sin imagen
+        const categoriaProducto = p.categoria || 'Sin categoría';
+        const nombreProducto = p.nombre;
+        let iconoClases = getIconoPorCategoriaJS(nombreProducto, categoriaProducto);
+        
+        let codigosHtml = '';
+        if (p.codigos_agrupados) {
+            const codigosArray = p.codigos_agrupados.split(',').map(c => c.trim());
+            const codigoPrincipal = codigosArray[0];
+            const tieneMultiples = codigosArray.length > 1;
+            codigosHtml = `<div class="codigo-container"><span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span><span class="codigo-toggle" data-codigos='${JSON.stringify(codigosArray)}' data-producto='${escapeHtml(p.nombre)}'>${escapeHtml(codigoPrincipal)}${tieneMultiples ? `<span class="badge badge-info badge-pill ml-1">+${codigosArray.length-1}</span>` : ''}</span></div>`;
+        } else {
+            codigosHtml = `<div class="codigo-container"><span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span><span class="text-muted">---</span></div>`;
+        }
+        
+        const productHtml = `
+            <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4 product-card" data-nombre="${escapeHtml(p.nombre.toLowerCase())}" data-categoria="${escapeHtml((p.categoria || 'Sin categoría').toLowerCase())}">
+                <div class="product-card-pro position-relative">
+                    <span class="badge ${badgeClass} badge-stock"><i class="fas ${badgeIcon} mr-1"></i> ${badgeText}</span>
+                    ${tieneImagen ? 
+                        `<div class="product-image-wrapper"><img src="${imagenUrl}" class="product-image" loading="lazy" alt="${escapeHtml(p.nombre)}" onerror="this.src='<?= IMAGEN_POR_DEFECTO_URL ?>'"></div>` : 
+                        `<div class="product-icon-wrapper"><i class="${iconoClases} product-icon" style="font-size: 4.5rem;"></i></div>`
+                    }
+                    <div class="card-content">
+                        <h5 class="product-title" title="${escapeHtml(p.nombre)}">${escapeHtml(p.nombre)}</h5>
+                        <div class="product-categoria"><i class="fas fa-tag"></i> ${escapeHtml(p.categoria || 'Sin categoría')}</div>
+                        <div class="product-metrics">
+                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-tag"></i></div><div class="metric-content"><div class="metric-label">Venta</div><div class="metric-value text-primary">$${parseFloat(p.precio_venta).toFixed(2)}</div></div></div>
+                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-cubes"></i></div><div class="metric-content"><div class="metric-label">Stock</div><div class="metric-value ${stock > 0 ? 'text-success' : 'text-danger'}">${stock}</div></div></div>
+                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-shopping-cart"></i></div><div class="metric-content"><div class="metric-label">Compra</div><div class="metric-value">$${parseFloat(p.precio_compra).toFixed(2)}</div></div></div>
+                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-chart-line"></i></div><div class="metric-content"><div class="metric-label">Margen</div><div class="metric-value ${margenClass}">${margen.toFixed(1)}%</div></div></div>
+                        </div>
+                        ${codigosHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', productHtml);
+    });
+    
+    // Re-inicializar eventos de códigos
+    document.querySelectorAll('.codigo-toggle').forEach(el => {
+        el.removeEventListener('click', manejarClickCodigo);
+        el.addEventListener('click', manejarClickCodigo);
+    });
 }
 
-// ================== MANEJADOR DE CÓDIGOS ==================
-document.addEventListener('click', async function(e) {
-    const toggle = e.target.closest('.codigo-toggle');
-    if (!toggle) return;
+// Función para obtener icono según categoría (JavaScript)
+function getIconoPorCategoriaJS(nombre, categoria) {
+    const textoBusqueda = (categoria || nombre || '').toLowerCase();
     
+    if (/(electronica|telefono|celular|smartphone|tablet|computadora|laptop|pc|monitor|teclado|mouse|audifonos|pantalla|impresora|cargador|cable|adaptador|bateria|pila|usb|memoria|disco|tarjeta)/.test(textoBusqueda)) {
+        return 'fas fa-microchip icon-primary';
+    }
+    if (/(ropa|camisa|pantalon|vestido|chaqueta|sueter|short|falda|jean|blusa|camiseta)/.test(textoBusqueda)) {
+        return 'fas fa-tshirt icon-info';
+    }
+    if (/(calzado|zapato|tenis|sandalia|botas|zapatilla|chancla)/.test(textoBusqueda)) {
+        return 'fas fa-shoe-prints icon-warning';
+    }
+    if (/(alimento|comida|bebida|refresco|agua|snack|galleta|pan|leche|jugo|gaseosa|cerveza|vino)/.test(textoBusqueda)) {
+        return 'fas fa-utensils icon-success';
+    }
+    if (/(hogar|mueble|silla|mesa|escritorio|estante|cocina|baño|sofa|cama|ropero|armario)/.test(textoBusqueda)) {
+        return 'fas fa-couch icon-secondary';
+    }
+    if (/(papeleria|oficina|papel|lapiz|pluma|cuaderno|libreta|escritura|marcador|borrador|regla|folder|carpeta)/.test(textoBusqueda)) {
+        return 'fas fa-pen icon-indigo';
+    }
+    if (/(herramienta|martillo|destornillador|pinza|taladro|sierra|llave|alicate|nivel|cincel)/.test(textoBusqueda)) {
+        return 'fas fa-tools icon-danger';
+    }
+    if (/(belleza|shampoo|jabon|crema|maquillaje|perfume|cosmetico|desodorante|pasta|cepillo|peine)/.test(textoBusqueda)) {
+        return 'fas fa-spa icon-pink';
+    }
+    if (/(deporte|pelota|bicicleta|pesa|gimnasio|balon|raqueta|casco|guante)/.test(textoBusqueda)) {
+        return 'fas fa-futbol icon-teal';
+    }
+    if (/(libro|revista|lectura|texto|manual|guia|diccionario|enciclopedia)/.test(textoBusqueda)) {
+        return 'fas fa-book icon-purple';
+    }
+    if (/(juguete|muñeca|carro|peluche|lego|rompecabezas|bloques|consola|videojuego)/.test(textoBusqueda)) {
+        return 'fas fa-gamepad icon-orange';
+    }
+    if (/(limpieza|limpia|detergente|cloro|escoba|trapeador|recogedor|bolsa)/.test(textoBusqueda)) {
+        return 'fas fa-pump-soap icon-cyan';
+    }
+    
+    return 'fas fa-box icon-gray';
+}
+
+function manejarClickCodigo(e) {
     e.preventDefault();
-    
+    e.stopPropagation();
+    const toggle = e.currentTarget;
     try {
         const codigos = JSON.parse(toggle.dataset.codigos);
         const nombreProducto = toggle.dataset.producto || 'Producto';
-
-        let html = `
-            <div class="text-center mb-4">
-                <strong style="font-size: 1.2rem; color: #007bff;">${nombreProducto}</strong>
-            </div>
-        `;
-
-        if (codigos.length === 1) {
-            html += `
-                <div class="text-center mb-4 p-3" style="background: #f8f9fa; border-radius: 10px;">
-                    <div id="barcode-container"></div>
-                </div>
-            `;
-        }
-
+        let html = `<div class="text-center mb-4"><strong style="font-size: 1.2rem; color: #007bff;">${escapeHtml(nombreProducto)}</strong></div>`;
+        if (codigos.length === 1) html += `<div class="text-center mb-4 p-3" style="background: #f8f9fa; border-radius: 10px;"><div id="barcode-container"></div></div>`;
         html += `<div class="codigos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">`;
-        codigos.forEach(c => {
-            html += `<div class="codigo-chip" data-codigo="${c}">${c}</div>`;
-        });
+        codigos.forEach(c => html += `<div class="codigo-chip" data-codigo="${c}">${c}</div>`);
         html += `</div>`;
-
-        Swal.fire({
-            title: 'Códigos de barras',
-            html: html,
-            showConfirmButton: false,
-            showCloseButton: true,
-            width: 550,
-            didOpen: () => {
-                if (codigos.length === 1) {
-                    generarCodigoBarras('barcode-container', codigos[0]);
-                }
-
-                document.querySelectorAll('.codigo-chip').forEach(chip => {
-                    chip.addEventListener('click', async function(e) {
-                        e.stopPropagation();
-                        const codigo = this.dataset.codigo || this.textContent;
-                        await copiarAlPortapapeles(codigo);
-                        
-                        this.classList.add('copiado');
-                        const originalText = this.textContent;
-                        this.textContent = '✓ Copiado!';
-                        
-                        setTimeout(() => {
-                            this.classList.remove('copiado');
-                            this.textContent = originalText;
-                        }, 1000);
-                    });
-                });
-            }
+        Swal.fire({ title: 'Códigos de barras', html: html, showConfirmButton: false, showCloseButton: true, width: 550 });
+        if (codigos.length === 1) generarCodigoBarras('barcode-container', codigos[0]);
+        document.querySelectorAll('.codigo-chip').forEach(chip => {
+            chip.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                const codigo = this.dataset.codigo || this.textContent;
+                await copiarAlPortapapeles(codigo);
+                this.classList.add('copiado');
+                const originalText = this.textContent;
+                this.textContent = '✓ Copiado!';
+                setTimeout(() => { this.classList.remove('copiado'); this.textContent = originalText; }, 1000);
+            });
         });
-    } catch (error) {
-        console.error('Error:', error);
-        mostrarToast('Error al mostrar códigos', 'error');
+    } catch (error) { console.error('Error:', error); }
+}
+
+function actualizarPaginacion(paginaActual, totalPaginas) {
+    currentPage = paginaActual;
+    totalPages = totalPaginas;
+    
+    const btnPrimera = document.getElementById('btnPrimera');
+    const btnAnterior = document.getElementById('btnAnterior');
+    const btnSiguiente = document.getElementById('btnSiguiente');
+    const btnUltima = document.getElementById('btnUltima');
+    
+    if (btnPrimera) btnPrimera.disabled = paginaActual === 1;
+    if (btnAnterior) btnAnterior.disabled = paginaActual === 1;
+    if (btnSiguiente) btnSiguiente.disabled = paginaActual === totalPaginas;
+    if (btnUltima) btnUltima.disabled = paginaActual === totalPaginas;
+    
+    if (btnPrimera) btnPrimera.dataset.page = 1;
+    if (btnAnterior) btnAnterior.dataset.page = paginaActual - 1;
+    if (btnSiguiente) btnSiguiente.dataset.page = paginaActual + 1;
+    if (btnUltima) btnUltima.dataset.page = totalPaginas;
+    
+    const pagesContainer = document.getElementById('paginationPages');
+    if (pagesContainer) {
+        let inicio = Math.max(1, paginaActual - 2);
+        let fin = Math.min(totalPaginas, paginaActual + 2);
+        let html = '';
+        if (inicio > 1) html += `<span class="page-number" data-page="1">1</span>`;
+        if (inicio > 2) html += `<span class="page-number disabled">...</span>`;
+        for (let i = inicio; i <= fin; i++) html += `<span class="page-number ${i === paginaActual ? 'active' : ''}" data-page="${i}">${i}</span>`;
+        if (fin < totalPaginas - 1) html += `<span class="page-number disabled">...</span>`;
+        if (fin < totalPaginas) html += `<span class="page-number" data-page="${totalPaginas}">${totalPaginas}</span>`;
+        pagesContainer.innerHTML = html;
+        
+        document.querySelectorAll('.page-number:not(.disabled)').forEach(btn => {
+            btn.addEventListener('click', function() { if (!isLoading) cargarPagina(parseInt(this.dataset.page)); });
+        });
     }
-});
+}
+
+function generarCodigoBarras(containerId, codigo) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    JsBarcode(container, codigo, { format: "CODE128", width: 2, height: 50, displayValue: true, fontSize: 14, margin: 10 });
+}
+
+async function copiarAlPortapapeles(texto) {
+    try { await navigator.clipboard.writeText(texto); mostrarToast('✓ Código copiado'); }
+    catch { const ta = Object.assign(document.createElement('textarea'), { value: texto, style: 'position:fixed;opacity:0' }); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); mostrarToast('✓ Código copiado'); }
+}
+
+function mostrarToast(mensaje) {
+    const toast = Object.assign(document.createElement('div'), { className: 'toast-custom', textContent: mensaje });
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'slideIn 0.3s reverse'; setTimeout(() => toast.remove(), 300); }, 2000);
+}
+
+function escapeHtml(text) { return text.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 </script>
 
 <?php include 'includes/footer.php'; ?>
