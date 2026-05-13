@@ -16,6 +16,75 @@ $busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
 $proveedor = isset($_GET['proveedor']) ? trim($_GET['proveedor']) : '';
 $categoria = isset($_GET['categoria']) ? trim($_GET['categoria']) : '';
 
+// Determinar la carpeta de destino según el proveedor
+$esReporteGeneral = ($proveedor === '');
+$carpetaDestino = $esReporteGeneral ? 'Stock_General' : 'Stock_Proveedor';
+$rutaCarpeta = "uploads/" . $carpetaDestino . "/";
+
+// Crear la carpeta si no existe
+if (!file_exists($rutaCarpeta)) {
+    mkdir($rutaCarpeta, 0777, true);
+}
+
+// ============================================
+// FUNCIÓN PARA GUARDAR PDF EN EL SERVIDOR
+// ============================================
+function guardarPDFenServidor($pdfContent, $nombreArchivo, $carpeta, $tipo, $proveedor, $totalRegistros) {
+    global $conn;
+    
+    $rutaCarpeta = "uploads/" . $carpeta . "/";
+    $rutaCompleta = $rutaCarpeta . $nombreArchivo;
+    
+    // Verificar si el archivo ya existe y generar nombre único
+    $contador = 1;
+    $info = pathinfo($nombreArchivo);
+    while (file_exists($rutaCompleta)) {
+        $nombreArchivo = $info['filename'] . "_" . $contador . "." . $info['extension'];
+        $rutaCompleta = $rutaCarpeta . $nombreArchivo;
+        $contador++;
+    }
+    
+    // Guardar el archivo
+    if (file_put_contents($rutaCompleta, $pdfContent)) {
+        // Guardar en base de datos
+        $usuario_id = $_SESSION['usuario_id'] ?? 0;
+        $usuario_nombre = $_SESSION['nombre'] ?? 'Sistema';
+        $proveedor_val = $proveedor ?: 'todos';
+        $modulo = ($carpeta === 'Stock_General') ? 'reporte inventario - general' : 'reporte inventario - proveedor';
+        
+        // Verificar si ya existe un registro con el mismo nombre
+        $check_sql = "SELECT id FROM historial_reportes WHERE nombre_archivo = '$rutaCompleta'";
+        $check_result = $conn->query($check_sql);
+        
+        if ($check_result && $check_result->num_rows == 0) {
+            $sql = "INSERT INTO historial_reportes (
+                usuario_id, 
+                usuario_nombre, 
+                tipo_reporte, 
+                modulo, 
+                proveedor, 
+                fecha_generacion, 
+                total_registros, 
+                nombre_archivo
+            ) VALUES (
+                $usuario_id, 
+                '$usuario_nombre', 
+                'pdf', 
+                '$modulo', 
+                '$proveedor_val', 
+                NOW(), 
+                $totalRegistros, 
+                '$rutaCompleta'
+            )";
+            $conn->query($sql);
+        }
+        
+        return true;
+    }
+    
+    return false;
+}
+
 // Obtener datos de la tienda
 $sqlConfig = "SELECT nombre, logo FROM configuracion_galeria LIMIT 1";
 $resultConfig = $conn->query($sqlConfig);
@@ -509,7 +578,7 @@ class PDF extends FPDF
         $this->SetTextColor(80, 80, 80);
         $this->Cell(50, 8, 'Productos agotados:', 0, 0, 'L');
         $this->SetFont('Arial', 'B', 12);
-        $this->SetTextColor(220, 53, 69);  // ← CORREGIDO: solo números, sin caracteres extraños
+        $this->SetTextColor(220, 53, 69);
         $this->Cell(40, 8, number_format($totalSinStock), 0, 1, 'L');
         
         $this->SetY($this->GetY() + 5);
@@ -567,6 +636,44 @@ $pdf->SetTextColor(150, 150, 150);
 $pdf->Cell(0, 5, 'Este reporte muestra los productos ordenados por cantidad disponible.', 0, 1, 'C');
 $pdf->Cell(0, 5, 'Los productos en rojo requieren reabastecimiento inmediato.', 0, 1, 'C');
 
-// Salida del PDF
-$pdf->Output('I', 'reporte_inventario_' . date('Ymd') . '.pdf');
+// Generar el contenido del PDF
+$pdfContent = $pdf->Output('S'); // 'S' para obtener el PDF como string
+
+// ============================================
+// GUARDAR EL PDF EN EL SERVIDOR
+// ============================================
+$fechaActual = date('Y-m-d');
+$horaActual = date('H-i-s');
+$nombreArchivo = "reporte_inventario_{$fechaActual}.pdf";
+
+// Si es reporte por proveedor, agregar el nombre del proveedor al archivo
+if ($proveedor !== '') {
+    $proveedorLimpio = preg_replace('/[^a-zA-Z0-9]/', '_', $proveedor);
+    $nombreArchivo = "reporte_inventario_{$proveedorLimpio}_{$fechaActual}.pdf";
+}
+
+// Guardar en el servidor
+$totalRegistros = $totalConStock + $totalSinStock;
+$guardadoExitoso = guardarPDFenServidor($pdfContent, $nombreArchivo, $carpetaDestino, 'inventario', $proveedor, $totalRegistros);
+
+// Mostrar mensaje de éxito/error (opcional - para depuración)
+if ($guardadoExitoso) {
+    // El PDF se guardó correctamente en el servidor
+    // Puedes agregar un log si lo deseas
+}
+
+// ============================================
+// SALIDA DEL PDF (para mostrar/descargar)
+// ============================================
+// Determinar si debe descargarse o mostrarse
+$disposition = isset($_GET['download']) ? 'D' : 'I';
+
+// Enviar headers para el PDF
+header('Content-Type: application/pdf');
+header('Content-Disposition: ' . ($disposition == 'D' ? 'attachment' : 'inline') . '; filename="' . $nombreArchivo . '"');
+header('Cache-Control: private, max-age=0, must-revalidate');
+header('Pragma: public');
+
+// Enviar el contenido del PDF
+echo $pdfContent;
 ?>

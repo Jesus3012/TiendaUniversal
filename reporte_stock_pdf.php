@@ -42,6 +42,65 @@ if (empty($logoTiendaPath) || !file_exists($logoTiendaPath)) {
     }
 }
 
+// ===== LOGO DEL PROVEEDOR CON REDIMENSIONADO AUTOMÁTICO =====
+$logoProveedorPath = '';
+$logoProveedorWidth = 22;
+$logoProveedorHeight = 22;
+$inicialesProveedor = '';
+
+if (!empty($proveedor_filtro)) {
+    $sqlLogoProveedor = "SELECT logo FROM proveedores WHERE nombre = ? LIMIT 1";
+    $stmtLogo = $conn->prepare($sqlLogoProveedor);
+    $stmtLogo->bind_param("s", $proveedor_filtro);
+    $stmtLogo->execute();
+    $resultLogo = $stmtLogo->get_result();
+    if ($resultLogo && $row = $resultLogo->fetch_assoc()) {
+        $logoProveedorPath = $row['logo'] ?? '';
+        if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
+            // Obtener dimensiones de la imagen
+            $size = getimagesize($logoProveedorPath);
+            if ($size !== false) {
+                $anchoOriginal = $size[0];
+                $altoOriginal = $size[1];
+                $ratio = $anchoOriginal / $altoOriginal;
+                
+                // Usar el lado más pequeño para decidir el tamaño
+                $ladoMenor = min($anchoOriginal, $altoOriginal);
+                
+                if ($ladoMenor < 310) {
+                    $maxSize = 45;  // Logo muy pequeño
+                } elseif ($ladoMenor < 500) {
+                    $maxSize = 28;  // Logo pequeño
+                } elseif ($ladoMenor > 800) {
+                    $maxSize = 18;  // Logo muy grande
+                } else {
+                    $maxSize = 22;  // Tamaño normal
+                }
+                
+                // Calcular tamaño proporcional
+                if ($anchoOriginal > $altoOriginal) {
+                    $logoProveedorWidth = $maxSize;
+                    $logoProveedorHeight = $maxSize / $ratio;
+                } else {
+                    $logoProveedorHeight = $maxSize;
+                    $logoProveedorWidth = $maxSize * $ratio;
+                }
+            }
+        } else {
+            $logoProveedorPath = '';
+        }
+    }
+    $stmtLogo->close();
+    
+    // Iniciales del proveedor
+    $palabras = explode(' ', $proveedor_filtro);
+    if (count($palabras) >= 2) {
+        $inicialesProveedor = strtoupper(substr($palabras[0], 0, 1) . substr($palabras[1], 0, 1));
+    } else {
+        $inicialesProveedor = strtoupper(substr($proveedor_filtro, 0, 2));
+    }
+}
+
 // ===== CREAR CARPETAS SI NO EXISTEN =====
 $carpeta_base = 'uploads/';
 $carpeta_reportes_stock = $carpeta_base . 'reportes_stock/';
@@ -76,10 +135,20 @@ $ruta_completa = $carpeta_reportes_stock . $nombre_archivo;
 class PDF extends FPDF {
     var $logoTiendaPath;
     var $nombreTienda;
+    var $logoProveedorPath;
+    var $logoProveedorWidth;
+    var $logoProveedorHeight;
+    var $inicialesProveedor;
+    var $proveedorNombre;
     
-    function SetTiendaData($logoTiendaPath, $nombreTienda) {
+    function SetTiendaData($logoTiendaPath, $nombreTienda, $logoProveedorPath, $logoProveedorWidth, $logoProveedorHeight, $inicialesProveedor, $proveedorNombre) {
         $this->logoTiendaPath = $logoTiendaPath;
         $this->nombreTienda = $nombreTienda;
+        $this->logoProveedorPath = $logoProveedorPath;
+        $this->logoProveedorWidth = $logoProveedorWidth;
+        $this->logoProveedorHeight = $logoProveedorHeight;
+        $this->inicialesProveedor = $inicialesProveedor;
+        $this->proveedorNombre = $proveedorNombre;
     }
     
     function Header() {
@@ -90,6 +159,21 @@ class PDF extends FPDF {
         // Logo Tienda (izquierda)
         if (!empty($this->logoTiendaPath) && file_exists($this->logoTiendaPath)) {
             $this->Image($this->logoTiendaPath, 12, $logoY, $logoTiendaSize, $logoTiendaSize);
+        }
+        
+        // Logo Proveedor o Iniciales (derecha) - solo si hay filtro de proveedor
+        if (!empty($this->proveedorNombre)) {
+            if (!empty($this->logoProveedorPath) && file_exists($this->logoProveedorPath)) {
+                $logoX = $pageWidth - $this->logoProveedorWidth - 12;
+                $this->Image($this->logoProveedorPath, $logoX, $logoY, $this->logoProveedorWidth, $this->logoProveedorHeight);
+            } else {
+                $textX = $pageWidth - 50;
+                $textY = $logoY + 10;
+                $this->SetFont('Arial', 'B', 24);
+                $this->SetTextColor(249, 115, 22);
+                $this->Text($textX, $textY, $this->inicialesProveedor);
+                $this->SetTextColor(0, 0, 0);
+            }
         }
         
         // Nombre Tienda centrado
@@ -108,6 +192,13 @@ class PDF extends FPDF {
         $this->SetFont('Arial', 'B', 16);
         $this->SetTextColor(249, 115, 22);
         $this->Cell(0, 10, 'REPORTE DE HISTORIAL DE STOCK', 0, 1, 'C');
+        
+        // Información del proveedor si hay filtro
+        if (!empty($this->proveedorNombre)) {
+            $this->SetFont('Arial', 'B', 11);
+            $this->SetTextColor(249, 115, 22);
+            $this->Cell(0, 6, 'PROVEEDOR: ' . utf8_decode(strtoupper($this->proveedorNombre)), 0, 1, 'C');
+        }
         
         // Fecha de generación
         $this->SetFont('Arial', '', 9);
@@ -199,7 +290,7 @@ $total_registros = $total_result->fetch_assoc()['total'];
 
 // Crear PDF (Landscape A4)
 $pdf = new PDF('L', 'mm', 'A4');
-$pdf->SetTiendaData($logoTiendaPath, $nombreTienda);
+$pdf->SetTiendaData($logoTiendaPath, $nombreTienda, $logoProveedorPath, $logoProveedorWidth, $logoProveedorHeight, $inicialesProveedor, $proveedor_filtro);
 $pdf->AliasNbPages();
 $pdf->AddPage();
 $pdf->SetAutoPageBreak(true, 20);
@@ -409,8 +500,7 @@ $pdf->SetTextColor(0, 0, 0);
 $pdf->SetFont('Arial', '', 10);
 $pdf->Cell(80, 9, 'Total Ajustes de Inventario:', 1, 0, 'L', true);
 $ajuste_signo = ($total_ajustes >= 0) ? '+' : '-';
-$ajuste_color = ($total_ajustes >= 0) ? [0, 128, 0] : [255, 0, 0];
-$pdf->SetTextColor($ajuste_color[0], $ajuste_color[1], $ajuste_color[2]);
+$pdf->SetTextColor($ajuste_signo == '+' ? 0 : 255, $ajuste_signo == '+' ? 128 : 0, 0);
 $pdf->SetFont('Arial', 'B', 10);
 $pdf->Cell(40, 9, $ajuste_signo . number_format($total_ajustes_abs) . ' unidades', 1, 1, 'R', true);
 

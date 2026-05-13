@@ -27,14 +27,17 @@ foreach ($carpetas as $ruta) {
 
 $todos_los_archivos = [];
 
-// Obtener todos los registros de la BD
-$query_bd = "SELECT nombre_archivo, proveedor, fecha_generacion FROM historial_reportes";
+// Obtener todos los registros de la BD con más campos
+$query_bd = "SELECT nombre_archivo, proveedor, fecha_generacion, usuario_nombre, modulo, total_registros FROM historial_reportes";
 $result_bd = $conn->query($query_bd);
 $info_bd = [];
 while ($row = $result_bd->fetch_assoc()) {
     $info_bd[$row['nombre_archivo']] = [
         'proveedor' => $row['proveedor'],
-        'fecha_bd' => strtotime($row['fecha_generacion'])
+        'fecha_bd' => strtotime($row['fecha_generacion']),
+        'usuario' => $row['usuario_nombre'],
+        'modulo' => $row['modulo'],
+        'total_registros' => $row['total_registros']
     ];
 }
 
@@ -43,25 +46,67 @@ foreach ($carpetas as $nombre_carpeta => $ruta_carpeta) {
         $archivos = scandir($ruta_carpeta);
         foreach ($archivos as $archivo) {
             if ($archivo != '.' && $archivo != '..' && !is_dir($ruta_carpeta . '/' . $archivo)) {
-                $ruta_completa = $ruta_carpeta . '/' . $archivo;  // ← Agregada la barra
+                $ruta_completa = $ruta_carpeta . '/' . $archivo;
                 $fecha_modificacion = filemtime($ruta_completa);
                 $tamaño = filesize($ruta_completa);
                 $extension = strtolower(pathinfo($archivo, PATHINFO_EXTENSION));
                 $tipo = ($extension == 'pdf') ? 'pdf' : 'excel';
                 
                 $proveedor_detectado = 'N/A';
+                $usuario_genero = 'Sistema';
+                $total_registros_reporte = 0;
+                
                 if (isset($info_bd[$archivo])) {
+                    // Usar datos de la base de datos
                     $proveedor_detectado = $info_bd[$archivo]['proveedor'] ?? 'N/A';
-                } else {
-                    if (strpos($archivo, 'proveedor_') === 0) {
-                        $partes = explode('_', $archivo);
-                        if (count($partes) >= 3) {
-                            $proveedor_detectado = ucwords(str_replace('_', ' ', $partes[1]));
+                    $usuario_genero = $info_bd[$archivo]['usuario'] ?? 'Sistema';
+                    $total_registros_reporte = $info_bd[$archivo]['total_registros'] ?? 0;
+                    
+                    // Si el proveedor es 'todos' o está vacío, intentar extraer del nombre
+                    if ($proveedor_detectado === 'todos' || $proveedor_detectado === 'N/A' || empty($proveedor_detectado)) {
+                        // Extraer del nombre del archivo
+                        if (strpos($archivo, 'proveedor_') === 0 || strpos($archivo, 'reporte_proveedor_') === 0) {
+                            if (preg_match('/proveedor_([^_]+)_/', $archivo, $matches)) {
+                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                            } elseif (preg_match('/reporte_proveedor_([^_]+)_/', $archivo, $matches)) {
+                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                            }
+                        } elseif (strpos($archivo, 'stock_') === 0 && strpos($archivo, 'proveedor') !== false) {
+                            if (preg_match('/stock_proveedor_([^_]+)_/', $archivo, $matches)) {
+                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                            } elseif (preg_match('/reporte_inventario_([^_]+)_/', $archivo, $matches)) {
+                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                            }
                         }
-                    } elseif (strpos($archivo, 'stock_') === 0) {
+                    }
+                } else {
+                    // No está en BD, extraer del nombre del archivo
+                    if (strpos($archivo, 'proveedor_') === 0 || strpos($archivo, 'reporte_proveedor_') === 0) {
+                        // Reportes de ventas por proveedor
+                        if (preg_match('/proveedor_([^_]+)_/', $archivo, $matches)) {
+                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                        } elseif (preg_match('/reporte_proveedor_([^_]+)_/', $archivo, $matches)) {
+                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                        } else {
+                            $proveedor_detectado = 'Ventas por Proveedor';
+                        }
+                    } elseif (strpos($archivo, 'stock_') === 0 && strpos($archivo, 'proveedor') !== false) {
+                        // Reportes de stock por proveedor
+                        if (preg_match('/stock_proveedor_([^_]+)_/', $archivo, $matches)) {
+                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                        } elseif (preg_match('/reporte_inventario_([^_]+)_/', $archivo, $matches)) {
+                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                        } else {
+                            $proveedor_detectado = 'Stock por Proveedor';
+                        }
+                    } elseif (strpos($archivo, 'admin') !== false || strpos($archivo, 'reporte_admin') !== false) {
+                        $proveedor_detectado = 'Ventas Generales';
+                    } elseif (strpos($archivo, 'stock_general') !== false || (strpos($archivo, 'reporte_inventario') === 0 && strpos($archivo, '_') !== false && substr_count($archivo, '_') == 2)) {
                         $proveedor_detectado = 'Stock General';
                     } elseif (strpos($archivo, 'ventas_') === 0) {
                         $proveedor_detectado = 'Ventas Generales';
+                    } elseif (strpos($archivo, 'stock_') === 0) {
+                        $proveedor_detectado = 'Stock General';
                     }
                 }
                 
@@ -72,7 +117,9 @@ foreach ($carpetas as $nombre_carpeta => $ruta_carpeta) {
                     'fecha' => $fecha_modificacion,
                     'tamaño' => $tamaño,
                     'tipo' => $tipo,
-                    'proveedor' => $proveedor_detectado
+                    'proveedor' => $proveedor_detectado,
+                    'usuario' => $usuario_genero,
+                    'total_registros' => $total_registros_reporte
                 ];
             }
         }
@@ -261,6 +308,7 @@ for ($i = 6; $i >= 0; $i--) {
                                 <th>Nombre del archivo</th>
                                 <th>Carpeta</th>
                                 <th>Proveedor</th>
+                                <th>Usuario</th>
                                 <th>Fecha</th>
                                 <th>Tamaño</th>
                                 <th>Acciones</th>
@@ -375,7 +423,7 @@ function renderizarTabla() {
     if (archivosFiltrados.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center py-5">
+                <td colspan="8" class="text-center py-5">
                     <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
                     <p class="mb-0">No se encontraron archivos con los filtros seleccionados</p>
                 </td>
@@ -414,9 +462,10 @@ function renderizarTabla() {
         html += `
             <tr>
                 <td>${tipoBadge}</td>
-                <td class="font-weight-bold">${escapeHtml(archivo.nombre.substring(0, 50))}</td>
+                <td class="font-weight-bold">${escapeHtml(archivo.nombre.substring(0, 50))}${archivo.nombre.length > 50 ? '...' : ''}</td>
                 <td><span class="badge bg-light text-dark" style="cursor: pointer;" onclick="filtrarPorCarpetaAjax('${archivo.carpeta}')"><i class="fas fa-folder text-warning"></i> ${nombreCarpeta}</span></td>
                 <td>${escapeHtml(archivo.proveedor)}</td>
+                <td><small><i class="fas fa-user"></i> ${escapeHtml(archivo.usuario || 'Sistema')}</small></td>
                 <td>${fechaStr}</td>
                 <td>${tamaño}</td>
                 <td>
@@ -426,7 +475,7 @@ function renderizarTabla() {
                     <a href="${archivo.ruta}" class="btn-descargar" download="${archivo.nombre}">
                         <i class="fas fa-download"></i>
                     </a>
-                 </td>
+                   </td>
             </tr>
         `;
     }
@@ -472,7 +521,8 @@ function aplicarFiltros() {
         // Filtro por búsqueda
         if (busqueda) {
             return archivo.nombre.toLowerCase().includes(busqueda) || 
-                   archivo.proveedor.toLowerCase().includes(busqueda);
+                   archivo.proveedor.toLowerCase().includes(busqueda) ||
+                   (archivo.usuario && archivo.usuario.toLowerCase().includes(busqueda));
         }
         
         return true;

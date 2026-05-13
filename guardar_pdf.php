@@ -1,7 +1,7 @@
 <?php
 // guardar_pdf.php
 session_start();
-require_once 'includes/db.php'; // Ajusta la ruta según tu estructura
+require_once 'includes/db.php';
 
 header('Content-Type: application/json');
 
@@ -40,13 +40,13 @@ if ($extension !== 'pdf') {
     exit;
 }
 
-// Crear la carpeta si no existe
+// Crear la carpeta correspondiente según el tipo
 $ruta_carpeta = "uploads/" . $carpeta . "/";
 if (!file_exists($ruta_carpeta)) {
     if (!mkdir($ruta_carpeta, 0777, true)) {
         echo json_encode([
             'success' => false,
-            'error' => 'No se pudo crear la carpeta de destino'
+            'error' => 'No se pudo crear la carpeta de destino: ' . $ruta_carpeta
         ]);
         exit;
     }
@@ -68,10 +68,11 @@ while (file_exists($ruta_completa)) {
 // Mover el archivo
 if (move_uploaded_file($archivo['tmp_name'], $ruta_completa)) {
     
-    // AHORA SÍ, guardar en base de datos (solo cuando se genera el PDF)
+    // Guardar en base de datos (solo cuando se genera el PDF)
     $usuario_id = $_SESSION['usuario_id'] ?? 0;
     $usuario_nombre = $_SESSION['nombre'] ?? 'Sistema';
     $proveedor_val = $proveedor ?: 'todos';
+    $modulo = ($tipoPDF === 'general') ? 'reporte de ventas - general' : 'reporte de ventas - proveedor';
     
     // Verificar si ya existe un registro con el mismo nombre para evitar duplicados
     $check_sql = "SELECT id FROM historial_reportes WHERE nombre_archivo = '$ruta_completa'";
@@ -92,7 +93,7 @@ if (move_uploaded_file($archivo['tmp_name'], $ruta_completa)) {
             $usuario_id, 
             '$usuario_nombre', 
             'pdf', 
-            'reporte de ventas', 
+            '$modulo', 
             '$proveedor_val', 
             NOW(), 
             $total_registros, 
@@ -104,9 +105,10 @@ if (move_uploaded_file($archivo['tmp_name'], $ruta_completa)) {
     
     echo json_encode([
         'success' => true,
-        'message' => 'PDF guardado correctamente',
+        'message' => 'PDF guardado correctamente en ' . $ruta_carpeta,
         'ruta' => $ruta_completa,
-        'nombre' => $nombre_archivo
+        'nombre' => $nombre_archivo,
+        'carpeta' => $carpeta
     ]);
 } else {
     echo json_encode([

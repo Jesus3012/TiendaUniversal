@@ -1732,13 +1732,28 @@ function generarPDF(tipo) {
         "reporte_proveedores_todos_{$fechaActual}.pdf";
     ?>
 
-    // Función para guardar el PDF en el servidor usando fetch
     function guardarPDFenServidor(pdfBlob, nombreArchivo, tipoPDF) {
         return new Promise((resolve, reject) => {
+            // Determinar la carpeta según el tipo de reporte
+            let carpetaDestino = '';
+            let modulo = '';
+            
+            if (tipoPDF === 'general') {
+                carpetaDestino = 'Ventas_Generales';
+                modulo = 'reporte de ventas - general';
+            } else if (tipoPDF === 'proveedor') {
+                carpetaDestino = 'Ventas_Proveedor';
+                modulo = 'reporte de ventas - proveedor';
+            } else {
+                carpetaDestino = 'reportes_ventas'; // Fallback para ambos
+                modulo = 'reporte de ventas';
+            }
+            
             const formData = new FormData();
             formData.append('pdf_file', pdfBlob, nombreArchivo);
-            formData.append('carpeta', 'reportes_ventas');
+            formData.append('carpeta', carpetaDestino);
             formData.append('tipo', tipoPDF);
+            formData.append('modulo', modulo);
             formData.append('proveedor', '<?= $filtroProveedor ?>');
             formData.append('total_registros', '<?= $totalRegistros ?>');
             
