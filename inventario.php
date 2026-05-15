@@ -94,7 +94,6 @@ if (!$result) {
 ?>
 
 <style>
-/* ================== ESTILOS EXISTENTES ================== */
 .content-wrapper {
     background: linear-gradient(180deg, #FFF4E6, #FFFFFF);
     min-height: 100vh;
@@ -318,7 +317,6 @@ if (!$result) {
     color: white;
 }
 
-/* ================== PAGINACIÓN ================== */
 .pagination-wrapper {
     display: flex;
     justify-content: center;
@@ -351,15 +349,6 @@ if (!$result) {
 .pagination-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-}
-
-.pagination-info {
-    background: #f8f9fa;
-    padding: 8px 20px;
-    border-radius: 40px;
-    color: #6c757d;
-    font-size: 0.85rem;
-    font-weight: 500;
 }
 
 .page-number {
@@ -395,7 +384,6 @@ if (!$result) {
     border: none;
 }
 
-/* Skeleton loading */
 .skeleton-card {
     background: #fff;
     border-radius: 18px;
@@ -526,7 +514,6 @@ if (!$result) {
                 <div class="alert alert-danger text-center">Error al cargar los productos.</div>
             <?php endif; ?>
             
-            <!-- Skeleton loading -->
             <div id="skeletonLoader" class="row">
                 <?php for ($i = 0; $i < PRODUCTOS_POR_PAGINA; $i++): ?>
                 <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4">
@@ -541,7 +528,6 @@ if (!$result) {
                 <?php endfor; ?>
             </div>
 
-            <!-- Productos grid -->
             <div class="row" id="listaProductos" style="display: none;">
                 <?php foreach ($productos as $row): ?>
                     <?php
@@ -617,7 +603,6 @@ if (!$result) {
                 <?php endforeach; ?>
             </div>
 
-            <!-- Paginación -->
             <?php if ($total_paginas > 1): ?>
             <div class="pagination-wrapper">
                 <button class="pagination-btn" id="btnPrimera" data-page="1" <?= $pagina_actual == 1 ? 'disabled' : '' ?>>
@@ -678,7 +663,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initBuscador();
     initPagination();
+    initCodigosEventos();
 });
+
+function initCodigosEventos() {
+    document.querySelectorAll('.codigo-toggle').forEach(el => {
+        el.removeEventListener('click', manejarClickCodigo);
+        el.addEventListener('click', manejarClickCodigo);
+    });
+}
 
 function initBuscador() {
     const buscador = document.getElementById("buscador");
@@ -711,7 +704,6 @@ function cargarPagina(page) {
     isLoading = true;
     currentPage = page;
     
-    // Actualizar URL sin recargar
     const url = new URL(window.location.href);
     url.searchParams.set('pagina', page);
     window.history.pushState({}, '', url);
@@ -762,7 +754,6 @@ function actualizarProductos(productos) {
         const tieneImagen = p.imagen && p.imagen !== '';
         const imagenUrl = tieneImagen ? p.imagen : '<?= IMAGEN_POR_DEFECTO_URL ?>';
         
-        // Obtener icono según categoría para productos sin imagen
         const categoriaProducto = p.categoria || 'Sin categoría';
         const nombreProducto = p.nombre;
         let iconoClases = getIconoPorCategoriaJS(nombreProducto, categoriaProducto);
@@ -772,7 +763,13 @@ function actualizarProductos(productos) {
             const codigosArray = p.codigos_agrupados.split(',').map(c => c.trim());
             const codigoPrincipal = codigosArray[0];
             const tieneMultiples = codigosArray.length > 1;
-            codigosHtml = `<div class="codigo-container"><span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span><span class="codigo-toggle" data-codigos='${JSON.stringify(codigosArray)}' data-producto='${escapeHtml(p.nombre)}'>${escapeHtml(codigoPrincipal)}${tieneMultiples ? `<span class="badge badge-info badge-pill ml-1">+${codigosArray.length-1}</span>` : ''}</span></div>`;
+            const codigosJson = JSON.stringify(codigosArray).replace(/"/g, '&quot;');
+            codigosHtml = `<div class="codigo-container">
+                <span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span>
+                <span class="codigo-toggle" data-codigos='${codigosJson}' data-producto='${escapeHtml(p.nombre)}' style="cursor: pointer;">
+                    ${escapeHtml(codigoPrincipal)}${tieneMultiples ? `<span class="badge badge-info badge-pill ml-1">+${codigosArray.length-1}</span>` : ''}
+                </span>
+            </div>`;
         } else {
             codigosHtml = `<div class="codigo-container"><span class="codigo-label"><i class="fas fa-barcode"></i> Código:</span><span class="text-muted">---</span></div>`;
         }
@@ -802,14 +799,9 @@ function actualizarProductos(productos) {
         container.insertAdjacentHTML('beforeend', productHtml);
     });
     
-    // Re-inicializar eventos de códigos
-    document.querySelectorAll('.codigo-toggle').forEach(el => {
-        el.removeEventListener('click', manejarClickCodigo);
-        el.addEventListener('click', manejarClickCodigo);
-    });
+    initCodigosEventos();
 }
 
-// Función para obtener icono según categoría (JavaScript)
 function getIconoPorCategoriaJS(nombre, categoria) {
     const textoBusqueda = (categoria || nombre || '').toLowerCase();
     
@@ -853,32 +845,164 @@ function getIconoPorCategoriaJS(nombre, categoria) {
     return 'fas fa-box icon-gray';
 }
 
+function generarCodigoBarras(containerId, codigo) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (typeof JsBarcode === 'undefined') {
+        container.innerHTML = `<div style="font-family: monospace; font-size: 20px;">${escapeHtml(codigo)}</div>`;
+        return;
+    }
+    
+    try {
+        // Crear una tarjeta bonita para el código
+        const card = document.createElement('div');
+        card.style.cssText = `
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        `;
+        
+        // Título
+        const title = document.createElement('div');
+        title.style.cssText = `
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+        `;
+        title.innerHTML = '<i class="fas fa-barcode"></i> CÓDIGO DE BARRAS';
+        card.appendChild(title);
+        
+        // Canvas para el código
+        const canvas = document.createElement('canvas');
+        canvas.style.width = '100%';
+        canvas.style.maxWidth = '300px';
+        canvas.style.margin = '10px auto';
+        canvas.style.display = 'block';
+        card.appendChild(canvas);
+        
+        // Footer
+        const footer = document.createElement('div');
+        footer.style.cssText = `
+            font-size: 11px;
+            color: #adb5bd;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #dee2e6;
+        `;
+        footer.innerHTML = '✓ Escanea con tu dispositivo';
+        card.appendChild(footer);
+        
+        container.appendChild(card);
+        
+        JsBarcode(canvas, codigo, {
+            format: "CODE128",
+            width: 2.2,
+            height: 60,
+            displayValue: true,
+            fontSize: 15,
+            margin: 5,
+            textAlign: "center",
+            textPosition: "bottom",
+            font: "monospace",
+            background: "transparent",
+            lineColor: "#000000"
+        });
+        
+    } catch(e) {
+        container.innerHTML = `<div style="font-family: monospace; font-size: 18px;">${escapeHtml(codigo)}</div>`;
+    }
+}
+
 function manejarClickCodigo(e) {
     e.preventDefault();
     e.stopPropagation();
     const toggle = e.currentTarget;
+    
+    if (!toggle.dataset.codigos) {
+        console.error('No hay códigos en el elemento');
+        return;
+    }
+    
     try {
-        const codigos = JSON.parse(toggle.dataset.codigos);
+        let codigos;
+        try {
+            codigos = JSON.parse(toggle.dataset.codigos);
+        } catch {
+            codigos = [toggle.dataset.codigos];
+        }
+        
         const nombreProducto = toggle.dataset.producto || 'Producto';
-        let html = `<div class="text-center mb-4"><strong style="font-size: 1.2rem; color: #007bff;">${escapeHtml(nombreProducto)}</strong></div>`;
-        if (codigos.length === 1) html += `<div class="text-center mb-4 p-3" style="background: #f8f9fa; border-radius: 10px;"><div id="barcode-container"></div></div>`;
-        html += `<div class="codigos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">`;
-        codigos.forEach(c => html += `<div class="codigo-chip" data-codigo="${c}">${c}</div>`);
-        html += `</div>`;
-        Swal.fire({ title: 'Códigos de barras', html: html, showConfirmButton: false, showCloseButton: true, width: 550 });
-        if (codigos.length === 1) generarCodigoBarras('barcode-container', codigos[0]);
-        document.querySelectorAll('.codigo-chip').forEach(chip => {
-            chip.addEventListener('click', async function(e) {
-                e.stopPropagation();
-                const codigo = this.dataset.codigo || this.textContent;
-                await copiarAlPortapapeles(codigo);
-                this.classList.add('copiado');
-                const originalText = this.textContent;
-                this.textContent = '✓ Copiado!';
-                setTimeout(() => { this.classList.remove('copiado'); this.textContent = originalText; }, 1000);
-            });
+        
+        let html = `<div class="text-center mb-4"><strong style="font-size: 1.3rem; color: #007bff;">${escapeHtml(nombreProducto)}</strong></div>`;
+        
+        if (codigos.length === 1) {
+            html += `<div class="text-center mb-4 p-3" style="background: #f8f9fa; border-radius: 12px;">
+                        <div id="barcode-container" style="display: flex; justify-content: center; min-height: 100px;"></div>
+                     </div>`;
+        }
+        
+        html += `<div class="codigos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 10px;">`;
+        codigos.forEach(c => {
+            html += `<div class="codigo-chip" data-codigo="${escapeHtml(c)}" style="cursor: pointer; padding: 12px; border-radius: 10px; background: #e9ecef; text-align: center; transition: all 0.2s; font-weight: 600;"> ${escapeHtml(c)}</div>`;
         });
-    } catch (error) { console.error('Error:', error); }
+        html += `</div>`;
+        
+        Swal.fire({
+            title: 'Códigos de barras',
+            html: html,
+            showConfirmButton: false,
+            showCloseButton: true,
+            width: 600,
+            didOpen: () => {
+                if (codigos.length === 1) {
+                    // Esperar a que el DOM esté listo
+                    setTimeout(() => {
+                        const container = document.getElementById('barcode-container');
+                        if (container) {
+                            generarCodigoBarras('barcode-container', codigos[0]);
+                        }
+                    }, 300);
+                }
+            }
+        });
+        
+        // Eventos para copiar códigos
+        setTimeout(() => {
+            document.querySelectorAll('.codigo-chip').forEach(chip => {
+                chip.removeEventListener('click', chip._clickHandler);
+                const handler = async function(e) {
+                    e.stopPropagation();
+                    const codigo = this.dataset.codigo || this.textContent.replace('', '').trim();
+                    await copiarAlPortapapeles(codigo);
+                    
+                    // Efecto visual de copiado
+                    this.style.background = '#28a745';
+                    this.style.color = 'white';
+                    this.innerHTML = '✓ Copiado!';
+                    
+                    setTimeout(() => {
+                        this.style.background = '#e9ecef';
+                        this.style.color = '#333';
+                        this.innerHTML = ` ${codigo}`;
+                    }, 1500);
+                };
+                chip._clickHandler = handler;
+                chip.addEventListener('click', handler);
+            });
+        }, 400);
+        
+    } catch (error) { 
+        console.error('Error al mostrar códigos:', error);
+        Swal.fire('Error', 'No se pudieron cargar los códigos del producto', 'error');
+    }
 }
 
 function actualizarPaginacion(paginaActual, totalPaginas) {
@@ -918,16 +1042,18 @@ function actualizarPaginacion(paginaActual, totalPaginas) {
     }
 }
 
-function generarCodigoBarras(containerId, codigo) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
-    JsBarcode(container, codigo, { format: "CODE128", width: 2, height: 50, displayValue: true, fontSize: 14, margin: 10 });
-}
-
 async function copiarAlPortapapeles(texto) {
-    try { await navigator.clipboard.writeText(texto); mostrarToast('✓ Código copiado'); }
-    catch { const ta = Object.assign(document.createElement('textarea'), { value: texto, style: 'position:fixed;opacity:0' }); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); mostrarToast('✓ Código copiado'); }
+    try { 
+        await navigator.clipboard.writeText(texto); 
+        mostrarToast('✓ Código copiado'); 
+    } catch { 
+        const ta = Object.assign(document.createElement('textarea'), { value: texto, style: 'position:fixed;opacity:0' }); 
+        document.body.appendChild(ta); 
+        ta.select(); 
+        document.execCommand('copy'); 
+        document.body.removeChild(ta); 
+        mostrarToast('✓ Código copiado'); 
+    }
 }
 
 function mostrarToast(mensaje) {
@@ -936,7 +1062,12 @@ function mostrarToast(mensaje) {
     setTimeout(() => { toast.style.animation = 'slideIn 0.3s reverse'; setTimeout(() => toast.remove(), 300); }, 2000);
 }
 
-function escapeHtml(text) { return text.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
 
 <?php include 'includes/footer.php'; ?>

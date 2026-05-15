@@ -1031,12 +1031,67 @@ function verTicket(folio) {
             Swal.close();
             
             if (response.success && response.data && response.data.length > 0) {
-                const items = response.data;
-                const total = response.total || 0;
-                const venta = items[0];
-                const fecha = new Date(venta.fecha_venta);
-                const fechaStr = fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                const cliente = (venta.correo_cliente && venta.correo_cliente !== '' && venta.correo_cliente !== 'null') ? venta.correo_cliente : 'Venta en general';
+const items = response.data;
+const total = response.total || 0;
+// Usar los datos directamente de response, NO de items[0]
+const fechaVenta = response.fecha_venta;
+const clienteCorreo = response.correo_cliente;
+const vendedorNombre = response.vendedor_nombre;
+                
+                // Obtener datos de la tienda
+                $.ajax({
+                    url: 'api/obtener_configuracion.php',
+                    method: 'GET',
+                    dataType: 'json',
+                    async: false,
+                    success: function(config) {
+                        window.tiendaConfig = config;
+                    },
+                    error: function() {
+                        window.tiendaConfig = { nombre: 'TIENDA PESCADORES', telefono: '', email: '', direccion: '', logo: '' };
+                    }
+                });
+                
+                // Formatear fecha CORRECTAMENTE
+// Formatear fecha CORRECTAMENTE
+let fechaStr = 'Fecha no disponible';
+if (fechaVenta) {
+    const fecha = new Date(fechaVenta);
+    if (!isNaN(fecha.getTime())) {
+        fechaStr = fecha.toLocaleDateString('es-MX', { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false
+        });
+    } else {
+        // Intentar parsear formato YYYY-MM-DD HH:MM:SS
+        const partes = fechaVenta.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+        if (partes) {
+            const fechaObj = new Date(partes[1], partes[2]-1, partes[3], partes[4], partes[5], partes[6]);
+            if (!isNaN(fechaObj.getTime())) {
+                fechaStr = fechaObj.toLocaleDateString('es-MX', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+            }
+        }
+    }
+}
+
+const cliente = (clienteCorreo && clienteCorreo !== '' && clienteCorreo !== 'null') ? clienteCorreo : 'Venta en general';
+                
+               
+                const logoBase64 = window.tiendaConfig?.logo_base64 || '';
+                const tiendaNombre = window.tiendaConfig?.nombre || 'TIENDA PESCADORES';
+                const tiendaTelefono = window.tiendaConfig?.telefono || '';
+                const tiendaEmail = window.tiendaConfig?.email || '';
+                const tiendaDireccion = window.tiendaConfig?.direccion || '';
                 
                 let itemsHtml = '';
                 items.forEach(item => {
@@ -1044,60 +1099,144 @@ function verTicket(folio) {
                     const cantidad = parseInt(item.cantidad);
                     itemsHtml += `
                         <tr>
-                            <td>${cantidad}</td>
-                            <td>${item.producto}</td>
-                            <td>$${precio.toFixed(2)}</td>
-                            <td>$${(precio * cantidad).toFixed(2)}</td>
+                            <td style="text-align: center; padding: 5px; border-bottom: 1px dotted #ccc;">${cantidad}</td>
+                            <td style="padding: 5px; border-bottom: 1px dotted #ccc;">${escapeHtml(item.producto)}</td>
+                            <td style="text-align: center; padding: 5px; border-bottom: 1px dotted #ccc;">$${precio.toFixed(2)}</td>
+                            <td style="text-align: center; padding: 5px; border-bottom: 1px dotted #ccc;">$${(precio * cantidad).toFixed(2)}</td>
                         </tr>
                     `;
                 });
                 
-const html = `
-    <div style="font-family: 'Courier New', monospace; background: white; max-width: 380px; margin: 0 auto; padding: 20px;">
-        <div style="text-align: center; border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 15px;">
-            <h4 style="font-size: 14px; font-weight: bold; margin: 0;">TIENDA PESCADORES</h4>
-            <p style="font-size: 10px; margin: 3px 0;">RFC: PESC123456</p>
-            <p style="font-size: 10px; margin: 0;">Tel: 1234-5678</p>
-            <p style="font-size: 10px; margin: 3px 0;">${fechaStr}</p>
-        </div>
-        <div style="border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
-                <span style="font-weight: bold;">FOLIO:</span>
-                <span>${folio}</span>
+                // Logo HTML
+                let logoHtml = '';
+                if (logoBase64) {
+                    logoHtml = `<img src="${logoBase64}" style="width: 60px; height: auto; margin-bottom: 10px;">`;
+                } else {
+                    logoHtml = `<i class="fas fa-store" style="font-size: 40px; color: #f97316; margin-bottom: 10px;"></i>`;
+                }
+                
+    const html = `
+        <div style="font-family: 'Courier New', monospace; background: white; max-width: 380px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 15px;">
+                ${logoHtml}
+                <h4 style="font-size: 14px; font-weight: bold; margin: 5px 0;">${escapeHtml(tiendaNombre)}</h4>
+                ${tiendaDireccion ? `<p style="font-size: 9px; margin: 2px 0;">${escapeHtml(tiendaDireccion)}</p>` : ''}
+                ${tiendaTelefono ? `<p style="font-size: 9px; margin: 2px 0;">Tel: ${escapeHtml(tiendaTelefono)}</p>` : ''}
+                ${tiendaEmail ? `<p style="font-size: 9px; margin: 2px 0;">${escapeHtml(tiendaEmail)}</p>` : ''}
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
-                <span style="font-weight: bold;">CLIENTE:</span>
-                <span>${cliente}</span>
+            <div style="border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">FOLIO:</span>
+                    <span>${escapeHtml(folio)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">CLIENTE:</span>
+                    <span>${escapeHtml(cliente)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">VENDEDOR:</span>
+                    <span>${escapeHtml(vendedorNombre || 'Sistema')}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">FECHA:</span>
+                    <span>${fechaStr}</span>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
-                <span style="font-weight: bold;">VENDEDOR:</span>
-                <span>${venta.vendedor_nombre || 'Sistema'}</span>
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <thead>
+                    <tr>
+                        <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">CANT</th>
+                        <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRODUCTO</th>
+                        <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRECIO</th>
+                        <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">SUBTOTAL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+            <div style="text-align: right; font-weight: bold; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #333;">
+                TOTAL: $${parseFloat(total).toFixed(2)}
+            </div>
+            <div style="text-align: center; font-size: 9px; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #333; color: #666;">
+                ¡Gracias por tu compra!<br>Este ticket es válido como comprobante
             </div>
         </div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
-            <thead>
-                <tr>
-                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">CANT</th>
-                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRODUCTO</th>
-                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">PRECIO</th>
-                    <th style="text-align: center; border-bottom: 1px solid #333; padding: 5px 0;">SUBTOTAL</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${itemsHtml}
-            </tbody>
-        </table>
-        <div style="text-align: right; font-weight: bold; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #333;">
-            TOTAL: $${parseFloat(total).toFixed(2)}
-        </div>
-        <div style="text-align: center; font-size: 9px; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #333; color: #666;">
-            ¡Gracias por tu compra!<br>Este ticket es válido como comprobante
-        </div>
-    </div>
-`;
+    `;
                 
                 $('#modalTicketBody').html(html);
                 $('#modalTicket').modal('show');
+                
+                // Configurar botón de imprimir
+                $('#btnImprimirTicket').off('click').on('click', function() {
+                    const contenido = $('#modalTicketBody').html();
+                    
+                    // Crear una nueva ventana para imprimir
+                    const ventanaImpresion = window.open('', '_blank');
+                    
+                    ventanaImpresion.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Ticket de Venta - ${escapeHtml(folio)}</title>
+                            <meta charset="UTF-8">
+                            <style>
+                                * {
+                                    margin: 0;
+                                    padding: 0;
+                                    box-sizing: border-box;
+                                }
+                                body {
+                                    font-family: 'Courier New', monospace;
+                                    background: white;
+                                    padding: 20px;
+                                    display: flex;
+                                    justify-content: center;
+                                    align-items: center;
+                                    min-height: 100vh;
+                                }
+                                .ticket-container {
+                                    max-width: 380px;
+                                    width: 100%;
+                                    margin: 0 auto;
+                                    background: white;
+                                }
+                                table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                }
+                                td, th {
+                                    padding: 5px;
+                                }
+                                @media print {
+                                    body {
+                                        padding: 0;
+                                        margin: 0;
+                                    }
+                                    .no-print {
+                                        display: none;
+                                    }
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="ticket-container">
+                                ${contenido}
+                            </div>
+                            <script>
+                                window.onload = function() {
+                                    window.print();
+                                    setTimeout(function() {
+                                        window.close();
+                                    }, 500);
+                                };
+                            <\/script>
+                        </body>
+                        </html>
+                    `);
+                    
+                    ventanaImpresion.document.close();
+                });
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los detalles', confirmButtonColor: '#f97316' });
             }
@@ -1107,33 +1246,8 @@ const html = `
             Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión', confirmButtonColor: '#f97316' });
         }
     });
-    
-    $('#btnImprimirTicket').off('click').on('click', function() {
-        const contenido = $('#modalTicketBody').html();
-        const ventana = window.open('', '_blank');
-        ventana.document.write(`
-            <html>
-            <head>
-                <title>Ticket de Venta</title>
-                <style>
-                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
-                    .ticket-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-                    .ticket-info { border-bottom: 1px dashed #000; padding-bottom: 10px; }
-                    .ticket-info-row { display: flex; justify-content: space-between; font-size: 11px; }
-                    table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                    th, td { padding: 5px; text-align: center; border-bottom: 1px dotted #ccc; }
-                    .total { text-align: right; font-weight: bold; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #000; }
-                    .footer { text-align: center; font-size: 9px; margin-top: 15px; }
-                </style>
-            </head>
-            <body>${contenido}</body>
-            </html>
-        `);
-        ventana.document.close();
-        ventana.print();
-        ventana.close();
-    });
 }
+
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');

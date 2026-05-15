@@ -27,7 +27,7 @@ foreach ($carpetas as $ruta) {
 
 $todos_los_archivos = [];
 
-// Obtener todos los registros de la BD con más campos
+// Obtener todos los registros de la BD
 $query_bd = "SELECT nombre_archivo, proveedor, fecha_generacion, usuario_nombre, modulo, total_registros FROM historial_reportes";
 $result_bd = $conn->query($query_bd);
 $info_bd = [];
@@ -56,57 +56,34 @@ foreach ($carpetas as $nombre_carpeta => $ruta_carpeta) {
                 $usuario_genero = 'Sistema';
                 $total_registros_reporte = 0;
                 
-                if (isset($info_bd[$archivo])) {
-                    // Usar datos de la base de datos
+                // Buscar en BD
+                if (isset($info_bd[$ruta_completa])) {
+                    $proveedor_detectado = $info_bd[$ruta_completa]['proveedor'] ?? 'N/A';
+                    $usuario_genero = $info_bd[$ruta_completa]['usuario'] ?? 'Sistema';
+                    $total_registros_reporte = $info_bd[$ruta_completa]['total_registros'] ?? 0;
+                } elseif (isset($info_bd[$archivo])) {
                     $proveedor_detectado = $info_bd[$archivo]['proveedor'] ?? 'N/A';
                     $usuario_genero = $info_bd[$archivo]['usuario'] ?? 'Sistema';
                     $total_registros_reporte = $info_bd[$archivo]['total_registros'] ?? 0;
-                    
-                    // Si el proveedor es 'todos' o está vacío, intentar extraer del nombre
-                    if ($proveedor_detectado === 'todos' || $proveedor_detectado === 'N/A' || empty($proveedor_detectado)) {
-                        // Extraer del nombre del archivo
-                        if (strpos($archivo, 'proveedor_') === 0 || strpos($archivo, 'reporte_proveedor_') === 0) {
-                            if (preg_match('/proveedor_([^_]+)_/', $archivo, $matches)) {
-                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                            } elseif (preg_match('/reporte_proveedor_([^_]+)_/', $archivo, $matches)) {
-                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                            }
-                        } elseif (strpos($archivo, 'stock_') === 0 && strpos($archivo, 'proveedor') !== false) {
-                            if (preg_match('/stock_proveedor_([^_]+)_/', $archivo, $matches)) {
-                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                            } elseif (preg_match('/reporte_inventario_([^_]+)_/', $archivo, $matches)) {
-                                $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                            }
-                        }
-                    }
-                } else {
-                    // No está en BD, extraer del nombre del archivo
-                    if (strpos($archivo, 'proveedor_') === 0 || strpos($archivo, 'reporte_proveedor_') === 0) {
-                        // Reportes de ventas por proveedor
-                        if (preg_match('/proveedor_([^_]+)_/', $archivo, $matches)) {
-                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                        } elseif (preg_match('/reporte_proveedor_([^_]+)_/', $archivo, $matches)) {
-                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                        } else {
-                            $proveedor_detectado = 'Ventas por Proveedor';
-                        }
-                    } elseif (strpos($archivo, 'stock_') === 0 && strpos($archivo, 'proveedor') !== false) {
-                        // Reportes de stock por proveedor
-                        if (preg_match('/stock_proveedor_([^_]+)_/', $archivo, $matches)) {
-                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                        } elseif (preg_match('/reporte_inventario_([^_]+)_/', $archivo, $matches)) {
-                            $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
-                        } else {
-                            $proveedor_detectado = 'Stock por Proveedor';
-                        }
-                    } elseif (strpos($archivo, 'admin') !== false || strpos($archivo, 'reporte_admin') !== false) {
+                }
+                
+                // Si el proveedor es 'todos' o está vacío, extraer del nombre
+                if ($proveedor_detectado === 'todos' || $proveedor_detectado === 'N/A' || empty($proveedor_detectado)) {
+                    if (preg_match('/reporte_inventario_([^_]+)_(\d{4}-\d{2}-\d{2})\.pdf$/', $archivo, $matches)) {
+                        $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                    } elseif (preg_match('/reporte_proveedor_([^_]+)_(\d{4}-\d{2}-\d{2})\.pdf$/', $archivo, $matches)) {
+                        $proveedor_detectado = ucwords(str_replace('_', ' ', $matches[1]));
+                    } elseif (preg_match('/reporte_admin_(\d{4}-\d{2}-\d{2})\.pdf$/', $archivo, $matches)) {
                         $proveedor_detectado = 'Ventas Generales';
-                    } elseif (strpos($archivo, 'stock_general') !== false || (strpos($archivo, 'reporte_inventario') === 0 && strpos($archivo, '_') !== false && substr_count($archivo, '_') == 2)) {
+                    } elseif (preg_match('/reporte_inventario_(\d{4}-\d{2}-\d{2})\.pdf$/', $archivo, $matches)) {
                         $proveedor_detectado = 'Stock General';
-                    } elseif (strpos($archivo, 'ventas_') === 0) {
-                        $proveedor_detectado = 'Ventas Generales';
-                    } elseif (strpos($archivo, 'stock_') === 0) {
-                        $proveedor_detectado = 'Stock General';
+                    } else {
+                        switch($nombre_carpeta) {
+                            case 'ventas_generales': $proveedor_detectado = 'Ventas Generales'; break;
+                            case 'ventas_proveedor': $proveedor_detectado = 'Ventas por Proveedor'; break;
+                            case 'stock_general': $proveedor_detectado = 'Stock General'; break;
+                            case 'stock_proveedor': $proveedor_detectado = 'Stock por Proveedor'; break;
+                        }
                     }
                 }
                 
@@ -126,7 +103,7 @@ foreach ($carpetas as $nombre_carpeta => $ruta_carpeta) {
     }
 }
 
-// Ordenar por fecha (más recientes primero)
+// Ordenar por fecha
 usort($todos_los_archivos, function($a, $b) {
     return $b['fecha'] - $a['fecha'];
 });
@@ -138,7 +115,7 @@ $total_bytes = array_sum(array_column($todos_los_archivos, 'tamaño'));
 $archivos_hoy = count(array_filter($todos_los_archivos, function($a) { return date('Y-m-d', $a['fecha']) == date('Y-m-d'); }));
 $archivos_semana = count(array_filter($todos_los_archivos, function($a) { return $a['fecha'] >= strtotime('-7 days'); }));
 
-// Estadísticas para gráfica (últimos 7 días)
+// Estadísticas para gráfica
 $fechas_grafica = [];
 $conteos_grafica = [];
 for ($i = 6; $i >= 0; $i--) {
@@ -154,6 +131,138 @@ for ($i = 6; $i >= 0; $i--) {
 ?>
 
 <link rel="stylesheet" href="css/historial_reportes.css">
+
+<style>
+/* SIN SCROLL - La tabla ocupa todo el ancho disponible */
+.table-responsive {
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+}
+
+.table {
+    width: 100%;
+    margin-bottom: 0;
+    table-layout: auto;
+}
+
+.table th, .table td {
+    padding: 8px 8px;
+    vertical-align: middle;
+    word-break: break-word;
+}
+
+/* Anchos relativos para cada columna */
+.table th:nth-child(1), .table td:nth-child(1) { width: 8%; }  /* Tipo */
+.table th:nth-child(2), .table td:nth-child(2) { width: 22%; } /* Nombre */
+.table th:nth-child(3), .table td:nth-child(3) { width: 12%; } /* Carpeta */
+.table th:nth-child(4), .table td:nth-child(4) { width: 15%; } /* Proveedor */
+.table th:nth-child(5), .table td:nth-child(5) { width: 10%; } /* Usuario */
+.table th:nth-child(6), .table td:nth-child(6) { width: 18%; } /* Fecha */
+.table th:nth-child(7), .table td:nth-child(7) { width: 8%; }  /* Tamaño */
+.table th:nth-child(8), .table td:nth-child(8) { width: 7%; }  /* Acciones */
+
+/* Badges con colores para PDF y Excel */
+.badge-excel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #e8f5e9;
+    color: #2e7d32;
+    white-space: nowrap;
+}
+
+.badge-pdf {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #ffebee;
+    color: #c62828;
+    white-space: nowrap;
+}
+
+.badge-excel i, .badge-pdf i {
+    margin-right: 5px;
+    font-size: 13px;
+}
+
+.carpetas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.carpeta-card {
+    cursor: pointer;
+    transition: all 0.3s;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid #e0e0e0;
+}
+
+.carpeta-card.active {
+    border-color: #f97316;
+    background: #fff7ed;
+}
+
+.carpeta-icon {
+    font-size: 32px;
+    color: #f97316;
+    margin-bottom: 10px;
+}
+
+.carpeta-card h4 {
+    font-size: 16px;
+    margin: 10px 0;
+    font-weight: 600;
+}
+
+.carpeta-count {
+    color: #666;
+    font-size: 13px;
+    margin: 0;
+}
+
+.btn-ver, .btn-descargar {
+    padding: 5px 8px;
+    margin: 0 2px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* Responsive: en pantallas pequeñas, ajustar tamaños */
+@media (max-width: 992px) {
+    .table th, .table td {
+        padding: 6px 4px;
+        font-size: 12px;
+    }
+    
+    .badge-excel, .badge-pdf {
+        padding: 3px 6px;
+        font-size: 10px;
+    }
+    
+    .badge-excel i, .badge-pdf i {
+        font-size: 10px;
+    }
+    
+    .btn-ver, .btn-descargar {
+        padding: 3px 5px;
+        font-size: 10px;
+    }
+}
+</style>
 
 <div class="content-wrapper">
     <div class="container-fluid">
@@ -217,7 +326,7 @@ for ($i = 6; $i >= 0; $i--) {
 
         <br>
         
-        <!-- Filtros (en tiempo real) -->
+        <!-- Filtros -->
         <div class="card-filtros">
             <div class="card-header">
                 <h3 class="card-title">
@@ -257,7 +366,7 @@ for ($i = 6; $i >= 0; $i--) {
             </div>
         </div>
 
-        <!-- Carpetas (4 tarjetas) - debajo de los filtros -->
+        <!-- Carpetas -->
         <div class="carpetas-grid">
             <?php 
             $iconos_carpetas = [
@@ -288,7 +397,7 @@ for ($i = 6; $i >= 0; $i--) {
             <?php endforeach; ?>
         </div>
 
-        <!-- Tabla de resultados -->
+        <!-- Tabla de resultados - SIN SCROLL -->
         <div class="table-container">
             <div class="table-header">
                 <div>
@@ -300,25 +409,23 @@ for ($i = 6; $i >= 0; $i--) {
                 </div>
             </div>
             <div class="table-body">
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Nombre del archivo</th>
-                                <th>Carpeta</th>
-                                <th>Proveedor</th>
-                                <th>Usuario</th>
-                                <th>Fecha</th>
-                                <th>Tamaño</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaArchivos">
-                            <!-- Se llenará con JavaScript -->
-                        </tbody>
-                    </table>
-                </div>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Nombre del archivo</th>
+                            <th>Carpeta</th>
+                            <th>Proveedor</th>
+                            <th>Usuario</th>
+                            <th>Fecha</th>
+                            <th>Tamaño</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaArchivos">
+                        <!-- Se llenará con JavaScript -->
+                    </tbody>
+                </table>
             </div>
             <div class="table-footer">
                 <i class="fas fa-info-circle"></i> 
@@ -328,7 +435,7 @@ for ($i = 6; $i >= 0; $i--) {
             </div>
         </div>
 
-        <!-- Gráfica de actividad -->
+        <!-- Gráfica -->
         <div class="card mt-4" style="border-radius: 20px; border: 1px solid #eef2f6; background: white;">
             <div class="card-header" style="background: white; border-bottom: 2px solid #f97316; border-radius: 20px 20px 0 0;">
                 <h5 class="mb-0" style="font-weight: 700; color: #1e293b;">
@@ -343,7 +450,7 @@ for ($i = 6; $i >= 0; $i--) {
     </div>
 </div>
 
-<!-- Modal para visualizar reportes -->
+<!-- Modal -->
 <div class="modal fade modal-reporte" id="reporteModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -378,13 +485,11 @@ for ($i = 6; $i >= 0; $i--) {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-// Datos de archivos desde PHP
 const todosArchivos = <?php echo json_encode($todos_los_archivos); ?>;
 let archivosFiltrados = [...todosArchivos];
 let carpetaSeleccionada = '';
 let grafica = null;
 
-// Inicializar gráfica
 function initGrafica() {
     const ctx = document.getElementById('graficaHistorial').getContext('2d');
     grafica = new Chart(ctx, {
@@ -413,7 +518,6 @@ function initGrafica() {
     });
 }
 
-// Renderizar tabla
 function renderizarTabla() {
     const tbody = document.getElementById('tablaArchivos');
     const resultadosCount = document.getElementById('resultadosCount');
@@ -421,14 +525,7 @@ function renderizarTabla() {
     const totalCount = document.getElementById('totalCount');
     
     if (archivosFiltrados.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center py-5">
-                    <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                    <p class="mb-0">No se encontraron archivos con los filtros seleccionados</p>
-                </td>
-            </tr>
-        `;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5"><i class="fas fa-folder-open fa-3x text-muted mb-3"></i><p class="mb-0">No se encontraron archivos</p></td></table>`;
         resultadosCount.textContent = '0 resultados';
         mostrandoCount.textContent = '0';
         return;
@@ -437,8 +534,8 @@ function renderizarTabla() {
     let html = '';
     for (const archivo of archivosFiltrados) {
         const tipoBadge = archivo.tipo === 'excel' 
-            ? '<span class="badge-excel"><i class="fas fa-file-excel mr-1"></i> Excel</span>'
-            : '<span class="badge-pdf"><i class="fas fa-file-pdf mr-1"></i> PDF</span>';
+            ? '<span class="badge-excel"><i class="fas fa-file-excel"></i> Excel</span>'
+            : '<span class="badge-pdf"><i class="fas fa-file-pdf"></i> PDF</span>';
         
         const nombreCarpeta = {
             'ventas_generales': 'Ventas Generales',
@@ -448,13 +545,9 @@ function renderizarTabla() {
         }[archivo.carpeta] || archivo.carpeta;
         
         let tamaño = '';
-        if (archivo.tamaño < 1024) {
-            tamaño = archivo.tamaño + ' B';
-        } else if (archivo.tamaño < 1048576) {
-            tamaño = (archivo.tamaño / 1024).toFixed(1) + ' KB';
-        } else {
-            tamaño = (archivo.tamaño / 1048576).toFixed(1) + ' MB';
-        }
+        if (archivo.tamaño < 1024) tamaño = archivo.tamaño + ' B';
+        else if (archivo.tamaño < 1048576) tamaño = (archivo.tamaño / 1024).toFixed(1) + ' KB';
+        else tamaño = (archivo.tamaño / 1048576).toFixed(1) + ' MB';
         
         const fecha = new Date(archivo.fecha * 1000);
         const fechaStr = fecha.toLocaleDateString('es-MX') + ' ' + fecha.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'});
@@ -462,20 +555,20 @@ function renderizarTabla() {
         html += `
             <tr>
                 <td>${tipoBadge}</td>
-                <td class="font-weight-bold">${escapeHtml(archivo.nombre.substring(0, 50))}${archivo.nombre.length > 50 ? '...' : ''}</td>
-                <td><span class="badge bg-light text-dark" style="cursor: pointer;" onclick="filtrarPorCarpetaAjax('${archivo.carpeta}')"><i class="fas fa-folder text-warning"></i> ${nombreCarpeta}</span></td>
+                <td title="${escapeHtml(archivo.nombre)}">${escapeHtml(archivo.nombre.substring(0, 50))}${archivo.nombre.length > 50 ? '...' : ''}</td>
+                <td><span class="badge bg-light" style="cursor: pointer; padding: 4px 8px;" onclick="filtrarPorCarpetaAjax('${archivo.carpeta}')"><i class="fas fa-folder text-warning"></i> ${nombreCarpeta}</span></td>
                 <td>${escapeHtml(archivo.proveedor)}</td>
-                <td><small><i class="fas fa-user"></i> ${escapeHtml(archivo.usuario || 'Sistema')}</small></td>
-                <td>${fechaStr}</td>
-                <td>${tamaño}</td>
+                <td><small><i class="fas fa-user text-muted"></i> ${escapeHtml(archivo.usuario || 'Sistema')}</small></td>
+                <td><small>${fechaStr}</small></td>
+                <td><span class="badge bg-light">${tamaño}</span></td>
                 <td>
-                    <button class="btn-ver" onclick="verReporte('${archivo.ruta}', '${archivo.tipo}')">
+                    <button class="btn-ver btn btn-sm btn-outline-info" onclick="verReporte('${archivo.ruta}', '${archivo.tipo}')" title="Ver">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <a href="${archivo.ruta}" class="btn-descargar" download="${archivo.nombre}">
+                    <a href="${archivo.ruta}" class="btn-descargar btn btn-sm btn-outline-success" download="${archivo.nombre}" title="Descargar">
                         <i class="fas fa-download"></i>
                     </a>
-                   </td>
+                 </td>
             </tr>
         `;
     }
@@ -485,7 +578,6 @@ function renderizarTabla() {
     mostrandoCount.textContent = archivosFiltrados.length;
 }
 
-// Aplicar filtros (en tiempo real)
 function aplicarFiltros() {
     const fechaDesde = document.getElementById('fecha_desde').value;
     const fechaHasta = document.getElementById('fecha_hasta').value;
@@ -493,139 +585,75 @@ function aplicarFiltros() {
     const busqueda = document.getElementById('busqueda').value.toLowerCase();
     
     archivosFiltrados = todosArchivos.filter(archivo => {
-        // Filtro por carpeta
-        if (carpetaSeleccionada && archivo.carpeta !== carpetaSeleccionada) {
-            return false;
-        }
-        
-        // Filtro por fecha desde
-        if (fechaDesde) {
-            const fechaArchivo = new Date(archivo.fecha * 1000);
-            const fechaDesdeDate = new Date(fechaDesde);
-            if (fechaArchivo < fechaDesdeDate) return false;
-        }
-        
-        // Filtro por fecha hasta
+        if (carpetaSeleccionada && archivo.carpeta !== carpetaSeleccionada) return false;
+        if (fechaDesde && new Date(archivo.fecha * 1000) < new Date(fechaDesde)) return false;
         if (fechaHasta) {
-            const fechaArchivo = new Date(archivo.fecha * 1000);
             const fechaHastaDate = new Date(fechaHasta);
             fechaHastaDate.setHours(23, 59, 59);
-            if (fechaArchivo > fechaHastaDate) return false;
+            if (new Date(archivo.fecha * 1000) > fechaHastaDate) return false;
         }
-        
-        // Filtro por tipo
-        if (tipoFiltro && archivo.tipo !== tipoFiltro) {
-            return false;
-        }
-        
-        // Filtro por búsqueda
+        if (tipoFiltro && archivo.tipo !== tipoFiltro) return false;
         if (busqueda) {
             return archivo.nombre.toLowerCase().includes(busqueda) || 
                    archivo.proveedor.toLowerCase().includes(busqueda) ||
                    (archivo.usuario && archivo.usuario.toLowerCase().includes(busqueda));
         }
-        
         return true;
     });
-    
     renderizarTabla();
     actualizarContadores();
 }
 
-// Filtrar por carpeta (sin recargar)
 function filtrarPorCarpetaAjax(carpeta) {
-    // Remover clase active de todas las carpetas
-    document.querySelectorAll('.carpeta-card').forEach(card => {
-        card.classList.remove('active');
-    });
-    
-    // Agregar clase active a la seleccionada
+    document.querySelectorAll('.carpeta-card').forEach(card => card.classList.remove('active'));
     const cardSeleccionada = document.querySelector(`.carpeta-card[data-carpeta="${carpeta}"]`);
-    if (cardSeleccionada) {
-        cardSeleccionada.classList.add('active');
-    }
+    if (cardSeleccionada) cardSeleccionada.classList.add('active');
     
-    // Actualizar filtro
     if (carpetaSeleccionada === carpeta) {
         carpetaSeleccionada = '';
         cardSeleccionada?.classList.remove('active');
     } else {
         carpetaSeleccionada = carpeta;
     }
-    
     aplicarFiltros();
 }
 
-// Limpiar todos los filtros
 function limpiarFiltros() {
     document.getElementById('fecha_desde').value = '';
     document.getElementById('fecha_hasta').value = '';
     document.getElementById('tipo_filtro').value = '';
     document.getElementById('busqueda').value = '';
     carpetaSeleccionada = '';
-    
-    document.querySelectorAll('.carpeta-card').forEach(card => {
-        card.classList.remove('active');
-    });
-    
+    document.querySelectorAll('.carpeta-card').forEach(card => card.classList.remove('active'));
     archivosFiltrados = [...todosArchivos];
     renderizarTabla();
     actualizarContadores();
 }
 
-// Actualizar contadores en las tarjetas y estadísticas
 function actualizarContadores() {
-    // Actualizar contadores de carpetas
     const carpetasCount = {
-        'ventas_generales': 0,
-        'ventas_proveedor': 0,
-        'stock_general': 0,
-        'stock_proveedor': 0
+        'ventas_generales': 0, 'ventas_proveedor': 0,
+        'stock_general': 0, 'stock_proveedor': 0
     };
-    
     archivosFiltrados.forEach(archivo => {
-        if (carpetasCount[archivo.carpeta] !== undefined) {
-            carpetasCount[archivo.carpeta]++;
-        }
+        if (carpetasCount[archivo.carpeta] !== undefined) carpetasCount[archivo.carpeta]++;
     });
-    
     document.querySelectorAll('.carpeta-card').forEach(card => {
         const carpeta = card.getAttribute('data-carpeta');
         const countSpan = card.querySelector('.carpeta-count');
-        if (countSpan && carpetasCount[carpeta] !== undefined) {
-            countSpan.textContent = carpetasCount[carpeta] + ' archivos';
-        }
+        if (countSpan && carpetasCount[carpeta] !== undefined) countSpan.textContent = carpetasCount[carpeta] + ' archivos';
     });
     
-    // Actualizar tarjetas de estadísticas
-    const totalExcel = archivosFiltrados.filter(a => a.tipo === 'excel').length;
-    const totalPdf = archivosFiltrados.filter(a => a.tipo === 'pdf').length;
-    
     document.getElementById('totalArchivos').textContent = archivosFiltrados.length;
-    document.getElementById('totalExcel').textContent = totalExcel;
-    document.getElementById('totalPdf').textContent = totalPdf;
+    document.getElementById('totalExcel').textContent = archivosFiltrados.filter(a => a.tipo === 'excel').length;
+    document.getElementById('totalPdf').textContent = archivosFiltrados.filter(a => a.tipo === 'pdf').length;
     
-    // Actualizar hoy y semana
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    const semanaAtras = new Date();
-    semanaAtras.setDate(semanaAtras.getDate() - 7);
-    
-    const archivosHoy = archivosFiltrados.filter(a => {
-        const fecha = new Date(a.fecha * 1000);
-        return fecha >= hoy;
-    }).length;
-    
-    const archivosSemana = archivosFiltrados.filter(a => {
-        const fecha = new Date(a.fecha * 1000);
-        return fecha >= semanaAtras;
-    }).length;
-    
-    document.getElementById('archivosHoy').textContent = archivosHoy;
-    document.getElementById('archivosSemana').textContent = archivosSemana;
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const semanaAtras = new Date(); semanaAtras.setDate(semanaAtras.getDate() - 7);
+    document.getElementById('archivosHoy').textContent = archivosFiltrados.filter(a => new Date(a.fecha * 1000) >= hoy).length;
+    document.getElementById('archivosSemana').textContent = archivosFiltrados.filter(a => new Date(a.fecha * 1000) >= semanaAtras).length;
 }
 
-// Ver reporte en modal
 function verReporte(ruta, tipo) {
     const modalBody = document.getElementById('reporteModalBody');
     const modalTitle = document.querySelector('#reporteModal .modal-title');
@@ -633,7 +661,7 @@ function verReporte(ruta, tipo) {
     
     if (tipo === 'pdf') {
         modalTitle.innerHTML = '<i class="fas fa-file-pdf text-danger"></i> Visualizando PDF';
-        modalBody.innerHTML = `<iframe src="${ruta}" type="application/pdf"></iframe>`;
+        modalBody.innerHTML = `<iframe src="${ruta}" style="width: 100%; height: 70vh; border: none;"></iframe>`;
     } else {
         modalTitle.innerHTML = '<i class="fas fa-file-excel text-success"></i> Visualizando Excel';
         modalBody.innerHTML = `
@@ -641,14 +669,10 @@ function verReporte(ruta, tipo) {
                 <i class="fas fa-file-excel" style="font-size: 64px; color: #22c55e;"></i>
                 <h4 class="mt-3">Archivo Excel</h4>
                 <p class="text-muted">Los archivos Excel no pueden visualizarse directamente en el navegador.</p>
-                <p>Descarga el archivo para abrirlo con Microsoft Excel u otra aplicación compatible.</p>
-                <a href="${ruta}" class="btn btn-success btn-lg mt-3" download>
-                    <i class="fas fa-download"></i> Descargar Excel
-                </a>
+                <a href="${ruta}" class="btn btn-success btn-lg mt-3" download><i class="fas fa-download"></i> Descargar Excel</a>
             </div>
         `;
     }
-    
     descargarBtn.href = ruta;
     $('#reporteModal').modal('show');
 }
@@ -660,14 +684,12 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Inicializar
 document.addEventListener('DOMContentLoaded', function() {
     archivosFiltrados = [...todosArchivos];
     renderizarTabla();
     initGrafica();
 });
 
-// Limpiar modal al cerrar
 $('#reporteModal').on('hidden.bs.modal', function () {
     document.getElementById('reporteModalBody').innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary" role="status"><span class="sr-only">Cargando...</span></div><p class="mt-3">Cargando archivo...</p></div>';
 });

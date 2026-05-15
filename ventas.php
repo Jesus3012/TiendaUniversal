@@ -315,6 +315,45 @@ $rol_usuario = $_SESSION['rol'] ?? 'vendedor';
 <!-- ESTILOS EXTERNOS -->
 <link rel="stylesheet" href="css/venta-codigo.css">
 
+<style>
+/* Estilos adicionales para los iconos de categoría */
+.producto-icono {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #f97316;
+}
+
+/* Colores para diferentes iconos */
+.producto-icono.icon-primary { color: #007bff; background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
+.producto-icono.icon-info { color: #17a2b8; background: linear-gradient(135deg, #e0f7fa, #b2ebf2); }
+.producto-icono.icon-warning { color: #ffc107; background: linear-gradient(135deg, #fff3e0, #ffe0b2); }
+.producto-icono.icon-success { color: #28a745; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); }
+.producto-icono.icon-danger { color: #dc3545; background: linear-gradient(135deg, #ffebee, #ffcdd2); }
+.producto-icono.icon-secondary { color: #6c757d; background: linear-gradient(135deg, #f8f9fa, #e9ecef); }
+.producto-icono.icon-indigo { color: #6610f2; background: linear-gradient(135deg, #e8eaf6, #c5cae9); }
+.producto-icono.icon-pink { color: #e83e8c; background: linear-gradient(135deg, #fce4ec, #f8bbd0); }
+.producto-icono.icon-teal { color: #20c997; background: linear-gradient(135deg, #e0f2f1, #b2dfdb); }
+.producto-icono.icon-purple { color: #6f42c1; background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
+.producto-icono.icon-orange { color: #fd7e14; background: linear-gradient(135deg, #fff3e0, #ffe0b2); }
+.producto-icono.icon-cyan { color: #17a2b8; background: linear-gradient(135deg, #e0f7fa, #b2ebf2); }
+.producto-icono.icon-gray { color: #6c757d; background: linear-gradient(135deg, #f8f9fa, #e9ecef); }
+
+html {
+    scroll-behavior: auto !important;
+}
+
+.metodo-radio {
+    cursor: pointer;
+    scroll-margin-top: 0 !important;
+}
+</style>
+
 <div class="content-wrapper">
     <div class="container-fluid">
         
@@ -390,44 +429,44 @@ $rol_usuario = $_SESSION['rol'] ?? 'vendedor';
                                 <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> Opcional - enviaremos el ticket por correo</small>
                             </div>
                             
-                            <!-- MÉTODOS DE PAGO -->
-                            <div class="metodos-container">
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
-                                    <input type="radio" name="metodo_pago" value="efectivo" checked>
-                                    <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-                                    <div class="metodo-content">
-                                        <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f4b5.svg" class="icono-metodo">
-                                        <span>Efectivo</span>
-                                    </div>
-                                </label>
+<!-- MÉTODOS DE PAGO -->
+<div class="metodos-container">
+    <label class="metodo-radio">
+        <input type="radio" name="metodo_pago" value="efectivo" checked>
+        <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+        <div class="metodo-content">
+            <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f4b5.svg" class="icono-metodo">
+            <span>Efectivo</span>
+        </div>
+    </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
-                                    <input type="radio" name="metodo_pago" value="transferencia">
-                                    <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-                                    <div class="metodo-content">
-                                        <img src="https://cdn-icons-png.flaticon.com/512/2331/2331947.png" class="icono-metodo">
-                                        <span>Transferencia</span>
-                                    </div>
-                                </label>
+    <label class="metodo-radio">
+        <input type="radio" name="metodo_pago" value="transferencia">
+        <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+        <div class="metodo-content">
+            <img src="https://cdn-icons-png.flaticon.com/512/2331/2331947.png" class="icono-metodo">
+            <span>Transferencia</span>
+        </div>
+    </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
-                                    <input type="radio" name="metodo_pago" value="tarjeta_debito">
-                                    <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-                                    <div class="metodo-content">
-                                        <img src="https://brandeps.com/logo-download/V/Visa-logo-vector-01.svg" class="icono-metodo visa-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/349/349221.png'">
-                                        <span>Tarjeta Débito</span>
-                                    </div>
-                                </label>
+    <label class="metodo-radio">
+        <input type="radio" name="metodo_pago" value="tarjeta_debito">
+        <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+        <div class="metodo-content">
+            <img src="https://brandeps.com/logo-download/V/Visa-logo-vector-01.svg" class="icono-metodo visa-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/349/349221.png'">
+            <span>Tarjeta Débito</span>
+        </div>
+    </label>
 
-                                <label class="metodo-radio" onclick="seleccionarMetodo(this, event)">
-                                    <input type="radio" name="metodo_pago" value="tarjeta_credito">
-                                    <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-                                    <div class="metodo-content">
-                                        <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Mastercard-logo.png" class="icono-metodo">
-                                        <span>Tarjeta Crédito</span>
-                                    </div>
-                                </label>
-                            </div>
+    <label class="metodo-radio">
+        <input type="radio" name="metodo_pago" value="tarjeta_credito">
+        <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+        <div class="metodo-content">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Mastercard-logo.png" class="icono-metodo">
+            <span>Tarjeta Crédito</span>
+        </div>
+    </label>
+</div>
                             
                             <div id="extraCampos"></div>
 
@@ -449,15 +488,28 @@ $rol_usuario = $_SESSION['rol'] ?? 'vendedor';
 
 <script>
 let carrito = <?php echo $carrito_json; ?>;
+let ventaEnProceso = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     renderCarrito();
     mostrarCamposPago();
     document.getElementById('codigo').focus();
+    
+    const btnConfirmar = document.getElementById('btnConfirmar');
+    if (btnConfirmar) {
+        btnConfirmar.disabled = false;
+        btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-2"></i> Confirmar venta';
+        btnConfirmar.style.opacity = '1';
+        btnConfirmar.style.cursor = 'pointer';
+    }
+    ventaEnProceso = false;
 });
 
+if (window.history.replaceState) {
+    window.history.replaceState(null, null, window.location.href);
+}
+
 <?php if(isset($alerta)): ?>
-// Mostrar alerta si existe
 Swal.fire({ 
     icon: '<?= $alerta['tipo'] ?>', 
     title: '<?= $alerta['titulo'] ?>', 
@@ -467,18 +519,59 @@ Swal.fire({
     allowOutsideClick: false
 }).then(() => { 
     <?php if($alerta['tipo'] === 'success'): ?>
-    // Limpiar todo después de la venta
     carrito = []; 
     renderCarrito(); 
     document.getElementById('monto_pagado').value = ''; 
     document.getElementById('correo_cliente').value = ''; 
     document.getElementById('codigo').focus();
-    
-    // Limpiar la URL para evitar reenvío
     window.history.replaceState({}, document.title, window.location.pathname);
     <?php endif; ?>
 });
 <?php endif; ?>
+
+// Función para obtener icono según categoría
+function getIconoPorCategoria(categoria, nombre) {
+    const texto = (categoria || nombre || '').toLowerCase();
+    
+    if (/(electronica|telefono|celular|smartphone|tablet|computadora|laptop|pc|monitor|teclado|mouse|audifonos|pantalla|impresora|cargador|cable|adaptador|bateria|pila|usb|memoria|disco|tarjeta)/.test(texto)) {
+        return { icono: 'fas fa-microchip', color: 'icon-primary' };
+    }
+    if (/(ropa|camisa|pantalon|vestido|chaqueta|sueter|short|falda|jean|blusa|camiseta)/.test(texto)) {
+        return { icono: 'fas fa-tshirt', color: 'icon-info' };
+    }
+    if (/(calzado|zapato|tenis|sandalia|botas|zapatilla|chancla)/.test(texto)) {
+        return { icono: 'fas fa-shoe-prints', color: 'icon-warning' };
+    }
+    if (/(alimento|comida|bebida|refresco|agua|snack|galleta|pan|leche|jugo|gaseosa|cerveza|vino)/.test(texto)) {
+        return { icono: 'fas fa-utensils', color: 'icon-success' };
+    }
+    if (/(hogar|mueble|silla|mesa|escritorio|estante|cocina|baño|sofa|cama|ropero|armario)/.test(texto)) {
+        return { icono: 'fas fa-couch', color: 'icon-secondary' };
+    }
+    if (/(papeleria|oficina|papel|lapiz|pluma|cuaderno|libreta|escritura|marcador|borrador|regla|folder|carpeta)/.test(texto)) {
+        return { icono: 'fas fa-pen', color: 'icon-indigo' };
+    }
+    if (/(herramienta|martillo|destornillador|pinza|taladro|sierra|llave|alicate|nivel|cincel)/.test(texto)) {
+        return { icono: 'fas fa-tools', color: 'icon-danger' };
+    }
+    if (/(belleza|shampoo|jabon|crema|maquillaje|perfume|cosmetico|desodorante|pasta|cepillo|peine)/.test(texto)) {
+        return { icono: 'fas fa-spa', color: 'icon-pink' };
+    }
+    if (/(deporte|pelota|bicicleta|pesa|gimnasio|balon|raqueta|casco|guante)/.test(texto)) {
+        return { icono: 'fas fa-futbol', color: 'icon-teal' };
+    }
+    if (/(libro|revista|lectura|texto|manual|guia|diccionario|enciclopedia)/.test(texto)) {
+        return { icono: 'fas fa-book', color: 'icon-purple' };
+    }
+    if (/(juguete|muñeca|carro|peluche|lego|rompecabezas|bloques|consola|videojuego)/.test(texto)) {
+        return { icono: 'fas fa-gamepad', color: 'icon-orange' };
+    }
+    if (/(limpieza|limpia|detergente|cloro|escoba|trapeador|recogedor|bolsa)/.test(texto)) {
+        return { icono: 'fas fa-pump-soap', color: 'icon-cyan' };
+    }
+    
+    return { icono: 'fas fa-box', color: 'icon-gray' };
+}
 
 async function agregarProducto() {
     const codigo = document.getElementById('codigo').value.trim();
@@ -498,6 +591,9 @@ async function agregarProducto() {
             return;
         }
 
+        // Obtener icono según categoría
+        const iconoData = getIconoPorCategoria(data.categoria, data.nombre);
+        
         const producto = {
             id: data.id,
             nombre: data.nombre,
@@ -505,6 +601,9 @@ async function agregarProducto() {
             cantidad: 1,
             stock: parseInt(data.stock),
             imagen: data.imagen || '',
+            categoria: data.categoria || '',
+            icono: iconoData.icono,
+            iconoColor: iconoData.color,
             inicial: data.inicial || data.nombre.charAt(0).toUpperCase()
         };
 
@@ -543,7 +642,7 @@ async function agregarProducto() {
 function renderCarrito() {
     const body = document.getElementById('carritoBody');
     if (carrito.length === 0) { 
-        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></tr>'; 
+        body.innerHTML = '<tr id="emptyCartRow"><td colspan="6" class="text-center py-5"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted mb-0">El carrito está vacío. Agrega productos para comenzar.</p></td>'; 
         document.getElementById('total').value = '0.00'; 
         document.getElementById('cambio').value = '0.00'; 
         return; 
@@ -555,11 +654,13 @@ function renderCarrito() {
         total += subtotal;
         
         let imagenHtml = '';
-        if (item.imagen && item.imagen !== '' && item.imagen !== 'uploads/noimage.png') {
+        // Verificar si tiene imagen válida
+        if (item.imagen && item.imagen !== '' && item.imagen !== 'uploads/noimage.png' && !item.imagen.includes('no-image')) {
             imagenHtml = `<img src="${item.imagen}" class="producto-imagen" 
-                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\'producto-imagen-fallback\'>${item.inicial}</div>'">`;
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\'producto-icono ${item.iconoColor}\'><i class=\'${item.icono}\'></i></div>'">`;
         } else {
-            imagenHtml = `<div class="producto-imagen-fallback">${item.inicial}</div>`;
+            // Mostrar icono basado en categoría
+            imagenHtml = `<div class="producto-icono ${item.iconoColor}"><i class="${item.icono}"></i></div>`;
         }
         
         html += `<tr class="producto-animado">
@@ -635,12 +736,49 @@ function calcularCambio() {
     cambioInput.style.fontWeight = 'bold'; 
 }
 
-function seleccionarMetodo(elemento) { 
-    document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('selected')); 
-    elemento.classList.add('selected'); 
-    elemento.querySelector('input[type="radio"]').checked = true; 
-    mostrarCamposPago(); 
-}
+document.addEventListener('DOMContentLoaded', function() {
+    renderCarrito();
+    mostrarCamposPago();
+    document.getElementById('codigo').focus();
+    
+    // Inicializar eventos de métodos de pago SIN scroll
+    const metodos = document.querySelectorAll('.metodo-radio');
+    metodos.forEach(metodo => {
+        metodo.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Quitar selected de todos
+            metodos.forEach(el => el.classList.remove('selected'));
+            
+            // Agregar selected al actual
+            this.classList.add('selected');
+            
+            // Marcar el radio button
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+            }
+            
+            // Mostrar campos adicionales
+            mostrarCamposPago();
+        });
+        
+        // Marcar el primero como selected si está checked
+        if (metodo.querySelector('input[type="radio"]').checked) {
+            metodo.classList.add('selected');
+        }
+    });
+    
+    const btnConfirmar = document.getElementById('btnConfirmar');
+    if (btnConfirmar) {
+        btnConfirmar.disabled = false;
+        btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-2"></i> Confirmar venta';
+        btnConfirmar.style.opacity = '1';
+        btnConfirmar.style.cursor = 'pointer';
+    }
+    ventaEnProceso = false;
+});
 
 function mostrarCamposPago() {
     const metodo = document.querySelector('input[name="metodo_pago"]:checked').value;
@@ -718,18 +856,121 @@ function detectarTipoTarjeta() {
 }
 
 function confirmarVenta() {
-    if (carrito.length === 0) { Swal.fire({ icon: 'warning', title: 'Carrito vacío', text: 'Agrega productos antes de registrar la venta.', confirmButtonColor: '#f97316' }); return; }
-    const total = parseFloat(document.getElementById('total').value); const pago = parseFloat(document.getElementById('monto_pagado').value);
-    if (!pago || pago <= 0) { Swal.fire({ icon: 'warning', title: 'Monto inválido', text: 'Ingresa un monto pagado válido.', confirmButtonColor: '#f97316' }); document.getElementById('monto_pagado').focus(); return; }
-    if (pago < total) { Swal.fire({ icon: 'error', title: 'Monto insuficiente', text: `El pago ($${pago.toFixed(2)}) no cubre el total ($${total.toFixed(2)}).`, confirmButtonColor: '#f97316' }); document.getElementById('monto_pagado').focus(); return; }
+    if (ventaEnProceso) {
+        Swal.fire({
+            icon: 'info',
+            title: 'Procesando',
+            text: 'Ya hay una venta en proceso, por favor espera...',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000
+        });
+        return;
+    }
+    
+    if (carrito.length === 0) { 
+        Swal.fire({ icon: 'warning', title: 'Carrito vacío', text: 'Agrega productos antes de registrar la venta.', confirmButtonColor: '#f97316' }); 
+        return; 
+    }
+    
+    const total = parseFloat(document.getElementById('total').value); 
+    const pago = parseFloat(document.getElementById('monto_pagado').value);
+    
+    if (!pago || pago <= 0) { 
+        Swal.fire({ icon: 'warning', title: 'Monto inválido', text: 'Ingresa un monto pagado válido.', confirmButtonColor: '#f97316' }); 
+        document.getElementById('monto_pagado').focus(); 
+        return; 
+    }
+    
+    if (pago < total) { 
+        Swal.fire({ icon: 'error', title: 'Monto insuficiente', text: `El pago ($${pago.toFixed(2)}) no cubre el total ($${total.toFixed(2)}).`, confirmButtonColor: '#f97316' }); 
+        document.getElementById('monto_pagado').focus(); 
+        return; 
+    }
     
     const metodo = document.querySelector('input[name="metodo_pago"]:checked').value;
-    if (metodo === 'transferencia') { const folio = document.getElementById('folio_transferencia')?.value; if (!folio || folio.length < 5) { Swal.fire({ icon: 'warning', title: 'Folio requerido', text: 'Ingresa el folio de la transferencia.', confirmButtonColor: '#f97316' }); return; } }
-    if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') { const ultimos4 = document.getElementById('ultimos4')?.value; const auth = document.getElementById('folio_autorizacion')?.value; if (!ultimos4 || ultimos4.length !== 4) { Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Ingresa los últimos 4 dígitos.', confirmButtonColor: '#f97316' }); return; } if (!auth || auth.length < 4) { Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Ingresa el folio de autorización.', confirmButtonColor: '#f97316' }); return; } }
+    
+    if (metodo === 'transferencia') { 
+        const folio = document.getElementById('folio_transferencia')?.value; 
+        if (!folio || folio.length < 5) { 
+            Swal.fire({ icon: 'warning', title: 'Folio requerido', text: 'Ingresa el folio de la transferencia.', confirmButtonColor: '#f97316' }); 
+            return; 
+        } 
+    }
+    
+    if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') { 
+        const ultimos4 = document.getElementById('ultimos4')?.value; 
+        const auth = document.getElementById('folio_autorizacion')?.value; 
+        if (!ultimos4 || ultimos4.length !== 4) { 
+            Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Ingresa los últimos 4 dígitos.', confirmButtonColor: '#f97316' }); 
+            return; 
+        } 
+        if (!auth || auth.length < 4) { 
+            Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Ingresa el folio de autorización.', confirmButtonColor: '#f97316' }); 
+            return; 
+        } 
+    }
     
     let resumen = carrito.map(p => `${p.nombre} x${p.cantidad} - $${(p.precio * p.cantidad).toFixed(2)}`).join('<br>');
-    Swal.fire({ title: 'Confirmar venta', html: `<div style="max-height: 300px; overflow-y: auto;">${resumen}</div><hr><strong>Total:</strong> $${total.toFixed(2)}<br><strong>Pago:</strong> $${pago.toFixed(2)}<br><strong>Cambio:</strong> $${(pago - total).toFixed(2)}`, icon: 'question', showCancelButton: true, confirmButtonText: '<i class="fas fa-check me-2"></i>Registrar', cancelButtonText: 'Cancelar', confirmButtonColor: '#f97316', cancelButtonColor: '#6c757d' }).then(result => { if (result.isConfirmed) { document.getElementById('sonidoCaja').play().catch(e => console.log('Error:', e)); document.getElementById('carrito_json').value = JSON.stringify(carrito); document.getElementById('ventaForm').submit(); } });
+    
+    Swal.fire({ 
+        title: 'Confirmar venta', 
+        html: `<div style="max-height: 300px; overflow-y: auto;">${resumen}</div><hr><strong>Total:</strong> $${total.toFixed(2)}<br><strong>Pago:</strong> $${pago.toFixed(2)}<br><strong>Cambio:</strong> $${(pago - total).toFixed(2)}`, 
+        icon: 'question', 
+        showCancelButton: true, 
+        confirmButtonText: '<i class="fas fa-check me-2"></i>Registrar', 
+        cancelButtonText: 'Cancelar', 
+        confirmButtonColor: '#f97316', 
+        cancelButtonColor: '#6c757d',
+        preConfirm: () => {
+            ventaEnProceso = true;
+            const btnConfirmar = document.getElementById('btnConfirmar');
+            if (btnConfirmar) {
+                btnConfirmar.disabled = true;
+                btnConfirmar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Procesando venta...';
+                btnConfirmar.style.opacity = '0.7';
+                btnConfirmar.style.cursor = 'not-allowed';
+            }
+            return true;
+        }
+    }).then(result => { 
+        if (result.isConfirmed) { 
+            try {
+                document.getElementById('sonidoCaja').play().catch(e => console.log('Error:', e));
+                document.getElementById('carrito_json').value = JSON.stringify(carrito);
+                document.getElementById('ventaForm').submit();
+            } catch(error) {
+                ventaEnProceso = false;
+                const btnConfirmar = document.getElementById('btnConfirmar');
+                if (btnConfirmar) {
+                    btnConfirmar.disabled = false;
+                    btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-2"></i> Confirmar venta';
+                    btnConfirmar.style.opacity = '1';
+                    btnConfirmar.style.cursor = 'pointer';
+                }
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Ocurrió un error al procesar la venta.', confirmButtonColor: '#f97316' });
+            }
+        } else if (result.dismiss === Swal.DismissReason.cancel) {
+            ventaEnProceso = false;
+            const btnConfirmar = document.getElementById('btnConfirmar');
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-2"></i> Confirmar venta';
+                btnConfirmar.style.opacity = '1';
+                btnConfirmar.style.cursor = 'pointer';
+            }
+        }
+    });
 }
+
+document.getElementById('ventaForm')?.addEventListener('submit', function(e) {
+    const btnConfirmar = document.getElementById('btnConfirmar');
+    if (btnConfirmar && btnConfirmar.disabled) {
+        e.preventDefault();
+        return false;
+    }
+});
 
 document.getElementById('codigo').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); agregarProducto(); } });
 document.getElementById('monto_pagado').addEventListener('input', calcularCambio);
@@ -777,4 +1018,18 @@ function mostrarDatosBancarios() {
         `
     });
 }
+
+// Forzar que el scroll no se mueva al hacer clic en métodos de pago
+document.querySelectorAll('.metodo-radio').forEach(el => {
+    el.addEventListener('click', function(e) {
+        // Guardar la posición actual del scroll
+        const scrollY = window.scrollY;
+        
+        // Permitir que el DOM se actualice
+        setTimeout(() => {
+            // Restaurar la posición del scroll
+            window.scrollTo(0, scrollY);
+        }, 0);
+    });
+});
 </script>

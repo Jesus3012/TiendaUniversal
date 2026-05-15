@@ -29,7 +29,7 @@ if (!file_exists($rutaCarpeta)) {
 // ============================================
 // FUNCIÓN PARA GUARDAR PDF EN EL SERVIDOR
 // ============================================
-function guardarPDFenServidor($pdfContent, $nombreArchivo, $carpeta, $tipo, $proveedor, $totalRegistros) {
+function guardarPDFenServidor($pdfContent, $nombreArchivo, $carpeta, $tipoReporte, $proveedor, $totalRegistros) {
     global $conn;
     
     $rutaCarpeta = "uploads/" . $carpeta . "/";
@@ -49,11 +49,24 @@ function guardarPDFenServidor($pdfContent, $nombreArchivo, $carpeta, $tipo, $pro
         // Guardar en base de datos
         $usuario_id = $_SESSION['usuario_id'] ?? 0;
         $usuario_nombre = $_SESSION['nombre'] ?? 'Sistema';
-        $proveedor_val = $proveedor ?: 'todos';
+        
+        // Determinar el valor del proveedor para la BD
+        $proveedor_val = $proveedor;
+        if (empty($proveedor_val)) {
+            $proveedor_val = 'todos';
+        }
+        
+        // Determinar el módulo correctamente
         $modulo = ($carpeta === 'Stock_General') ? 'reporte inventario - general' : 'reporte inventario - proveedor';
         
+        // ESCAPAR correctamente las cadenas para evitar errores SQL
+        $usuario_nombre_escape = $conn->real_escape_string($usuario_nombre);
+        $modulo_escape = $conn->real_escape_string($modulo);
+        $proveedor_escape = $conn->real_escape_string($proveedor_val);
+        $ruta_escape = $conn->real_escape_string($rutaCompleta);
+        
         // Verificar si ya existe un registro con el mismo nombre
-        $check_sql = "SELECT id FROM historial_reportes WHERE nombre_archivo = '$rutaCompleta'";
+        $check_sql = "SELECT id FROM historial_reportes WHERE nombre_archivo = '$ruta_escape'";
         $check_result = $conn->query($check_sql);
         
         if ($check_result && $check_result->num_rows == 0) {
@@ -68,15 +81,18 @@ function guardarPDFenServidor($pdfContent, $nombreArchivo, $carpeta, $tipo, $pro
                 nombre_archivo
             ) VALUES (
                 $usuario_id, 
-                '$usuario_nombre', 
+                '$usuario_nombre_escape', 
                 'pdf', 
-                '$modulo', 
-                '$proveedor_val', 
+                '$modulo_escape', 
+                '$proveedor_escape', 
                 NOW(), 
                 $totalRegistros, 
-                '$rutaCompleta'
+                '$ruta_escape'
             )";
-            $conn->query($sql);
+            
+            if (!$conn->query($sql)) {
+                error_log("Error al guardar en BD: " . $conn->error);
+            }
         }
         
         return true;
@@ -111,8 +127,8 @@ if (empty($logoTiendaPath) || !file_exists($logoTiendaPath)) {
 // LOGO DEL PROVEEDOR CON REDIMENSIONADO AUTOMÁTICO
 // ============================================
 $logoProveedorPath = '';
-$logoProveedorWidth = 22;  // Ancho calculado
-$logoProveedorHeight = 22; // Alto calculado
+$logoProveedorWidth = 22;
+$logoProveedorHeight = 22;
 $inicialesProveedor = '';
 
 if ($proveedor !== '') {
@@ -124,43 +140,37 @@ if ($proveedor !== '') {
     if ($resultLogo && $row = $resultLogo->fetch_assoc()) {
         $logoProveedorPath = $row['logo'] ?? '';
         if (!empty($logoProveedorPath) && file_exists($logoProveedorPath)) {
-            // Obtener dimensiones de la imagen
             $size = getimagesize($logoProveedorPath);
             if ($size !== false) {
                 $anchoOriginal = $size[0];
                 $altoOriginal = $size[1];
                 $ratio = $anchoOriginal / $altoOriginal;
                 
-                // USAR EL LADO MÁS PEQUEÑO para decidir el tamaño
                 $ladoMenor = min($anchoOriginal, $altoOriginal);
                 
                 if ($ladoMenor < 310) {
-                    $maxSize = 45;  // Logo muy pequeño (menos de 300px)
+                    $maxSize = 45;
                 } elseif ($ladoMenor < 500) {
-                    $maxSize = 28;  // Logo pequeño (300-500px)
+                    $maxSize = 28;
                 } elseif ($ladoMenor > 800) {
-                    $maxSize = 18;  // Logo muy grande (más de 800px)
+                    $maxSize = 18;
                 } else {
-                    $maxSize = 22;  // Tamaño normal (500-800px)
+                    $maxSize = 22;
                 }
                 
-                // Calcular tamaño proporcional
                 if ($anchoOriginal > $altoOriginal) {
-                    // Logo horizontal (más ancho que alto)
                     $logoProveedorWidth = $maxSize;
                     $logoProveedorHeight = $maxSize / $ratio;
                 } else {
-                    // Logo vertical o cuadrado
                     $logoProveedorHeight = $maxSize;
                     $logoProveedorWidth = $maxSize * $ratio;
                 }
             }
         } else {
-            $logoProveedorPath = ''; // No existe el archivo
+            $logoProveedorPath = '';
         }
     }
     
-    // Iniciales del proveedor (para cuando no tiene logo)
     $palabras = explode(' ', $proveedor);
     if (count($palabras) >= 2) {
         $inicialesProveedor = strtoupper(substr($palabras[0], 0, 1) . substr($palabras[1], 0, 1));
@@ -169,7 +179,7 @@ if ($proveedor !== '') {
     }
 }
 
-// Consulta 1: Productos con stock mayor a 0 (ordenados de mayor a menor)
+// Consulta 1: Productos con stock mayor a 0
 $queryConStock = "SELECT nombre, proveedor, cantidad, tipo_inventario, categoria 
                   FROM productos 
                   WHERE activo = 1 AND cantidad > 0";
@@ -205,7 +215,6 @@ if ($busqueda !== '') {
 
 $queryConStock .= " ORDER BY cantidad DESC, nombre ASC";
 
-// Ejecutar consulta con stock
 $stmt = $conn->prepare($queryConStock);
 if (!empty($paramsCon)) {
     $stmt->bind_param($typesCon, ...$paramsCon);
@@ -220,7 +229,7 @@ while ($row = $resultCon->fetch_assoc()) {
     $totalCantidadConStock += floatval($row['cantidad']);
 }
 
-// Consulta 2: Productos sin stock (cantidad = 0) ordenados alfabéticamente
+// Consulta 2: Productos sin stock (cantidad = 0)
 $querySinStock = "SELECT nombre, proveedor, cantidad, tipo_inventario, categoria 
                   FROM productos 
                   WHERE activo = 1 AND cantidad = 0";
@@ -256,7 +265,6 @@ if ($busqueda !== '') {
 
 $querySinStock .= " ORDER BY nombre ASC";
 
-// Ejecutar consulta sin stock
 $stmt = $conn->prepare($querySinStock);
 if (!empty($paramsSin)) {
     $stmt->bind_param($typesSin, ...$paramsSin);
@@ -308,26 +316,21 @@ class PDF extends FPDF
         $this->SetAutoPageBreak(true, 15);
     }
     
-    // Cabecera personalizada con logos
     function Header()
     {
         $pageWidth = $this->GetPageWidth();
         $logoY = 8;
         $logoTiendaSize = 22;
         
-        // Logo Tienda (izquierda) - tamaño fijo
         if (!empty($this->logoTiendaPath) && file_exists($this->logoTiendaPath)) {
             $this->Image($this->logoTiendaPath, 12, $logoY, $logoTiendaSize, $logoTiendaSize);
         }
         
-        // Logo Proveedor o Iniciales (derecha) - CON TAMAÑO PROPORCIONAL
         if (!empty($this->proveedorNombre)) {
             if (!empty($this->logoProveedorPath) && file_exists($this->logoProveedorPath)) {
-                // Posición X: borde derecho - ancho del logo - margen
                 $logoX = $pageWidth - $this->logoProveedorWidth - 12;
                 $this->Image($this->logoProveedorPath, $logoX, $logoY, $this->logoProveedorWidth, $this->logoProveedorHeight);
             } else {
-                // Solo texto con las iniciales
                 $textX = $pageWidth - 50;
                 $textY = $logoY + 10;
                 $this->SetFont('Arial', 'B', 24);
@@ -337,29 +340,24 @@ class PDF extends FPDF
             }
         }
         
-        // Nombre Tienda centrado
         $this->SetY($logoY + 5);
         $this->SetFont('Arial', 'B', 12);
         $this->SetTextColor(60, 60, 60);
         $this->Cell(0, 8, utf8_decode(strtoupper($this->nombreTienda)), 0, 1, 'C');
         
-        // Línea decorativa superior naranja
         $this->SetDrawColor(255, 140, 0);
         $this->SetLineWidth(1.5);
         $this->Line(12, $logoY + $logoTiendaSize + 6, $pageWidth - 12, $logoY + $logoTiendaSize + 6);
         
-        // Título principal
         $this->SetY($logoY + $logoTiendaSize + 14);
         $this->SetFont('Arial', 'B', 20);
         $this->SetTextColor(255, 140, 0);
         $this->Cell(0, 10, 'REPORTE DE INVENTARIO', 0, 1, 'C');
         
-        // Subtítulo
         $this->SetFont('Arial', '', 10);
         $this->SetTextColor(100, 100, 100);
         $this->Cell(0, 6, 'Control de stock - Productos con y sin inventario', 0, 1, 'C');
         
-        // Fecha de generación
         $this->SetFont('Arial', 'I', 9);
         $this->SetTextColor(120, 120, 120);
         $this->Cell(0, 5, 'Generado: ' . date('d/m/Y H:i'), 0, 1, 'C');
@@ -370,13 +368,9 @@ class PDF extends FPDF
     function Footer()
     {
         $this->SetY(-12);
-        
-        // Línea decorativa naranja
         $this->SetDrawColor(255, 140, 0);
         $this->SetLineWidth(0.3);
         $this->Line($this->GetX(), $this->GetY(), $this->GetPageWidth() - $this->GetX(), $this->GetY());
-        
-        // Número de página
         $this->SetFont('Arial', 'I', 8);
         $this->SetTextColor(100, 100, 100);
         $this->Cell(0, 5, 'Página ' . $this->PageNo() . ' | Sistema de Inventario', 0, 0, 'C');
@@ -384,7 +378,6 @@ class PDF extends FPDF
     
     function FiltrosAplicados($filtros)
     {
-        // Fondo naranja claro
         $this->SetFillColor(255, 245, 235);
         $this->Rect($this->GetX(), $this->GetY(), $this->GetPageWidth() - ($this->GetX() * 2), 20, 'F');
         
@@ -429,7 +422,6 @@ class PDF extends FPDF
         $this->SetFillColor($colorFondo[0], $colorFondo[1], $colorFondo[2]);
         $this->SetTextColor(255, 255, 255);
         
-        // Anchos de columna - PROVEEDOR PRIMERO
         $anchoTotal = $this->GetPageWidth() - ($this->GetX() * 2);
         $anchoProveedor = $anchoTotal * 0.30;
         $anchoNombre = $anchoTotal * 0.55;
@@ -460,15 +452,12 @@ class PDF extends FPDF
         
         $this->SetTextColor(0, 0, 0);
         
-        // Proveedor
         $proveedor_texto = $proveedor ? utf8_decode($proveedor) : 'No especificado';
         $this->Cell($anchoProveedor, 9, $proveedor_texto, 1, 0, 'L', $fill);
         
-        // Nombre del producto
         $nombre_corto = utf8_decode(substr($nombre, 0, 50));
         $this->Cell($anchoNombre, 9, $nombre_corto, 1, 0, 'L', $fill);
         
-        // Cantidad
         if ($esAgotado) {
             $this->SetFont('Arial', 'B', 10);
             $this->SetTextColor(220, 53, 69);
@@ -563,10 +552,8 @@ class PDF extends FPDF
         $this->SetFont('Arial', '', 10);
         $this->SetTextColor(80, 80, 80);
         
-        // Distribución en dos filas
         $this->SetY($this->GetY() + 5);
         
-        // Fila 1
         $this->SetX($this->GetX() + 20);
         $this->Cell(50, 8, 'Productos con stock:', 0, 0, 'L');
         $this->SetFont('Arial', 'B', 12);
@@ -583,13 +570,11 @@ class PDF extends FPDF
         
         $this->SetY($this->GetY() + 5);
         
-        // Línea separadora
         $this->SetDrawColor(255, 140, 0);
         $this->SetLineWidth(0.3);
         $this->Line($this->GetX() + 15, $this->GetY(), $this->GetPageWidth() - $this->GetX() - 15, $this->GetY());
         $this->Ln(5);
         
-        // Inventario total
         $this->SetX($this->GetX() + 20);
         $this->SetFont('Arial', 'B', 12);
         $this->SetTextColor(80, 80, 80);
@@ -637,13 +622,12 @@ $pdf->Cell(0, 5, 'Este reporte muestra los productos ordenados por cantidad disp
 $pdf->Cell(0, 5, 'Los productos en rojo requieren reabastecimiento inmediato.', 0, 1, 'C');
 
 // Generar el contenido del PDF
-$pdfContent = $pdf->Output('S'); // 'S' para obtener el PDF como string
+$pdfContent = $pdf->Output('S');
 
 // ============================================
 // GUARDAR EL PDF EN EL SERVIDOR
 // ============================================
 $fechaActual = date('Y-m-d');
-$horaActual = date('H-i-s');
 $nombreArchivo = "reporte_inventario_{$fechaActual}.pdf";
 
 // Si es reporte por proveedor, agregar el nombre del proveedor al archivo
@@ -656,24 +640,15 @@ if ($proveedor !== '') {
 $totalRegistros = $totalConStock + $totalSinStock;
 $guardadoExitoso = guardarPDFenServidor($pdfContent, $nombreArchivo, $carpetaDestino, 'inventario', $proveedor, $totalRegistros);
 
-// Mostrar mensaje de éxito/error (opcional - para depuración)
-if ($guardadoExitoso) {
-    // El PDF se guardó correctamente en el servidor
-    // Puedes agregar un log si lo deseas
-}
-
 // ============================================
 // SALIDA DEL PDF (para mostrar/descargar)
 // ============================================
-// Determinar si debe descargarse o mostrarse
 $disposition = isset($_GET['download']) ? 'D' : 'I';
 
-// Enviar headers para el PDF
 header('Content-Type: application/pdf');
 header('Content-Disposition: ' . ($disposition == 'D' ? 'attachment' : 'inline') . '; filename="' . $nombreArchivo . '"');
 header('Cache-Control: private, max-age=0, must-revalidate');
 header('Pragma: public');
 
-// Enviar el contenido del PDF
 echo $pdfContent;
 ?>
