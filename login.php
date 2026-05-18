@@ -4,6 +4,15 @@ include('includes/header.php');
 include('includes/session.php');
 require_once('includes/csrf.php');
 
+$logo_login = 'img/logo_galeria_pescadores.png';
+
+$result_logo = $conn->query("SELECT logo FROM configuracion_galeria WHERE id = 1");
+if ($result_logo && $row_logo = $result_logo->fetch_assoc()) {
+    if (!empty($row_logo['logo']) && file_exists($row_logo['logo'])) {
+        $logo_login = $row_logo['logo'];
+    }
+}
+
 $max_attempts = 5;
 $lock_time = 60; // 1 minuto
 
@@ -545,58 +554,36 @@ if (isset($_POST['login'])) {
 
         /* Modo oscuro */
         @media (prefers-color-scheme: dark) {
+
             body {
-                background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
             }
-            
+
             .login-card {
-                background: rgba(35, 35, 45, 0.98);
+                background: rgba(255, 255, 255, 0.98) !important;
             }
-            
+
             .card-header {
-                background: #252530;
-                border-bottom-color: #353540;
+                background: white !important;
+                border-bottom-color: #f0e6e0 !important;
             }
-            
-            .card-header h2 {
-                background: linear-gradient(135deg, #f97316, #ea580c);
-                -webkit-background-clip: text;
-                background-clip: text;
-            }
-            
-            .card-header p {
-                color: #f97316;
-            }
-            
+
             .logo-img {
-                background-color: #252530;
-                box-shadow: 0 5px 15px rgba(249, 115, 22, 0.2);
+                background-color: #f9f9f9 !important;
             }
-            
+
             .input-group-custom input {
-                background: #353540;
-                border-color: #f97316;
-                color: white;
+                background: #fffaf5 !important;
+                color: #2d2d2d !important;
+                border-color: #f97316 !important;
             }
-            
-            .input-group-custom input:focus {
-                border-color: #ea580c;
-            }
-            
-            .input-group-custom input::placeholder {
-                color: #fba870;
-            }
-            
+
             .checkbox-label {
-                color: #aaaacc;
+                color: #5c4b3a !important;
             }
-            
-            .register-section {
-                border-top-color: #353540;
-            }
-            
+
             .register-section p {
-                color: #aaaacc;
+                color: #8a7a6a !important;
             }
         }
     </style>
@@ -612,7 +599,9 @@ if (isset($_POST['login'])) {
             <div class="card-header">
                 <div class="logo-wrapper">
                     <div class="logo-img">
-                        <img src="img/logo_galeria_pescadores.png" alt="Pescadores de la Prehistoria Logo" onerror="this.src='img/logo.png'; this.onerror=null;">
+                        <img src="<?= htmlspecialchars($logo_login) ?>?v=<?= time() ?>" 
+                        alt="Pescadores de la Prehistoria Logo" 
+                        onerror="this.src='img/logo.png'; this.onerror=null;">
                     </div>
                 </div>
                 <h2>Pescadores de la Prehistoria</h2>

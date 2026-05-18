@@ -1,8 +1,16 @@
 <?php
-include 'includes/session.php';
+date_default_timezone_set('America/Mexico_City');
+ob_start(); // Iniciar buffer de salida
+
+// Incluir sesión y DB primero
+session_start();
 include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
+
+// Verificar sesión
+if (!isset($_SESSION['usuario_id'])) {
+    header("Location: login.php");
+    exit;
+}
 
 // Verificar rol - solo vendedor y administrador
 if ($_SESSION['rol'] !== 'vendedor' && $_SESSION['rol'] !== 'administrador') {
@@ -13,10 +21,255 @@ if ($_SESSION['rol'] !== 'vendedor' && $_SESSION['rol'] !== 'administrador') {
 $id_vendedor = $_SESSION['usuario_id'];
 $nombre_vendedor = $_SESSION['nombre'] ?? 'Vendedor';
 
-// ================== PROCESAR FILTROS ==================
+// ================== FUNCIÓN PARA OBTENER DATOS ==================
+function obtenerDatosReporte($conn, $id_vendedor, $fecha_inicio, $fecha_fin) {
+    $resultados = [
+        'resumen' => [
+            'total_ventas' => 0,
+            'total_unidades' => 0,
+            'total_ingresos' => 0,
+            'utilidad_estimada' => 0,
+            'ticket_promedio' => 0
+        ],
+        'ventas_por_dia' => [],
+        'top_productos' => [],
+        'metodos_pago' => [],
+        'clientes_top' => [],
+        'ventas_por_hora' => array_fill(0, 24, 0),
+        'ventas_por_dia_semana' => array_fill(0, 7, 0),
+        'dias_semana' => ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    ];
+    
+    // 1. Resumen general
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(DISTINCT v.id) AS total_ventas,
+            IFNULL(SUM(v.cantidad_vendida), 0) AS total_unidades,
+            IFNULL(SUM(v.cantidad_vendida * p.precio_venta), 0) AS total_ingresos,
+            IFNULL(SUM((p.precio_venta - p.precio_compra) * v.cantidad_vendida), 0) AS utilidad_estimada,
+            IFNULL(AVG(v.cantidad_vendida * p.precio_venta), 0) AS ticket_promedio
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            $resultados['resumen'] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // 2. Ventas por día
+    $stmt = $conn->prepare("
+        SELECT 
+            DATE(v.fecha_venta) AS fecha,
+            IFNULL(SUM(v.cantidad_vendida * p.precio_venta), 0) AS total,
+            COUNT(DISTINCT v.id) AS num_ventas
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY DATE(v.fecha_venta)
+        ORDER BY fecha ASC
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $resultados['ventas_por_dia'][] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // 3. Top productos
+    $stmt = $conn->prepare("
+        SELECT 
+            p.nombre,
+            SUM(v.cantidad_vendida) AS unidades,
+            SUM(v.cantidad_vendida * p.precio_venta) AS ingresos,
+            COUNT(DISTINCT v.id) AS veces_vendido
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY p.id
+        ORDER BY ingresos DESC
+        LIMIT 10
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $resultados['top_productos'][] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // 4. Métodos de pago
+    $stmt = $conn->prepare("
+        SELECT 
+            metodo_pago,
+            COUNT(*) AS cantidad,
+            SUM(cantidad_vendida * p.precio_venta) AS total
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY metodo_pago
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $resultados['metodos_pago'][] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // 5. Clientes frecuentes
+    $stmt = $conn->prepare("
+        SELECT 
+            v.correo_cliente AS email,
+            COUNT(DISTINCT v.id) AS compras,
+            SUM(v.cantidad_vendida * p.precio_venta) AS total_gastado
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND v.correo_cliente IS NOT NULL 
+        AND v.correo_cliente != ''
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY v.correo_cliente
+        ORDER BY total_gastado DESC
+        LIMIT 5
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $resultados['clientes_top'][] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // 6. Ventas por hora
+    $stmt = $conn->prepare("
+        SELECT 
+            HOUR(v.fecha_venta) AS hora,
+            SUM(v.cantidad_vendida * p.precio_venta) AS total
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY HOUR(v.fecha_venta)
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $resultados['ventas_por_hora'][(int)$row['hora']] = (float)$row['total'];
+        }
+        $stmt->close();
+    }
+    
+    // 7. Ventas por día de semana
+    $stmt = $conn->prepare("
+        SELECT 
+            DAYOFWEEK(v.fecha_venta) AS dia_num,
+            SUM(v.cantidad_vendida * p.precio_venta) AS total
+        FROM ventas v
+        JOIN productos p ON v.id_producto = p.id
+        WHERE v.id_vendedor = ?
+        AND DATE(v.fecha_venta) BETWEEN ? AND ?
+        GROUP BY DAYOFWEEK(v.fecha_venta)
+    ");
+    
+    if ($stmt) {
+        $stmt->bind_param("iss", $id_vendedor, $fecha_inicio, $fecha_fin);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $pos = ($row['dia_num'] == 1) ? 6 : $row['dia_num'] - 2;
+            $resultados['ventas_por_dia_semana'][$pos] = (float)$row['total'];
+        }
+        $stmt->close();
+    }
+    
+    return $resultados;
+}
+
+// ================== PROCESAR PETICIÓN AJAX ==================
+// IMPORTANTE: Esto debe ir ANTES de cualquier salida HTML
+if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
+    // Limpiar buffer y cabeceras
+    if (ob_get_level()) ob_clean();
+    header('Content-Type: application/json');
+    header('Cache-Control: no-cache, must-revalidate');
+    
+    try {
+        $periodo_ajax = isset($_GET['periodo']) ? $_GET['periodo'] : 'personalizado';
+        $fecha_inicio_ajax = isset($_GET['fecha_inicio']) ? $_GET['fecha_inicio'] : date('Y-m-01');
+        $fecha_fin_ajax = isset($_GET['fecha_fin']) ? $_GET['fecha_fin'] : date('Y-m-d');
+        
+        // Ajustar fechas según período
+        switch ($periodo_ajax) {
+            case 'hoy':
+                $fecha_inicio_ajax = date('Y-m-d');
+                $fecha_fin_ajax = date('Y-m-d');
+                break;
+            case 'semana':
+                $fecha_inicio_ajax = date('Y-m-d', strtotime('monday this week'));
+                $fecha_fin_ajax = date('Y-m-d', strtotime('sunday this week'));
+                break;
+            case 'mes':
+                $fecha_inicio_ajax = date('Y-m-01');
+                $fecha_fin_ajax = date('Y-m-t');
+                break;
+            case 'mes_anterior':
+                $fecha_inicio_ajax = date('Y-m-01', strtotime('-1 month'));
+                $fecha_fin_ajax = date('Y-m-t', strtotime('-1 month'));
+                break;
+            case 'trimestre':
+                $mes_actual = date('n');
+                $trimestre = ceil($mes_actual / 3);
+                $año = date('Y');
+                $mes_inicio = ($trimestre - 1) * 3 + 1;
+                $mes_fin = $trimestre * 3;
+                $fecha_inicio_ajax = date("$año-$mes_inicio-01");
+                $fecha_fin_ajax = date("$año-$mes_fin-") . date('t', strtotime("$año-$mes_fin-01"));
+                break;
+            default:
+                break;
+        }
+        
+        $datos = obtenerDatosReporte($conn, $id_vendedor, $fecha_inicio_ajax, $fecha_fin_ajax);
+        echo json_encode($datos);
+        
+    } catch (Exception $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    
+    ob_end_flush();
+    exit;
+}
+
+// ================== PROCESAR FILTROS PARA VISTA HTML ==================
 $fecha_inicio = isset($_GET['fecha_inicio']) ? $_GET['fecha_inicio'] : date('Y-m-01');
 $fecha_fin = isset($_GET['fecha_fin']) ? $_GET['fecha_fin'] : date('Y-m-d');
-$tipo_reporte = isset($_GET['tipo_reporte']) ? $_GET['tipo_reporte'] : 'ventas';
 $periodo = isset($_GET['periodo']) ? $_GET['periodo'] : 'personalizado';
 
 // Ajustar fechas según período seleccionado
@@ -46,139 +299,26 @@ switch ($periodo) {
         $fecha_fin = date("$año-$mes_fin-", date("t", strtotime("$año-$mes_fin-01")));
         break;
     default:
-        // personalizado - mantener fechas del GET
         break;
 }
 
-// ================== CONSULTAS PRINCIPALES ==================
+// Obtener datos para mostrar inicialmente
+$datos = obtenerDatosReporte($conn, $id_vendedor, $fecha_inicio, $fecha_fin);
+$resumen = $datos['resumen'];
+$ventas_por_dia = $datos['ventas_por_dia'];
+$top_productos = $datos['top_productos'];
+$metodos_pago = $datos['metodos_pago'];
+$clientes_top = $datos['clientes_top'];
+$ventas_por_hora = $datos['ventas_por_hora'];
+$ventas_por_dia_semana = $datos['ventas_por_dia_semana'];
+$dias_semana = $datos['dias_semana'];
 
-// 1. Resumen general del período
-$resumen = $conn->query("
-    SELECT 
-        COUNT(DISTINCT v.id) AS total_ventas,
-        IFNULL(SUM(v.cantidad_vendida), 0) AS total_unidades,
-        IFNULL(SUM(v.cantidad_vendida * p.precio_venta), 0) AS total_ingresos,
-        IFNULL(SUM((p.precio_venta - p.precio_compra) * v.cantidad_vendida), 0) AS utilidad_estimada,
-        IFNULL(AVG(v.cantidad_vendida * p.precio_venta), 0) AS ticket_promedio
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-")->fetch_assoc();
-
-// 2. Ventas por día (para gráfico)
-$ventas_por_dia = [];
-$resDias = $conn->query("
-    SELECT 
-        DATE(v.fecha_venta) AS fecha,
-        IFNULL(SUM(v.cantidad_vendida * p.precio_venta), 0) AS total,
-        COUNT(DISTINCT v.id) AS num_ventas
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY DATE(v.fecha_venta)
-    ORDER BY fecha ASC
-");
-while ($row = $resDias->fetch_assoc()) {
-    $ventas_por_dia[] = $row;
-}
-
-// 3. Top productos más vendidos
-$top_productos = [];
-$resTop = $conn->query("
-    SELECT 
-        p.nombre,
-        SUM(v.cantidad_vendida) AS unidades,
-        SUM(v.cantidad_vendida * p.precio_venta) AS ingresos,
-        COUNT(DISTINCT v.id) AS veces_vendido
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY p.id
-    ORDER BY ingresos DESC
-    LIMIT 10
-");
-while ($row = $resTop->fetch_assoc()) {
-    $top_productos[] = $row;
-}
-
-// 4. Métodos de pago utilizados
-$metodos_pago = [];
-$resMetodos = $conn->query("
-    SELECT 
-        metodo_pago,
-        COUNT(*) AS cantidad,
-        SUM(cantidad_vendida * p.precio_venta) AS total
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY metodo_pago
-");
-while ($row = $resMetodos->fetch_assoc()) {
-    $metodos_pago[] = $row;
-}
-
-// 5. Clientes frecuentes del período
-$clientes_top = [];
-$resClientes = $conn->query("
-    SELECT 
-        v.correo_cliente AS email,
-        COUNT(DISTINCT v.id) AS compras,
-        SUM(v.cantidad_vendida * p.precio_venta) AS total_gastado
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND v.correo_cliente IS NOT NULL 
-    AND v.correo_cliente != ''
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY v.correo_cliente
-    ORDER BY total_gastado DESC
-    LIMIT 5
-");
-while ($row = $resClientes->fetch_assoc()) {
-    $clientes_top[] = $row;
-}
-
-// 6. Ventas por hora del día (para saber horarios más productivos)
-$ventas_por_hora = array_fill(0, 24, 0);
-$resHoras = $conn->query("
-    SELECT 
-        HOUR(v.fecha_venta) AS hora,
-        SUM(v.cantidad_vendida * p.precio_venta) AS total
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY HOUR(v.fecha_venta)
-");
-while ($row = $resHoras->fetch_assoc()) {
-    $ventas_por_hora[(int)$row['hora']] = (float)$row['total'];
-}
-
-// 7. Resumen por día de la semana
-$dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-$ventas_por_dia_semana = array_fill(0, 7, 0);
-$resDiasSemana = $conn->query("
-    SELECT 
-        DAYOFWEEK(v.fecha_venta) AS dia_num,
-        SUM(v.cantidad_vendida * p.precio_venta) AS total
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE v.id_vendedor = $id_vendedor
-    AND DATE(v.fecha_venta) BETWEEN '$fecha_inicio' AND '$fecha_fin'
-    GROUP BY DAYOFWEEK(v.fecha_venta)
-");
-while ($row = $resDiasSemana->fetch_assoc()) {
-    $pos = ($row['dia_num'] == 1) ? 6 : $row['dia_num'] - 2;
-    $ventas_por_dia_semana[$pos] = (float)$row['total'];
-}
+// Ahora incluimos header y navbar
+include 'includes/header.php';
+include 'includes/navbar.php';
 ?>
 
 <style>
-/* ================== ESTILOS DEL MÓDULO DE REPORTES ================== */
 .content-wrapper {
     background: linear-gradient(180deg, #FFF4E6, #FFFFFF);
     min-height: 100vh;
@@ -192,7 +332,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     color: #2c2c2c;
 }
 
-/* Tarjeta de filtros */
 .filter-card {
     background: white;
     border-radius: 20px;
@@ -240,8 +379,8 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 }
 
-.btn-filter {
-    background: #f97316;
+.btn-clear {
+    background: #6c757d;
     border: none;
     padding: 10px 25px;
     border-radius: 12px;
@@ -251,12 +390,11 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     transition: all 0.3s;
 }
 
-.btn-filter:hover {
-    background: #ea580c;
+.btn-clear:hover {
+    background: #5a6268;
     transform: translateY(-2px);
 }
 
-/* Tarjetas de métricas */
 .metrics-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -308,7 +446,42 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     color: #6c757d;
 }
 
-/* Gráficos */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+.loading-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.loading-spinner {
+    background: white;
+    padding: 20px 30px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.loading-spinner i {
+    font-size: 1.8rem;
+    color: #f97316;
+}
+
 .chart-container {
     background: white;
     border-radius: 20px;
@@ -333,7 +506,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     font-size: 1.2rem;
 }
 
-/* Tablas */
 .table-report {
     background: white;
     border-radius: 20px;
@@ -362,7 +534,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     background: #fef3e8;
 }
 
-/* Botón exportar */
 .btn-export {
     background: #10b981;
     border: none;
@@ -380,7 +551,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     transform: translateY(-2px);
 }
 
-/* Rango de fechas personalizado */
 .fecha-range {
     display: flex;
     gap: 10px;
@@ -391,7 +561,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     flex: 1;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
     .metrics-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -413,7 +582,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     }
 }
 
-/* Modal de exportación */
 .modal-export {
     position: fixed;
     top: 0;
@@ -511,10 +679,30 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     color: #6c757d;
     margin: 0;
 }
+
+/* Asegurar que los canvas tengan el mismo tamaño */
+.chart-container canvas {
+    max-width: 100% !important;
+    height: 300px !important;
+    width: auto !important;
+}
+
+/* Para el gráfico de pastel, centrarlo */
+#chartMetodosPago {
+    margin: 0 auto;
+    display: block;
+}
 </style>
 
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>Cargando datos...</span>
+    </div>
+</div>
+
 <div class="content-wrapper">
-    <!-- Header -->
     <section class="content-header mb-4">
         <div class="container-fluid">
             <div class="row align-items-center">
@@ -535,99 +723,89 @@ while ($row = $resDiasSemana->fetch_assoc()) {
         </div>
     </section>
 
-    <!-- Filtros -->
     <div class="filter-card">
-        <form method="GET" action="" id="formFiltros">
-            <div class="filter-group">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label><i class="fas fa-calendar-alt mr-1"></i> Período</label>
+                <select name="periodo" id="periodo">
+                    <option value="personalizado" <?= $periodo == 'personalizado' ? 'selected' : '' ?>>Personalizado</option>
+                    <option value="hoy" <?= $periodo == 'hoy' ? 'selected' : '' ?>>Hoy</option>
+                    <option value="semana" <?= $periodo == 'semana' ? 'selected' : '' ?>>Esta semana</option>
+                    <option value="mes" <?= $periodo == 'mes' ? 'selected' : '' ?>>Este mes</option>
+                    <option value="mes_anterior" <?= $periodo == 'mes_anterior' ? 'selected' : '' ?>>Mes anterior</option>
+                    <option value="trimestre" <?= $periodo == 'trimestre' ? 'selected' : '' ?>>Este trimestre</option>
+                </select>
+            </div>
+            
+            <div id="fechasPersonalizadas" class="fecha-range" style="display: <?= $periodo == 'personalizado' ? 'flex' : 'none' ?>; flex: 2;">
                 <div class="filter-item">
-                    <label><i class="fas fa-calendar-alt mr-1"></i> Período</label>
-                    <select name="periodo" id="periodo" onchange="cambiarPeriodo()">
-                        <option value="personalizado" <?= $periodo == 'personalizado' ? 'selected' : '' ?>>Personalizado</option>
-                        <option value="hoy" <?= $periodo == 'hoy' ? 'selected' : '' ?>>Hoy</option>
-                        <option value="semana" <?= $periodo == 'semana' ? 'selected' : '' ?>>Esta semana</option>
-                        <option value="mes" <?= $periodo == 'mes' ? 'selected' : '' ?>>Este mes</option>
-                        <option value="mes_anterior" <?= $periodo == 'mes_anterior' ? 'selected' : '' ?>>Mes anterior</option>
-                        <option value="trimestre" <?= $periodo == 'trimestre' ? 'selected' : '' ?>>Este trimestre</option>
-                    </select>
+                    <label><i class="fas fa-calendar-day"></i> Fecha inicio</label>
+                    <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= $fecha_inicio ?>">
                 </div>
-                
-                <div id="fechasPersonalizadas" style="display: <?= $periodo == 'personalizado' ? 'flex' : 'none' ?>; gap: 10px; flex: 2;">
-                    <div class="filter-item">
-                        <label><i class="fas fa-calendar-day"></i> Fecha inicio</label>
-                        <input type="date" name="fecha_inicio" value="<?= $fecha_inicio ?>">
-                    </div>
-                    <div class="filter-item">
-                        <label><i class="fas fa-calendar-day"></i> Fecha fin</label>
-                        <input type="date" name="fecha_fin" value="<?= $fecha_fin ?>">
-                    </div>
-                </div>
-                
                 <div class="filter-item">
-                    <label>&nbsp;</label>
-                    <button type="submit" class="btn-filter w-100">
-                        <i class="fas fa-sync-alt mr-2"></i> Aplicar filtros
-                    </button>
+                    <label><i class="fas fa-calendar-day"></i> Fecha fin</label>
+                    <input type="date" name="fecha_fin" id="fecha_fin" value="<?= $fecha_fin ?>">
                 </div>
             </div>
-        </form>
+            
+            <div class="filter-item">
+                <label>&nbsp;</label>
+                <button type="button" class="btn-clear w-100" id="btnLimpiarFiltros">
+                    <i class="fas fa-eraser mr-2"></i> Limpiar filtros
+                </button>
+            </div>
+        </div>
     </div>
 
-    <!-- Métricas clave -->
     <div class="metrics-grid">
         <div class="metric-card-report">
             <div class="metric-icon-report"><i class="fas fa-chart-line"></i></div>
             <div class="metric-label-report">Total Ventas</div>
-            <div class="metric-value-report">$<?= number_format($resumen['total_ingresos'], 2) ?></div>
-            <div class="metric-sub"><?= $resumen['total_ventas'] ?> transacciones</div>
+            <div class="metric-value-report" id="totalIngresos">$<?= number_format($resumen['total_ingresos'], 2) ?></div>
+            <div class="metric-sub" id="totalVentas"><?= $resumen['total_ventas'] ?> transacciones</div>
         </div>
         <div class="metric-card-report">
             <div class="metric-icon-report"><i class="fas fa-boxes"></i></div>
             <div class="metric-label-report">Unidades vendidas</div>
-            <div class="metric-value-report"><?= number_format($resumen['total_unidades']) ?></div>
-            <div class="metric-sub"><?= $resumen['total_unidades'] > 0 ? number_format($resumen['total_ingresos'] / $resumen['total_unidades'], 2) : 0 ?> promedio por unidad</div>
+            <div class="metric-value-report" id="totalUnidades"><?= number_format($resumen['total_unidades']) ?></div>
+            <div class="metric-sub" id="promedioUnidad"><?= $resumen['total_unidades'] > 0 ? number_format($resumen['total_ingresos'] / $resumen['total_unidades'], 2) : 0 ?> promedio por unidad</div>
         </div>
         <div class="metric-card-report">
             <div class="metric-icon-report"><i class="fas fa-wallet"></i></div>
             <div class="metric-label-report">Utilidad estimada</div>
-            <div class="metric-value-report">$<?= number_format($resumen['utilidad_estimada'], 2) ?></div>
-            <div class="metric-sub"><?= $resumen['total_ingresos'] > 0 ? number_format(($resumen['utilidad_estimada'] / $resumen['total_ingresos']) * 100, 1) : 0 ?>% margen</div>
+            <div class="metric-value-report" id="utilidadEstimada">$<?= number_format($resumen['utilidad_estimada'], 2) ?></div>
+            <div class="metric-sub" id="margenUtilidad"><?= $resumen['total_ingresos'] > 0 ? number_format(($resumen['utilidad_estimada'] / $resumen['total_ingresos']) * 100, 1) : 0 ?>% margen</div>
         </div>
         <div class="metric-card-report">
             <div class="metric-icon-report"><i class="fas fa-receipt"></i></div>
             <div class="metric-label-report">Ticket promedio</div>
-            <div class="metric-value-report">$<?= number_format($resumen['ticket_promedio'], 2) ?></div>
+            <div class="metric-value-report" id="ticketPromedio">$<?= number_format($resumen['ticket_promedio'], 2) ?></div>
             <div class="metric-sub">Por transacción</div>
         </div>
     </div>
 
-    <!-- Gráficos principales -->
     <div class="row">
-        <div class="col-lg-8">
+        <div class="col-lg-6">
             <div class="chart-container">
                 <div class="chart-title">
                     <i class="fas fa-chart-line"></i>
                     <span>Ventas por día</span>
                 </div>
-                <canvas id="chartVentasDiarias" style="height: 300px;"></canvas>
-                <?php if (empty($ventas_por_dia)): ?>
-                    <div class="text-center text-muted py-5">No hay datos en el período seleccionado</div>
-                <?php endif; ?>
+                <canvas id="chartVentasDiarias" style="height: 300px; width: 100%;"></canvas>
+                <div id="noDataVentasDiarias" class="text-center text-muted py-5" style="display: none;">No hay datos en el período seleccionado</div>
             </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-lg-6">
             <div class="chart-container">
                 <div class="chart-title">
                     <i class="fas fa-chart-pie"></i>
                     <span>Métodos de pago</span>
                 </div>
-                <canvas id="chartMetodosPago" style="height: 300px;"></canvas>
-                <?php if (empty($metodos_pago)): ?>
-                    <div class="text-center text-muted py-5">No hay datos en el período seleccionado</div>
-                <?php endif; ?>
+                <canvas id="chartMetodosPago" style="height: 300px; width: 100%; max-width: 100%;"></canvas>
+                <div id="noDataMetodosPago" class="text-center text-muted py-5" style="display: none;">No hay datos en el período seleccionado</div>
             </div>
         </div>
     </div>
-
     <div class="row">
         <div class="col-lg-6">
             <div class="chart-container">
@@ -649,7 +827,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
         </div>
     </div>
 
-    <!-- Top productos -->
     <div class="chart-container">
         <div class="chart-title">
             <i class="fas fa-trophy"></i>
@@ -667,7 +844,7 @@ while ($row = $resDiasSemana->fetch_assoc()) {
                         <th class="text-end">% del total</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="topProductosBody">
                     <?php if (!empty($top_productos)): ?>
                         <?php foreach ($top_productos as $index => $p): 
                             $porcentaje = $resumen['total_ingresos'] > 0 ? ($p['ingresos'] / $resumen['total_ingresos']) * 100 : 0;
@@ -682,14 +859,13 @@ while ($row = $resDiasSemana->fetch_assoc()) {
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td></tr>
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td><?
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- Clientes frecuentes -->
     <div class="chart-container">
         <div class="chart-title">
             <i class="fas fa-users"></i>
@@ -705,7 +881,7 @@ while ($row = $resDiasSemana->fetch_assoc()) {
                         <th class="text-end">Total gastado</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="clientesBody">
                     <?php if (!empty($clientes_top)): ?>
                         <?php foreach ($clientes_top as $index => $c): ?>
                             <tr>
@@ -716,7 +892,7 @@ while ($row = $resDiasSemana->fetch_assoc()) {
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="4" class="text-center py-4 text-muted">No hay datos de clientes en este período</td></tr>
+                        <tr><td colspan="4" class="text-center py-4 text-muted">No hay datos de clientes en este período</td><?
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -724,7 +900,6 @@ while ($row = $resDiasSemana->fetch_assoc()) {
     </div>
 </div>
 
-<!-- Modal de exportación -->
 <div id="modalExport" class="modal-export">
     <div class="modal-export-content">
         <div class="modal-export-header">
@@ -758,19 +933,25 @@ while ($row = $resDiasSemana->fetch_assoc()) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-// Inicializar gráficos
-document.addEventListener('DOMContentLoaded', function() {
-    // Gráfico de ventas diarias
-    const ventasDiarias = <?= json_encode($ventas_por_dia) ?>;
-    if (ventasDiarias.length > 0) {
-        const ctx = document.getElementById('chartVentasDiarias').getContext('2d');
-        new Chart(ctx, {
+let chartVentasDiarias = null;
+let chartMetodosPago = null;
+let chartVentasPorHora = null;
+let chartVentasDiaSemana = null;
+
+function initCharts(datos) {
+    const ctx1 = document.getElementById('chartVentasDiarias').getContext('2d');
+    if (chartVentasDiarias) chartVentasDiarias.destroy();
+    
+    if (datos.ventas_por_dia && datos.ventas_por_dia.length > 0) {
+        document.getElementById('chartVentasDiarias').style.display = 'block';
+        document.getElementById('noDataVentasDiarias').style.display = 'none';
+        chartVentasDiarias = new Chart(ctx1, {
             type: 'line',
             data: {
-                labels: ventasDiarias.map(v => v.fecha),
+                labels: datos.ventas_por_dia.map(v => v.fecha),
                 datasets: [{
                     label: 'Ventas ($)',
-                    data: ventasDiarias.map(v => v.total),
+                    data: datos.ventas_por_dia.map(v => v.total),
                     borderColor: '#f97316',
                     backgroundColor: 'rgba(249, 115, 22, 0.1)',
                     fill: true,
@@ -784,29 +965,30 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
-                plugins: {
-                    tooltip: { callbacks: { label: (ctx) => '$' + ctx.raw.toLocaleString() } }
-                },
+                plugins: { tooltip: { callbacks: { label: (ctx) => '$' + ctx.raw.toLocaleString() } } },
                 scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toLocaleString() } } }
             }
         });
+    } else {
+        document.getElementById('chartVentasDiarias').style.display = 'none';
+        document.getElementById('noDataVentasDiarias').style.display = 'block';
     }
 
-    // Gráfico de métodos de pago
-    const metodosPago = <?= json_encode($metodos_pago) ?>;
-    if (metodosPago.length > 0) {
-        const ctx2 = document.getElementById('chartMetodosPago').getContext('2d');
+    const ctx2 = document.getElementById('chartMetodosPago').getContext('2d');
+    if (chartMetodosPago) chartMetodosPago.destroy();
+    
+    if (datos.metodos_pago && datos.metodos_pago.length > 0) {
+        document.getElementById('chartMetodosPago').style.display = 'block';
+        document.getElementById('noDataMetodosPago').style.display = 'none';
         const colores = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444'];
-        new Chart(ctx2, {
+        const nombres = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta_debito: 'Tarjeta Débito', tarjeta_credito: 'Tarjeta Crédito' };
+        chartMetodosPago = new Chart(ctx2, {
             type: 'pie',
             data: {
-                labels: metodosPago.map(m => {
-                    const nombres = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta_debito: 'Tarjeta Débito', tarjeta_credito: 'Tarjeta Crédito' };
-                    return nombres[m.metodo_pago] || m.metodo_pago;
-                }),
+                labels: datos.metodos_pago.map(m => nombres[m.metodo_pago] || m.metodo_pago),
                 datasets: [{
-                    data: metodosPago.map(m => m.total),
-                    backgroundColor: colores.slice(0, metodosPago.length),
+                    data: datos.metodos_pago.map(m => m.total),
+                    backgroundColor: colores.slice(0, datos.metodos_pago.length),
                     borderWidth: 0
                 }]
             },
@@ -815,23 +997,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 maintainAspectRatio: true,
                 plugins: {
                     legend: { position: 'bottom' },
-                    tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toLocaleString()} (${((ctx.raw / <?= $resumen['total_ingresos'] ?: 1 ?>) * 100).toFixed(1)}%)` } }
+                    tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toLocaleString()} (${((ctx.raw / datos.resumen.total_ingresos) * 100).toFixed(1)}%)` } }
                 }
             }
         });
+    } else {
+        document.getElementById('chartMetodosPago').style.display = 'none';
+        document.getElementById('noDataMetodosPago').style.display = 'block';
     }
 
-    // Gráfico de ventas por hora
-    const ventasPorHora = <?= json_encode($ventas_por_hora) ?>;
-    const horas = Array.from({length: 24}, (_, i) => i + ':00');
     const ctx3 = document.getElementById('chartVentasPorHora').getContext('2d');
-    new Chart(ctx3, {
+    if (chartVentasPorHora) chartVentasPorHora.destroy();
+    const horas = Array.from({length: 24}, (_, i) => i + ':00');
+    chartVentasPorHora = new Chart(ctx3, {
         type: 'bar',
         data: {
             labels: horas,
             datasets: [{
                 label: 'Ventas ($)',
-                data: ventasPorHora,
+                data: datos.ventas_por_hora,
                 backgroundColor: '#f97316',
                 borderRadius: 6
             }]
@@ -843,17 +1027,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Gráfico de ventas por día de semana
-    const ventasDiaSemana = <?= json_encode($ventas_por_dia_semana) ?>;
-    const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     const ctx4 = document.getElementById('chartVentasDiaSemana').getContext('2d');
-    new Chart(ctx4, {
+    if (chartVentasDiaSemana) chartVentasDiaSemana.destroy();
+    chartVentasDiaSemana = new Chart(ctx4, {
         type: 'bar',
         data: {
-            labels: diasSemana,
+            labels: datos.dias_semana,
             datasets: [{
                 label: 'Ventas ($)',
-                data: ventasDiaSemana,
+                data: datos.ventas_por_dia_semana,
                 backgroundColor: '#10b981',
                 borderRadius: 6
             }]
@@ -864,19 +1046,168 @@ document.addEventListener('DOMContentLoaded', function() {
             scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toLocaleString() } } }
         }
     });
-});
+}
 
-function cambiarPeriodo() {
+function actualizarReporte() {
     const periodo = document.getElementById('periodo').value;
-    const fechasDiv = document.getElementById('fechasPersonalizadas');
+    let fechaInicio = document.getElementById('fecha_inicio')?.value || '';
+    let fechaFin = document.getElementById('fecha_fin')?.value || '';
+    
+    let url = window.location.pathname + '?ajax=1&periodo=' + encodeURIComponent(periodo);
     
     if (periodo === 'personalizado') {
-        fechasDiv.style.display = 'flex';
-    } else {
-        fechasDiv.style.display = 'none';
-        document.getElementById('formFiltros').submit();
+        if (fechaInicio) url += '&fecha_inicio=' + encodeURIComponent(fechaInicio);
+        if (fechaFin) url += '&fecha_fin=' + encodeURIComponent(fechaFin);
     }
+    
+    url += '&_=' + Date.now();
+    
+    document.getElementById('loadingOverlay').classList.add('active');
+    
+    fetch(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Error HTTP: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Actualizar métricas
+        document.getElementById('totalIngresos').innerHTML = '$' + parseFloat(data.resumen.total_ingresos || 0).toLocaleString('es-MX', {minimumFractionDigits: 2});
+        document.getElementById('totalVentas').innerHTML = (data.resumen.total_ventas || 0) + ' transacciones';
+        document.getElementById('totalUnidades').innerHTML = parseInt(data.resumen.total_unidades || 0).toLocaleString();
+        const promedioUnidad = (data.resumen.total_unidades || 0) > 0 ? ((data.resumen.total_ingresos || 0) / (data.resumen.total_unidades || 1)).toFixed(2) : 0;
+        document.getElementById('promedioUnidad').innerHTML = '$' + parseFloat(promedioUnidad).toLocaleString() + ' promedio por unidad';
+        document.getElementById('utilidadEstimada').innerHTML = '$' + parseFloat(data.resumen.utilidad_estimada || 0).toLocaleString('es-MX', {minimumFractionDigits: 2});
+        const margen = (data.resumen.total_ingresos || 0) > 0 ? (((data.resumen.utilidad_estimada || 0) / (data.resumen.total_ingresos || 1)) * 100).toFixed(1) : 0;
+        document.getElementById('margenUtilidad').innerHTML = margen + '% margen';
+        document.getElementById('ticketPromedio').innerHTML = '$' + parseFloat(data.resumen.ticket_promedio || 0).toLocaleString('es-MX', {minimumFractionDigits: 2});
+        
+        // Actualizar tabla de top productos
+        const topBody = document.getElementById('topProductosBody');
+        if (data.top_productos && data.top_productos.length > 0) {
+            topBody.innerHTML = '';
+            data.top_productos.forEach((p, index) => {
+                const porcentaje = (data.resumen.total_ingresos || 0) > 0 ? ((p.ingresos || 0) / (data.resumen.total_ingresos || 1)) * 100 : 0;
+                topBody.innerHTML += `
+                    <tr>
+                        <td class="fw-bold">${index + 1}</td>
+                        <td><strong>${escapeHtml(p.nombre)}</strong></td>
+                        <td class="text-center">${parseInt(p.unidades || 0).toLocaleString()}</td>
+                        <td class="text-center">${p.veces_vendido || 0} veces</td>
+                        <td class="text-end text-success">$${parseFloat(p.ingresos || 0).toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
+                        <td class="text-end">${porcentaje.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+        } else {
+            topBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td></tr>';
+        }
+        
+        // Actualizar tabla de clientes
+        const clientesBody = document.getElementById('clientesBody');
+        if (data.clientes_top && data.clientes_top.length > 0) {
+            clientesBody.innerHTML = '';
+            data.clientes_top.forEach((c, index) => {
+                clientesBody.innerHTML += `
+                    <tr>
+                        <td class="fw-bold">${index + 1}</td>
+                        <td>${escapeHtml(c.email)}</td>
+                        <td class="text-center">${c.compras || 0} compras</td>
+                        <td class="text-end text-success">$${parseFloat(c.total_gastado || 0).toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            clientesBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No hay datos de clientes en este período</td></tr>';
+        }
+        
+        initCharts(data);
+        document.getElementById('loadingOverlay').classList.remove('active');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('loadingOverlay').classList.remove('active');
+        Swal.fire({ 
+            icon: 'error', 
+            title: 'Error', 
+            text: error.message || 'No se pudieron cargar los datos',
+            confirmButtonColor: '#f97316' 
+        });
+    });
 }
+
+function limpiarFiltros() {
+    document.getElementById('periodo').value = 'personalizado';
+    document.getElementById('fechasPersonalizadas').style.display = 'flex';
+    
+    const hoy = new Date();
+    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    
+    document.getElementById('fecha_inicio').value = primerDiaMes.toISOString().split('T')[0];
+    document.getElementById('fecha_fin').value = ultimoDiaMes.toISOString().split('T')[0];
+    
+    actualizarReporte();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const datosIniciales = <?= json_encode($datos) ?>;
+    initCharts(datosIniciales);
+    
+    const periodoSelect = document.getElementById('periodo');
+    if (periodoSelect) {
+        periodoSelect.addEventListener('change', function() {
+            const periodo = this.value;
+            const fechasDiv = document.getElementById('fechasPersonalizadas');
+            
+            if (periodo === 'personalizado') {
+                fechasDiv.style.display = 'flex';
+                if (document.getElementById('fecha_inicio').value && document.getElementById('fecha_fin').value) {
+                    actualizarReporte();
+                }
+            } else {
+                fechasDiv.style.display = 'none';
+                actualizarReporte();
+            }
+        });
+    }
+    
+    const fechaInicio = document.getElementById('fecha_inicio');
+    const fechaFin = document.getElementById('fecha_fin');
+    
+    if (fechaInicio) {
+        fechaInicio.addEventListener('change', function() {
+            if (document.getElementById('periodo').value === 'personalizado') {
+                actualizarReporte();
+            }
+        });
+    }
+    
+    if (fechaFin) {
+        fechaFin.addEventListener('change', function() {
+            if (document.getElementById('periodo').value === 'personalizado') {
+                actualizarReporte();
+            }
+        });
+    }
+    
+    const btnLimpiar = document.getElementById('btnLimpiarFiltros');
+    if (btnLimpiar) {
+        btnLimpiar.addEventListener('click', limpiarFiltros);
+    }
+});
 
 function abrirModalExportacion() {
     document.getElementById('modalExport').classList.add('active');
@@ -889,20 +1220,26 @@ function cerrarModalExportacion() {
 function exportarReporte(tipo) {
     cerrarModalExportacion();
     
-    const params = new URLSearchParams(window.location.search);
-    params.set('exportar', tipo);
+    const periodo = document.getElementById('periodo').value;
+    let fechaInicio = document.getElementById('fecha_inicio')?.value || '';
+    let fechaFin = document.getElementById('fecha_fin')?.value || '';
     
-    window.location.href = 'exportar_reporte.php?' + params.toString();
+    let url = 'exportar_reporte.php?exportar=' + tipo + '&periodo=' + encodeURIComponent(periodo);
+    
+    if (periodo === 'personalizado') {
+        if (fechaInicio) url += '&fecha_inicio=' + encodeURIComponent(fechaInicio);
+        if (fechaFin) url += '&fecha_fin=' + encodeURIComponent(fechaFin);
+    }
+    
+    window.location.href = url;
 }
 
-<?php if (isset($_GET['exportado']) && $_GET['exportado'] == 1): ?>
-Swal.fire({
-    icon: 'success',
-    title: 'Reporte exportado',
-    text: 'El reporte se ha descargado correctamente',
-    confirmButtonColor: '#f97316'
-});
-<?php endif; ?>
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
 
 <?php include 'includes/footer.php'; ?>
