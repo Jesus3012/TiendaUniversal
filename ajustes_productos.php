@@ -260,12 +260,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         }
     }
 
+    $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado'; // Agregar esta línea al inicio de la sección
+
     if ($imagen_path) {
-        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=? WHERE id=?");
-        $stmt->bind_param("sssssiddsi", $nombre, $categoria, $atributos_json, $proveedor, $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $id);
+        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
+        $stmt->bind_param("sssssiddssi", $nombre, $categoria, $atributos_json, $proveedor, $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id);
     } else {
-        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=? WHERE id=?");
-        $stmt->bind_param("ssssiddsi", $nombre, $categoria, $atributos_json, $proveedor, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $id);
+        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
+        $stmt->bind_param("ssssiddssi", $nombre, $categoria, $atributos_json, $proveedor, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id);
     }
 
     if ($stmt->execute()) {
@@ -833,6 +835,7 @@ if (!empty($errors)) {
                                         <th class="text-white text-center">Cantidad</th>
                                         <th class="text-white text-right">Compra</th>
                                         <th class="text-white text-right">Venta</th>
+                                        <th class="text-white text-center">Adquisición</th>
                                         <th class="text-white text-center">PDF</th>
                                         <th class="text-white text-center">Acciones</th>
                                     </tr>
@@ -887,6 +890,22 @@ if (!empty($errors)) {
                                                     $<?= number_format($p['precio_venta'], 2) ?>
                                                 <?php else: ?>
                                                     <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <!-- NUEVA COLUMNA: Tipo de Adquisición -->
+                                            <td class="text-center">
+                                                <?php if ($p['tipo_inventario'] == 'producto'): ?>
+                                                    <?php if ($p['tipo_adquisicion'] == 'pagado'): ?>
+                                                        <span class="badge-adquisicion badge-pagado">
+                                                            <i class="fas fa-check-circle"></i> Pagado
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="badge-adquisicion badge-concesion">
+                                                            <i class="fas fa-handshake"></i> Por concesión
+                                                        </span>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted">—</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td class="text-center">
@@ -1041,50 +1060,180 @@ if (!empty($errors)) {
     </div>
 </div>
 
-<!-- MODAL EDITAR PRODUCTO -->
+<!-- MODAL EDITAR PRODUCTO - VERSIÓN COMPACTA -->
 <div class="modal fade" id="modalEditar" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <form method="POST" enctype="multipart/form-data" class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Editar Producto / Insumo</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" name="action" value="update">
-                <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
-                <input type="hidden" id="edit_id" name="id">
-                <input type="hidden" id="edit_tipo_inventario" name="tipo_inventario">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="form-group"><label>Nombre:</label><input type="text" id="edit_nombre" name="nombre" class="form-control" required></div>
-                        <div class="form-group"><label>Categoría:</label><input type="text" id="edit_categoria" name="categoria" class="form-control" required></div>
-                        <div class="form-group"><label>Proveedor:</label><input type="text" id="edit_proveedor" name="proveedor" class="form-control"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group"><label>Precio compra:</label><input type="number" step="0.01" id="edit_precio_compra" name="precio_compra" class="form-control" required></div>
-                        <div class="form-group" id="edit_precio_venta_group"><label>Precio venta:</label><input type="number" step="0.01" id="edit_precio_venta" name="precio_venta" class="form-control"></div>
-                        <div class="form-group" id="edit_tipo_codigo_group"><label>Tipo código:</label><select id="edit_tipo_codigo" name="tipo_codigo" class="form-control"><option value="unico">Código único</option><option value="multiple">Por artículo</option></select></div>
-                        <div class="form-group"><label>Nueva imagen (opcional):</label><input type="file" name="imagen" accept="image/*" class="form-control"></div>
-                    </div>
+        <div class="modal-content" style="overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            
+            <!-- HEADER COMPACTO -->
+            <div class="modal-header" style="background: linear-gradient(135deg, #f97316, #ea580c); border: none; padding: 12px 20px;">
+                <div>
+                    <h5 class="modal-title" style="color: white; font-size: 1.1rem; font-weight: 600;">
+                        <i class="fas fa-edit mr-2"></i> Editar Producto / Insumo
+                    </h5>
                 </div>
-                <div class="alert alert-info"><i class="fas fa-info-circle mr-2"></i>Stock actual: <strong id="edit_cantidad_actual">0</strong><small class="d-block mt-1">Para modificar el stock usa el botón Agregar stock en la tabla.</small></div>
-                <div id="edit_atributos_section" class="card card-secondary mt-3">
-                    <div class="card-header"><h6>Atributos adicionales</h6></div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6 mb-2"><label>Marca</label><input type="text" id="edit_marca" name="marca" class="form-control form-control-sm"></div>
-                            <div class="col-md-6 mb-2"><label>Color</label><input type="text" id="edit_color" name="color" class="form-control form-control-sm"></div>
-                            <div class="col-md-6 mb-2"><label>Talla</label><input type="text" id="edit_talla" name="talla" class="form-control form-control-sm"></div>
-                            <div class="col-md-6 mb-2"><label>Material</label><input type="text" id="edit_material" name="material" class="form-control form-control-sm"></div>
+                <button type="button" class="close text-white" data-dismiss="modal" style="font-size: 1.5rem;">&times;</button>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" id="formEditarProducto">
+                <div class="modal-body" style="padding: 20px; background: #f8fafc;">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
+                    <input type="hidden" id="edit_id" name="id">
+                    <input type="hidden" id="edit_tipo_inventario" name="tipo_inventario">
+                    <input type="hidden" id="edit_categoria_nueva_input" name="categoria_nueva">
+                    <input type="hidden" id="edit_proveedor_nuevo_input" name="proveedor_nuevo">
+
+                    <!-- STOCK ACTUAL - COMPACTO -->
+                    <div class="d-flex align-items-center mb-4" style="background: #eff6ff; border-left: 4px solid #f97316; border-radius: 10px; padding: 10px 15px;">
+                        <div class="rounded-circle bg-white p-2 mr-3">
+                            <i class="fas fa-boxes" style="color: #f97316; font-size: 1rem;"></i>
+                        </div>
+                        <div>
+                            <small style="color: #475569;">Stock actual</small>
+                            <strong id="edit_cantidad_actual" style="font-size: 1.2rem; color: #f97316; margin-left: 5px;">0</strong>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- COLUMNA IZQUIERDA -->
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 mb-3" style="border-radius: 12px;">
+                                <div class="card-header bg-white border-0 pt-2 pb-0 px-3">
+                                    <h6 style="color: #f97316; font-size: 0.85rem; margin: 0;">
+                                        <i class="fas fa-info-circle mr-1"></i> Información Básica
+                                    </h6>
+                                </div>
+                                <div class="card-body pt-2 px-3 pb-3">
+                                    <div class="form-group mb-2">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Nombre *</label>
+                                        <input type="text" id="edit_nombre" name="nombre" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" required>
+                                    </div>
+
+                                    <div class="form-group mb-2">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Categoría *</label>
+                                        <select id="edit_categoria" name="categoria" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" required>
+                                            <option value="">Seleccionar categoría</option>
+                                            <?php foreach ($categorias as $cat): ?>
+                                                <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
+                                            <?php endforeach; ?>
+                                            <option value="__NUEVA__">+ Crear nueva categoría</option>
+                                        </select>
+                                        <input type="text" id="edit_categoria_nueva" class="form-control form-control-sm mt-1" style="border-radius: 8px; font-size: 0.85rem; display: none;" placeholder="Nueva categoría">
+                                    </div>
+
+                                    <div class="form-group mb-2">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Proveedor</label>
+                                        <select id="edit_proveedor" name="proveedor" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;">
+                                            <option value="">Seleccionar proveedor</option>
+                                            <?php foreach ($proveedores as $prov): ?>
+                                                <option value="<?= htmlspecialchars($prov) ?>"><?= htmlspecialchars($prov) ?></option>
+                                            <?php endforeach; ?>
+                                            <option value="__NUEVO__">+ Crear nuevo proveedor</option>
+                                        </select>
+                                        <input type="text" id="edit_proveedor_nuevo" class="form-control form-control-sm mt-1" style="border-radius: 8px; font-size: 0.85rem; display: none;" placeholder="Nuevo proveedor">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Imagen</label>
+                                        <input type="file" name="imagen" class="form-control-file form-control-sm" style="font-size: 0.8rem; padding: 4px;" accept="image/*">
+                                        <small class="text-muted" style="font-size: 0.7rem;">Dejar en blanco para mantener actual</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- COLUMNA DERECHA -->
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 mb-3" style="border-radius: 12px;">
+                                <div class="card-header bg-white border-0 pt-2 pb-0 px-3">
+                                    <h6 style="color: #f97316; font-size: 0.85rem; margin: 0;">
+                                        <i class="fas fa-chart-line mr-1"></i> Precios y Configuración
+                                    </h6>
+                                </div>
+                                <div class="card-body pt-2 px-3 pb-3">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="form-group mb-2">
+                                                <label style="font-size: 0.75rem; font-weight: 600;">Precio compra *</label>
+                                                <div class="input-group input-group-sm">
+                                                    <div class="input-group-prepend">
+                                                        <span class="input-group-text" style="padding: 0 8px; font-size: 0.85rem;">$</span>
+                                                    </div>
+                                                    <input type="number" step="0.01" id="edit_precio_compra" name="precio_compra" class="form-control form-control-sm" style="font-size: 0.85rem;" required>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="form-group mb-2" id="edit_precio_venta_group">
+                                                <label style="font-size: 0.75rem; font-weight: 600;">Precio venta</label>
+                                                <div class="input-group input-group-sm">
+                                                    <div class="input-group-prepend">
+                                                        <span class="input-group-text" style="padding: 0 8px; font-size: 0.85rem;">$</span>
+                                                    </div>
+                                                    <input type="number" step="0.01" id="edit_precio_venta" name="precio_venta" class="form-control form-control-sm" style="font-size: 0.85rem;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group mb-2" id="edit_tipo_codigo_group">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Tipo de código</label>
+                                        <select id="edit_tipo_codigo" name="tipo_codigo" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;">
+                                            <option value="unico">Código único</option>
+                                            <option value="multiple">Múltiple (uno por unidad)</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group" id="edit_adquisicion_group">
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Adquisición</label>
+                                        <div class="d-flex" style="gap: 8px;">
+                                            <label class="btn btn-outline-success btn-sm" style="flex: 1; cursor: pointer; text-align: center; margin: 0; padding: 5px; font-size: 0.8rem;">
+                                                <input type="radio" name="tipo_adquisicion" value="pagado" class="mr-1"> Pagado
+                                            </label>
+                                            <label class="btn btn-outline-warning btn-sm" style="flex: 1; cursor: pointer; text-align: center; margin: 0; padding: 5px; font-size: 0.8rem;">
+                                                <input type="radio" name="tipo_adquisicion" value="concesion" class="mr-1"> Concesión
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ATRIBUTOS COMPACTOS -->
+                            <div id="edit_atributos_section" class="card shadow-sm border-0" style="border-radius: 12px;">
+                                <div class="card-header bg-white border-0 pt-2 pb-0 px-3">
+                                    <h6 style="color: #f97316; font-size: 0.85rem; margin: 0;">
+                                        <i class="fas fa-cog mr-1"></i> Atributos <small class="text-muted">(opcional)</small>
+                                    </h6>
+                                </div>
+                                <div class="card-body pt-2 px-3 pb-3">
+                                    <div class="row">
+                                        <div class="col-6 mb-1">
+                                            <input type="text" id="edit_marca" name="marca" class="form-control form-control-sm" placeholder="Marca" style="border-radius: 6px; font-size: 0.8rem;">
+                                        </div>
+                                        <div class="col-6 mb-1">
+                                            <input type="text" id="edit_color" name="color" class="form-control form-control-sm" placeholder="Color" style="border-radius: 6px; font-size: 0.8rem;">
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="text" id="edit_talla" name="talla" class="form-control form-control-sm" placeholder="Talla" style="border-radius: 6px; font-size: 0.8rem;">
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="text" id="edit_material" name="material" class="form-control form-control-sm" placeholder="Material" style="border-radius: 6px; font-size: 0.8rem;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary">Actualizar</button>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-            </div>
-        </form>
+
+                <!-- FOOTER COMPACTO -->
+                <div class="modal-footer" style="background: white; border-top: 1px solid #e2e8f0; padding: 12px 20px;">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" style="border-radius: 6px;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm" style="background: #f97316; border: none; border-radius: 6px;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -1267,39 +1416,141 @@ function calcularDiferencia(actual, nueva) {
     else span.innerHTML = `Diferencia: 0 (sin cambios)`;
 }
 
+// Manejo de selects dinámicos para categoría y proveedor
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar eventos para los selects dinámicos
+    const categoriaSelect = document.getElementById('edit_categoria');
+    const categoriaNueva = document.getElementById('edit_categoria_nueva');
+    const proveedorSelect = document.getElementById('edit_proveedor');
+    const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
+
+    if (categoriaSelect && categoriaNueva) {
+        categoriaSelect.addEventListener('change', function() {
+            if (this.value === '__NUEVA__') {
+                categoriaNueva.style.display = 'block';
+                categoriaNueva.required = true;
+                categoriaNueva.focus();
+                this.disabled = true;
+            } else {
+                categoriaNueva.style.display = 'none';
+                categoriaNueva.value = '';
+                categoriaNueva.required = false;
+                this.disabled = false;
+            }
+        });
+    }
+
+    if (proveedorSelect && proveedorNuevo) {
+        proveedorSelect.addEventListener('change', function() {
+            if (this.value === '__NUEVO__') {
+                proveedorNuevo.style.display = 'block';
+                proveedorNuevo.focus();
+                this.disabled = true;
+            } else {
+                proveedorNuevo.style.display = 'none';
+                proveedorNuevo.value = '';
+                this.disabled = false;
+            }
+        });
+    }
+
+    // Capturar valores antes de enviar el formulario
+    const formEditar = document.getElementById('formEditarProducto');
+    if (formEditar) {
+        formEditar.addEventListener('submit', function() {
+            // Procesar categoría
+            if (categoriaSelect.value === '__NUEVA__' && categoriaNueva.value.trim() !== '') {
+                document.getElementById('edit_categoria_nueva_input').value = categoriaNueva.value.trim();
+                categoriaSelect.value = categoriaNueva.value.trim();
+            }
+            
+            // Procesar proveedor
+            if (proveedorSelect.value === '__NUEVO__' && proveedorNuevo.value.trim() !== '') {
+                document.getElementById('edit_proveedor_nuevo_input').value = proveedorNuevo.value.trim();
+                proveedorSelect.value = proveedorNuevo.value.trim();
+            }
+        });
+    }
+});
+
+// Función editarProducto actualizada
 function editarProducto(id) {
     fetch(`get_producto.php?id=${id}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 const p = data.producto;
-                $('#edit_id').val(p.id);
-                $('#edit_nombre').val(p.nombre);
-                $('#edit_categoria').val(p.categoria);
-                $('#edit_proveedor').val(p.proveedor || '');
-                $('#edit_precio_compra').val(p.precio_compra);
-                $('#edit_precio_venta').val(p.precio_venta);
-                $('#edit_tipo_codigo').val(p.tipo_codigo);
-                $('#edit_tipo_inventario').val(p.tipo_inventario);
-                $('#edit_cantidad_actual').text(p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz');
-                if (p.atributos_array) {
-                    $('#edit_marca').val(p.atributos_array.marca || '');
-                    $('#edit_color').val(p.atributos_array.color || '');
-                    $('#edit_talla').val(p.atributos_array.talla || '');
-                    $('#edit_material').val(p.atributos_array.material || '');
-                }
-                if (p.tipo_inventario === 'producto') {
-                    $('#edit_precio_venta_group').show();
-                    $('#edit_tipo_codigo_group').show();
-                    $('#edit_atributos_section').show();
+                
+                // Resetear campos
+                const categoriaSelect = document.getElementById('edit_categoria');
+                const categoriaNueva = document.getElementById('edit_categoria_nueva');
+                const proveedorSelect = document.getElementById('edit_proveedor');
+                const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
+                
+                categoriaSelect.disabled = false;
+                categoriaNueva.style.display = 'none';
+                categoriaNueva.value = '';
+                proveedorSelect.disabled = false;
+                proveedorNuevo.style.display = 'none';
+                proveedorNuevo.value = '';
+                
+                // Llenar datos básicos
+                document.getElementById('edit_id').value = p.id;
+                document.getElementById('edit_nombre').value = p.nombre;
+                document.getElementById('edit_precio_compra').value = p.precio_compra;
+                document.getElementById('edit_precio_venta').value = p.precio_venta;
+                document.getElementById('edit_tipo_codigo').value = p.tipo_codigo;
+                document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;
+                
+                // Stock
+                const stockText = p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz';
+                document.getElementById('edit_cantidad_actual').textContent = stockText;
+                
+                // Cargar categoría
+                const categoriaExiste = Array.from(categoriaSelect.options).some(opt => opt.value === p.categoria);
+                if (categoriaExiste && p.categoria) {
+                    categoriaSelect.value = p.categoria;
+                } else if (p.categoria) {
+                    categoriaSelect.value = '__NUEVA__';
+                    categoriaNueva.value = p.categoria;
+                    categoriaNueva.style.display = 'block';
+                    categoriaSelect.disabled = true;
                 } else {
-                    $('#edit_precio_venta_group').hide();
-                    $('#edit_tipo_codigo_group').hide();
-                    $('#edit_atributos_section').hide();
+                    categoriaSelect.value = '';
                 }
+                
+                // Cargar proveedor
+                const proveedorExiste = Array.from(proveedorSelect.options).some(opt => opt.value === p.proveedor);
+                if (proveedorExiste && p.proveedor) {
+                    proveedorSelect.value = p.proveedor;
+                } else if (p.proveedor) {
+                    proveedorSelect.value = '__NUEVO__';
+                    proveedorNuevo.value = p.proveedor;
+                    proveedorNuevo.style.display = 'block';
+                    proveedorSelect.disabled = true;
+                } else {
+                    proveedorSelect.value = '';
+                }
+                
+                // Adquisición
+                if (p.tipo_adquisicion === 'pagado') {
+                    document.querySelector('input[name="tipo_adquisicion"][value="pagado"]').checked = true;
+                } else {
+                    document.querySelector('input[name="tipo_adquisicion"][value="concesion"]').checked = true;
+                }
+                
+                // Mostrar/ocultar según tipo
+                const isProducto = p.tipo_inventario === 'producto';
+                document.getElementById('edit_precio_venta_group').style.display = isProducto ? '' : 'none';
+                document.getElementById('edit_tipo_codigo_group').style.display = isProducto ? '' : 'none';
+                document.getElementById('edit_atributos_section').style.display = isProducto ? '' : 'none';
+                document.getElementById('edit_adquisicion_group').style.display = isProducto ? '' : 'none';
+                
+                // Abrir modal
                 $('#modalEditar').modal('show');
             }
-        });
+        })
+        .catch(error => console.error('Error:', error));
 }
 
 function confirmarEliminar(id) {

@@ -53,7 +53,9 @@ function obtenerProveedores($conn) {
 
 // ========================= AGREGAR PROVEEDOR =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_proveedor') {
-    ob_clean();
+    // Limpiar completamente el buffer
+    while (ob_get_level()) ob_end_clean();
+    ob_start();
     header('Content-Type: application/json');
     
     $nombre = trim($_POST['nombre'] ?? '');
@@ -67,11 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_p
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
     $pais = trim($_POST['pais'] ?? 'México');
     
+    // Validar
     if ($nombre === '') {
         echo json_encode(['success' => false, 'error' => 'El nombre del proveedor es obligatorio.']);
         exit;
     }
     
+    // Verificar si ya existe
     $stmt = $conn->prepare("SELECT id FROM proveedores WHERE nombre = ? AND activo = 1");
     $stmt->bind_param("s", $nombre);
     $stmt->execute();
@@ -82,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_p
         exit;
     }
     
+    // Procesar logo
     $logo_path = '';
     if (!empty($_FILES['logo']['name'])) {
         $upload_dir = __DIR__.'/uploads/proveedores/';
@@ -106,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_p
         }
     }
     
+    // Insertar proveedor
     $stmt = $conn->prepare("INSERT INTO proveedores (nombre, correo, telefono, calle, numero, colonia, ciudad, estado, codigo_postal, pais, logo, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
     $stmt->bind_param("sssssssssss", $nombre, $correo, $telefono, $calle, $numero, $colonia, $ciudad, $estado, $codigo_postal, $pais, $logo_path);
     
@@ -126,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $nombre = trim($_POST['nombre'] ?? '');
     $categoria = trim($_POST['categoria'] ?? 'General');
     $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
+    $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado'; // NUEVO CAMPO
     
     $proveedor_nombre = '';
     if ($proveedor_id > 0) {
@@ -244,8 +251,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $conn->begin_transaction();
             
             try {
-                $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssssiddss", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario);
+                $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sssssiddsss", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion);
                 
                 if (!$stmt->execute()) {
                     throw new Exception("Error al insertar producto: " . $conn->error);
@@ -414,6 +421,94 @@ if (!empty($errors)) {
 ?>
 <link rel="stylesheet" href="css/productos.css">
 
+<style>
+/* Estilos para los botones de tipo de adquisición */
+.adquisicion-toggle {
+    display: flex;
+    gap: 15px;
+    margin-top: 5px;
+}
+
+.btn-adquisicion {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    text-align: center;
+    border: 2px solid transparent;
+}
+
+.btn-adquisicion i {
+    font-size: 1.3rem;
+    margin-right: 8px;
+}
+
+.btn-adquisicion-pagado {
+    background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+    color: #2e7d32;
+    border-color: #a5d6a7;
+}
+
+.btn-adquisicion-pagado.active {
+    background: linear-gradient(135deg, #4caf50, #388e3c);
+    color: white;
+    border-color: #2e7d32;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.btn-adquisicion-concesion {
+    background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+    color: #e65100;
+    border-color: #ffcc80;
+}
+
+.btn-adquisicion-concesion.active {
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+    color: white;
+    border-color: #e65100;
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+}
+
+.btn-adquisicion:hover {
+    transform: translateY(-2px);
+}
+
+.btn-adquisicion:active {
+    transform: translateY(0);
+}
+
+.tipo-adquisicion-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.tipo-adquisicion-badge.pagado {
+    background: #c8e6c9;
+    color: #2e7d32;
+}
+
+.tipo-adquisicion-badge.concesion {
+    background: #ffe0b2;
+    color: #e65100;
+}
+
+.info-adquisicion {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #475569;
+}
+</style>
+
 <div class="content-wrapper">
     <div class="container-fluid">
         
@@ -469,7 +564,7 @@ if (!empty($errors)) {
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label>Nombre <span class="text-danger">*</span></label>
+                                        <label>Nombre del producto <span class="text-danger">*</span></label>
                                         <input type="text" name="nombre" id="nombre_input" class="form-control" placeholder="Ej. Llaveros, playeras, tazas, etc." required>
                                     </div>
 
@@ -502,6 +597,24 @@ if (!empty($errors)) {
                                             <button type="button" class="btn btn-outline-primary" onclick="abrirModalProveedor()">
                                                 <i class="fas fa-plus"></i>
                                             </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- NUEVA SECCIÓN: TIPO DE ADQUISICIÓN -->
+                                    <div class="form-group">
+                                        <label><i class="fas fa-tag mr-1"></i> Tipo de adquisición <span class="text-danger">*</span></label>
+                                        <div class="adquisicion-toggle">
+                                            <div class="btn-adquisicion btn-adquisicion-pagado active" onclick="seleccionarAdquisicion('pagado')">
+                                                <i class="fas fa-check-circle"></i> Pagado
+                                            </div>
+                                            <div class="btn-adquisicion btn-adquisicion-concesion" onclick="seleccionarAdquisicion('concesion')">
+                                                <i class="fas fa-handshake"></i> Por concesión
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="tipo_adquisicion" id="tipo_adquisicion" value="pagado">
+                                        <div class="info-adquisicion" id="infoAdquisicion">
+                                            <i class="fas fa-info-circle text-primary mr-1"></i>
+                                            <strong>Pagado:</strong> Producto ya liquidado al proveedor. Aparece como disponible inmediatamente.
                                         </div>
                                     </div>
 
@@ -773,6 +886,40 @@ if (!empty($errors)) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+// ===== TIPO DE ADQUISICIÓN =====
+function seleccionarAdquisicion(tipo) {
+    const pagadoBtn = document.querySelector('.btn-adquisicion-pagado');
+    const concesionBtn = document.querySelector('.btn-adquisicion-concesion');
+    const inputAdquisicion = document.getElementById('tipo_adquisicion');
+    const infoDiv = document.getElementById('infoAdquisicion');
+    
+    if (tipo === 'pagado') {
+        pagadoBtn.classList.add('active');
+        concesionBtn.classList.remove('active');
+        inputAdquisicion.value = 'pagado';
+        infoDiv.innerHTML = `
+            <i class="fas fa-check-circle text-success mr-1"></i>
+            <strong>Pagado:</strong> Producto ya liquidado al proveedor.
+            <span class="badge badge-success ml-2">✓ Stock disponible</span>
+            <div class="mt-2 small text-muted">
+                <i class="fas fa-info-circle"></i> Aparecerá en reporte de deuda con proveedores como pagado.
+            </div>
+        `;
+    } else {
+        concesionBtn.classList.add('active');
+        pagadoBtn.classList.remove('active');
+        inputAdquisicion.value = 'concesion';
+        infoDiv.innerHTML = `
+            <i class="fas fa-handshake text-warning mr-1"></i>
+            <strong>Por concesión:</strong> Producto entregado por proveedor a cuenta. Se pagará al vender.
+            <span class="badge badge-warning ml-2">Pendiente de pago</span>
+            <div class="mt-2 small text-muted">
+                <i class="fas fa-info-circle"></i> Este producto aparecerá en reportes de deuda con proveedores.
+            </div>
+        `;
+    }
+}
+
 // ===== PROVEEDORES =====
 function abrirModalProveedor() {
     document.getElementById('formProveedor').reset();
@@ -810,14 +957,26 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
     
     const formData = new FormData(this);
     
-    fetch('nuevo_producto.php', {
+    // IMPORTANTE: Usar la URL completa y asegurar que sea una petición AJAX
+    fetch(window.location.href, {  // Cambiar a window.location.href en lugar de 'nuevo_producto.php'
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
     })
     .then(response => response.text())
     .then(text => {
+        console.log('Respuesta del servidor:', text); // Para depuración
+        
+        // Limpiar cualquier salida HTML antes de parsear
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('No se recibió una respuesta JSON válida');
+        }
+        
         try {
-            const data = JSON.parse(text);
+            const data = JSON.parse(jsonMatch[0]);
             if (data.success) {
                 Swal.fire({
                     icon: 'success',
@@ -827,6 +986,9 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
                 });
                 agregarProveedorAlSelect(data.id, data.nombre);
                 $('#modalProveedor').modal('hide');
+                // Limpiar el formulario de proveedor
+                document.getElementById('formProveedor').reset();
+                document.getElementById('previewLogo').classList.add('d-none');
             } else {
                 Swal.fire({
                     icon: 'error',
@@ -840,7 +1002,7 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
             Swal.fire({
                 icon: 'error',
                 title: 'Error',
-                text: 'Error en el servidor',
+                text: 'Error en el servidor: ' + text.substring(0, 200),
                 confirmButtonColor: '#f97316'
             });
         }
@@ -850,7 +1012,7 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
         Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: 'Error al procesar la solicitud',
+            text: 'Error al procesar la solicitud: ' + error.message,
             confirmButtonColor: '#f97316'
         });
     });
@@ -861,6 +1023,7 @@ function limpiarFormulario() {
     const form = document.getElementById('formProducto');
     form.reset();
     document.getElementById('previewImg').classList.add('d-none');
+    seleccionarAdquisicion('pagado');
 }
 
 function previewImagen(event) {
@@ -928,15 +1091,18 @@ function cambiarUnidadInsumo(tipo) {
     });
 }
 
-// Inicialización para insumos
-<?php if ($tipo_seleccionado == 'insumo'): ?>
+// Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    // Seleccionar pagado por defecto
+    seleccionarAdquisicion('pagado');
+    
+    <?php if ($tipo_seleccionado == 'insumo'): ?>
     const unidadPorDefecto = document.querySelector('input[name="tipo_unidad_insumo"]:checked');
     if (unidadPorDefecto) {
         cambiarUnidadInsumo(unidadPorDefecto.value);
     }
+    <?php endif; ?>
 });
-<?php endif; ?>
 </script>
 
 <?php
