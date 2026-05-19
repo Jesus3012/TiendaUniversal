@@ -75,8 +75,22 @@ if (!empty($nombre)) {
 }
 
 $tienda_nombre = $config['nombre'] ?? 'Tienda Pescadores';
-$tienda_logo = $config['logo'] ?? '';
-$logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
+$tienda_logo = '';
+$logo_exists = false;
+
+$extensiones_logo = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+
+foreach ($extensiones_logo as $ext) {
+    $ruta_logo = 'img/panel_principal.' . $ext;
+
+    if (file_exists($ruta_logo)) {
+        $tienda_logo = $ruta_logo;
+        $logo_exists = true;
+        break;
+    }
+}
+
+$logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 ?>
 
 <!doctype html>
@@ -105,7 +119,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
     <div class="mobile-sidebar-header">
       <div class="logo-area">
         <?php if ($logo_exists): ?>
-          <img src="<?php echo htmlspecialchars($tienda_logo); ?>" alt="Logo">
+          <img src="<?php echo htmlspecialchars($tienda_logo); ?>?v=<?php echo $logo_version; ?>" alt="Logo">
         <?php else: ?>
           <i class="fas fa-fish" style="color: white; font-size: 24px;"></i>
         <?php endif; ?>
@@ -148,6 +162,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
           <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
           <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
+          <a href="reportes_vendedor.php"><i class="fas fa-file-alt"></i> Reportes</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
         <?php endif; ?>
         
@@ -161,7 +176,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
   <div class="sidebar-header">
     <div class="logo-area">
       <?php if ($logo_exists): ?>
-        <img src="<?php echo htmlspecialchars($tienda_logo); ?>" alt="Logo">
+        <img src="<?php echo htmlspecialchars($tienda_logo); ?>?v=<?php echo $logo_version; ?>" alt="Logo">
       <?php else: ?>
         <i class="fas fa-fish" style="color: white; font-size: 24px;"></i>
       <?php endif; ?>
@@ -205,6 +220,7 @@ $logo_exists = !empty($tienda_logo) && file_exists($tienda_logo);
         <a href="ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
+        <a href="reportes_vendedor.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
       <?php endif; ?>
     </div>

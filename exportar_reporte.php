@@ -136,12 +136,12 @@ function exportarPDF($conn, $ventas, $resumen, $fecha_inicio, $fecha_fin, $nombr
     $pdf->Cell(0, 7, utf8_decode($nombre_vendedor), 0, 1);
     
     $pdf->SetFont('Arial', '', 10);
-    $pdf->Cell(50, 7, 'Período:', 0, 0);
+    $pdf->Cell(50, 7, 'Periodo:', 0, 0);
     $pdf->SetFont('Arial', 'B', 10);
     $pdf->Cell(0, 7, $fecha_inicio . ' - ' . $fecha_fin, 0, 1);
     
     $pdf->SetFont('Arial', '', 10);
-    $pdf->Cell(50, 7, 'Fecha de exportación:', 0, 0);
+    $pdf->Cell(50, 7, 'Fecha de exportacion:', 0, 0);
     $pdf->SetFont('Arial', 'B', 10);
     $pdf->Cell(0, 7, date('d/m/Y H:i:s'), 0, 1);
     $pdf->Ln(8);

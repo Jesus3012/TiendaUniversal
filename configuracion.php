@@ -91,6 +91,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         if ($stmt->execute()) {
             // Procesar logo
+            if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
+
+                $upload_dir = 'img/';
+
+                if (!file_exists($upload_dir)) {
+                    mkdir($upload_dir, 0777, true);
+                }
+
+                // Eliminar logos anteriores
+                foreach (glob($upload_dir . 'panel_principal.*') as $old_file) {
+                    if (is_file($old_file)) {
+                        unlink($old_file);
+                    }
+                }
+
+                $extension = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
+
+                $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+                if (in_array($extension, $allowed)) {
+
+                    $filename = 'panel_principal.' . $extension;
+                    $target_path = $upload_dir . $filename;
+
+                    if (move_uploaded_file($_FILES['logo']['tmp_name'], $target_path)) {
+
+                        $stmt_logo = $conn->prepare("UPDATE configuracion_galeria SET logo = ? WHERE id = 1");
+                        $stmt_logo->bind_param("s", $target_path);
+                        $stmt_logo->execute();
+                    }
+                }
+            }
 
             // Procesar imagen del Dashboard
             if (isset($_FILES['imagen_dashboard']) && $_FILES['imagen_dashboard']['error'] === UPLOAD_ERR_OK) {
