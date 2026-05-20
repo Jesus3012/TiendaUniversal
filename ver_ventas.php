@@ -256,6 +256,7 @@ foreach ($ventasAgrupadas as $v) {
 $hayDatosTablaProductos = count($productos) > 0;
 $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
 ?>
+
 <link rel="stylesheet" href="css/ver_ventas.css">
 
 <div class="content-wrapper">
@@ -498,14 +499,14 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                     <table class="table table-hover table-sm mb-0" id="tablaProductos">
                         <thead class="thead-dark">
                             <tr>
-                                <th class="sortable" data-column="0">Producto</th>
-                                <th class="sortable" data-column="1">Proveedor</th>
-                                <th class="sortable text-center" data-column="2">Vendidos</th>
-                                <th class="sortable text-center" data-column="3">Stock Restante</th>
-                                <th class="sortable text-right" data-column="4">Compra</th>
-                                <th class="sortable text-right" data-column="5">Venta</th>
-                                <th class="sortable text-right" data-column="6">Ganancia</th>
-                                <th class="text-center">Adquisición</th>
+                                <th>Producto</th>
+                                <th>Proveedor</th>
+                                <th>Vendidos</th>
+                                <th>Stock Restante</th>
+                                <th>Compra</th>
+                                <th>Venta</th>
+                                <th>Ganancia</th>
+                                <th>Adquisición</th>
                             </tr>
                         </thead>
                         <tbody id="tablaProductosBody">
@@ -529,25 +530,27 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                         <?php endif; ?>
                                     </td>
                                     <td><?= htmlspecialchars($p['proveedor']) ?></td>
-                                    <td class="text-center"><?= number_format($p['vendidos']) ?></td>
-                                    <td class="text-center">
+                                    <td><?= number_format($p['vendidos']) ?></td>
+                                    <td>
                                         <span class="badge <?= $p['stock'] <= 0 ? 'badge-danger' : ($p['stock'] <= 5 ? 'badge-warning' : 'badge-success') ?>">
                                             <?= number_format($p['stock']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
-                                    <td class="text-right">$<?= number_format($p['precio_venta'], 2) ?></td>
-                                    <td class="text-right font-weight-bold text-success">
-                                        $<?= number_format($p['ganancia'], 2) ?>
-                                    </td>
-                                    <td class="text-center">
+                                    <td>$<?= number_format($p['precio_compra'], 2) ?></td>
+                                    <td>$<?= number_format($p['precio_venta'], 2) ?></td>
+                                    <td class="font-weight-bold text-success">$<?= number_format($p['ganancia'], 2) ?></td>
+                                    <td>
                                         <?php if ($p['es_pagado']): ?>
-                                            <span class="badge badge-success"><i class="fas fa-check-circle"></i> Pagado</span>
+                                            <span class="badge-adquisicion badge-pagado">
+                                                <i class="fas fa-check-circle"></i> Pagado
+                                            </span>
                                         <?php else: ?>
-                                            <span class="badge badge-warning"><i class="fas fa-handshake"></i> Concesión</span>
+                                            <span class="badge-adquisicion badge-concesion">
+                                                <i class="fas fa-handshake"></i> Concesión
+                                            </span>
                                         <?php endif; ?>
                                     </td>
-                                </td>
+                                </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
@@ -609,12 +612,12 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                         <table class="table table-hover table-sm mb-0" id="tablaDeuda">
                             <thead class="thead-dark">
                                 <tr>
-                                    <th class="sortable" data-column="0">Producto</th>
-                                    <th class="sortable" data-column="1">Proveedor</th>
-                                    <th class="sortable text-center" data-column="2">Vendidos</th>
-                                    <th class="sortable text-right" data-column="3">Costo unitario</th>
-                                    <th class="sortable text-right" data-column="4">Deuda total</th>
-                                    <th class="text-center">Adquisición</th>
+                                    <th>Producto</th>
+                                    <th>Proveedor</th>
+                                    <th>Vendidos</th>
+                                    <th>Costo unitario</th>
+                                    <th>Deuda total</th>
+                                    <th>Adquisición</th>
                                 </tr>
                             </thead>
                             <tbody id="tablaDeudaBody">
@@ -633,20 +636,26 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                     <tr class="<?= $v['es_producto_pagado'] ? 'table-success' : '' ?>">
                                         <td><?= htmlspecialchars($v['producto']) ?></td>
                                         <td><?= htmlspecialchars($v['proveedor']) ?></td>
-                                        <td class="text-center"><?= number_format($v['total_vendido']) ?></td>
-                                        <td class="text-right">$<?= number_format($v['precio_compra'], 2) ?></td>
-                                        <td class="text-right font-weight-bold <?= $v['es_producto_pagado'] ? 'text-success' : 'text-danger' ?>">
+                                        <td><?= number_format($v['total_vendido']) ?></td>
+                                        <td>$<?= number_format($v['precio_compra'], 2) ?></td>
+                                        <td class="font-weight-bold <?= $v['es_producto_pagado'] ? 'text-success' : 'text-danger' ?>">
                                             <?php if ($v['es_producto_pagado']): ?>
-                                                <span class="badge badge-success"><i class="fas fa-check-circle"></i> PAGADO</span>
+                                                <span class="badge-adquisicion badge-pagado">
+                                                    <i class="fas fa-check-circle"></i> PAGADO
+                                                </span>
                                             <?php else: ?>
                                                 $<?= number_format($v['deuda_total'], 2) ?>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="text-center">
+                                        <td>
                                             <?php if ($v['es_producto_pagado']): ?>
-                                                <span class="badge badge-success"><i class="fas fa-check-circle"></i> Pagado</span>
+                                                <span class="badge-adquisicion badge-pagado">
+                                                    <i class="fas fa-check-circle"></i> Pagado
+                                                </span>
                                             <?php else: ?>
-                                                <span class="badge badge-warning"><i class="fas fa-handshake"></i> Concesión</span>
+                                                <span class="badge-adquisicion badge-concesion">
+                                                    <i class="fas fa-handshake"></i> Concesión
+                                                </span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -2064,7 +2073,7 @@ function generarPDFGeneral() {
             <?= $venta['stock_actual'] ?>,
             '$<?= number_format($venta['precio_compra'], 2) ?>',
             '$<?= number_format($venta['precio_venta'], 2) ?>',
-            '<?= $venta['es_producto_especial'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>',
+            '<?= $venta['es_producto_pagado'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>',
             '$<?= number_format($venta['ganancia_total'], 2) ?>'
         ],
         <?php endforeach; ?>
@@ -2121,7 +2130,7 @@ function generarPDFGeneral() {
             <?= $vendido ?>,
             <?= $stockRestante - $vendido ?>,
             '$<?= number_format($producto['precio_venta'], 2) ?>',
-            '<?= $producto['es_producto_especial'] ? "PAGADO" : "" ?>'
+            '<?= $producto['es_producto_pagado'] ? "PAGADO" : "" ?>'
         ],
         <?php endforeach; ?>
     ];
@@ -2461,7 +2470,7 @@ if ($filtroProveedor !== '') {
             <?= $venta['total_vendido'] ?>,
             <?= $venta['stock_actual'] ?>,
             '$<?= number_format($venta['precio_compra'], 2) ?>',
-            '<?= $venta['es_producto_especial'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>'
+            '<?= $venta['es_producto_pagado'] ? "PAGADO" : "$".number_format($venta['deuda_total'], 2) ?>'
         ],
         <?php endforeach; ?>
     ];
@@ -2530,7 +2539,7 @@ if ($filtroProveedor !== '') {
                 <?= $stockInicial ?>,
                 <?= $vendido ?>,
                 <?= $stockActual ?>,
-                '<?= $producto['es_producto_especial'] ? "PAGADO" : "" ?>'
+                '<?= $producto['es_producto_pagado'] ? "PAGADO" : "" ?>'
             ],
             <?php endforeach; ?>
         ];
@@ -2819,54 +2828,74 @@ class TablaDinamica {
         });
     }
     
-    renderizar() {
-        if (this.datos.length === 0) {
-            this.tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="no-data-message"><i class="fas fa-box-open" style="font-size: 4rem; color: #dee2e6;"></i><p class="mt-3 mb-0">No hay datos para mostrar</p></div></td></tr>';
-            if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
-                this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'none';
-            }
-            if (this.paginacionDiv) this.paginacionDiv.style.display = 'none';
-            if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
-                this.infoDesde.closest('.pagination-info').style.display = 'none';
-            }
-            return;
-        }
-        
-        const inicio = (this.paginaActual - 1) * this.itemsPorPagina;
-        const fin = inicio + this.itemsPorPagina;
-        const paginaDatos = this.datos.slice(inicio, fin);
-        const totalPaginas = Math.ceil(this.datos.length / this.itemsPorPagina);
-        
-        this.tbody.innerHTML = '';
-        paginaDatos.forEach(filaData => {
-            const fila = document.createElement('tr');
-            filaData.forEach(celdaData => {
-                const celda = document.createElement('td');
-                if (celdaData.match(/^\$?[\d,]+\.\d{2}$/)) celda.className = 'text-right';
-                else if (celdaData.match(/^\d+$/)) celda.className = 'text-center';
-                celda.innerHTML = celdaData;
-                fila.appendChild(celda);
-            });
-            this.tbody.appendChild(fila);
-        });
-        
-        const desde = this.datos.length > 0 ? inicio + 1 : 0;
-        const hasta = Math.min(fin, this.datos.length);
-        if (this.infoDesde) this.infoDesde.textContent = desde;
-        if (this.infoHasta) this.infoHasta.textContent = hasta;
-        if (this.infoTotal) this.infoTotal.textContent = this.datos.length;
-        
-        this.renderizarPaginacion(totalPaginas);
-        
-        // Mostrar controles si están ocultos
+renderizar() {
+    if (this.datos.length === 0) {
+        this.tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="no-data-message"><i class="fas fa-box-open" style="font-size: 4rem; color: #dee2e6;"></i><p class="mt-3 mb-0">No hay datos para mostrar</p></div></td></tr>';
         if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
-            this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'flex';
+            this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'none';
         }
-        if (this.paginacionDiv) this.paginacionDiv.style.display = 'block';
+        if (this.paginacionDiv) this.paginacionDiv.style.display = 'none';
         if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
-            this.infoDesde.closest('.pagination-info').style.display = 'block';
+            this.infoDesde.closest('.pagination-info').style.display = 'none';
         }
+        return;
     }
+    
+    const inicio = (this.paginaActual - 1) * this.itemsPorPagina;
+    const fin = inicio + this.itemsPorPagina;
+    const paginaDatos = this.datos.slice(inicio, fin);
+    const totalPaginas = Math.ceil(this.datos.length / this.itemsPorPagina);
+    
+    this.tbody.innerHTML = '';
+    paginaDatos.forEach(filaData => {
+        const fila = document.createElement('tr');
+        
+        filaData.forEach((celdaData, index) => {
+            const celda = document.createElement('td');
+            
+            // CENTRAR TODAS LAS CELDAS
+            celda.style.textAlign = 'center';
+            celda.style.verticalAlign = 'middle';
+            
+            // Detectar si es la columna de Adquisición (última columna)
+            const esUltimaColumna = index === filaData.length - 1;
+            
+            if (esUltimaColumna && (celdaData.includes('Pagado') || celdaData.includes('PAGADO'))) {
+                // Solo el badge con color, sin animaciones
+                celda.innerHTML = `<span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+                                    <i class="fas fa-check-circle"></i> Pagado
+                                </span>`;
+            } 
+            else if (esUltimaColumna && (celdaData.includes('Concesión') || celdaData.includes('concesion'))) {
+                celda.innerHTML = `<span style="background: #f59e0b; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+                                    <i class="fas fa-handshake"></i> Concesión
+                                </span>`;
+            }
+            else {
+                celda.innerHTML = celdaData;
+            }
+            
+            fila.appendChild(celda);
+        });
+        this.tbody.appendChild(fila);
+    });
+    
+    const desde = this.datos.length > 0 ? inicio + 1 : 0;
+    const hasta = Math.min(fin, this.datos.length);
+    if (this.infoDesde) this.infoDesde.textContent = desde;
+    if (this.infoHasta) this.infoHasta.textContent = hasta;
+    if (this.infoTotal) this.infoTotal.textContent = this.datos.length;
+    
+    this.renderizarPaginacion(totalPaginas);
+    
+    if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
+        this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'flex';
+    }
+    if (this.paginacionDiv) this.paginacionDiv.style.display = 'block';
+    if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
+        this.infoDesde.closest('.pagination-info').style.display = 'block';
+    }
+}
     
     renderizarPaginacion(totalPaginas) {
         if (!this.paginacionDiv) return;
@@ -3109,4 +3138,53 @@ window.addEventListener('load', function() {
         }
     }, 500);
 });
+
+// Forzar centrado de TODOS los encabezados y celdas
+function centrarTablas() {
+    // Para tabla de productos
+    var thsProductos = document.querySelectorAll('#tablaProductos th');
+    var tdsProductos = document.querySelectorAll('#tablaProductos td');
+    
+    // Para tabla de deuda
+    var thsDeuda = document.querySelectorAll('#tablaDeuda th');
+    var tdsDeuda = document.querySelectorAll('#tablaDeuda td');
+    
+    // Centrar encabezados productos
+    thsProductos.forEach(function(th) {
+        th.style.textAlign = 'center';
+        th.style.verticalAlign = 'middle';
+    });
+    
+    // Centrar celdas productos
+    tdsProductos.forEach(function(td) {
+        td.style.textAlign = 'center';
+        td.style.verticalAlign = 'middle';
+    });
+    
+    // Centrar encabezados deuda
+    thsDeuda.forEach(function(th) {
+        th.style.textAlign = 'center';
+        th.style.verticalAlign = 'middle';
+    });
+    
+    // Centrar celdas deuda
+    tdsDeuda.forEach(function(td) {
+        td.style.textAlign = 'center';
+        td.style.verticalAlign = 'middle';
+    });
+}
+
+// Ejecutar al cargar
+centrarTablas();
+
+// También ejecutar después de cada cambio en las tablas (por si la paginación las recarga)
+var observer = new MutationObserver(function() {
+    centrarTablas();
+});
+
+// Observar cambios en las tablas
+var tablaProductos = document.getElementById('tablaProductos');
+var tablaDeuda = document.getElementById('tablaDeuda');
+if (tablaProductos) observer.observe(tablaProductos, { childList: true, subtree: true });
+if (tablaDeuda) observer.observe(tablaDeuda, { childList: true, subtree: true });
 </script>

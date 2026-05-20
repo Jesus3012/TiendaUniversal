@@ -1,4 +1,5 @@
 <?php
+error_reporting(E_ALL & ~E_DEPRECATED);
 ob_start();
 session_start();
 require_once 'includes/csrf.php';
@@ -330,28 +331,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
         $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado';
 
-        // Actualizar producto
-        if ($imagen_path) {
-            $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
-            $stmt->bind_param("ssssissddssi", 
-                $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
-                $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
-            );
-        } else {
-            $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
-            $stmt->bind_param("sssssiddssi", 
-                $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
-                $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
-            );
-        }
+       // Actualizar producto
+
+$stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
+
+// Valor por defecto para tipo_codigo si está vacío
+if ($tipo_inventario === 'producto' && empty($tipo_codigo)) {
+    $tipo_codigo = 'multiple';
+}
+
+if ($imagen_path) {
+    $stmt->bind_param("ssssissddssi", 
+        $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
+        $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
+    );
+} else {
+    // Usar el mismo bind_param, pero con $imagen_path (que puede ser null o cadena vacía)
+    $imagen_actual = $imagen_path ?? '';
+    $stmt->bind_param("ssssissddssi", 
+        $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
+        $imagen_actual, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
+    );
+}
+
 
         if ($stmt->execute()) {
-            if ($tipo_inventario === 'producto') {
-                $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
-                $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
-                if (file_exists($old_pdf)) @unlink($old_pdf);
-                generarCodigosBarras($conn, $nombre, $id, $cantidad_actual, $tipo_codigo, $tipo_inventario);
-            }
+if ($tipo_inventario === 'producto') {
+    $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
+    $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
+    if (file_exists($old_pdf)) @unlink($old_pdf);
+    
+    // Obtener la cantidad NUEVA después de la actualización
+    $stmt_cantidad = $conn->prepare("SELECT cantidad FROM productos WHERE id = ?");
+    $stmt_cantidad->bind_param("i", $id);
+    $stmt_cantidad->execute();
+    $result_cantidad = $stmt_cantidad->get_result();
+    $nueva_cantidad = $result_cantidad->fetch_assoc()['cantidad'];
+    
+    generarCodigosBarras($conn, $nombre, $id, $nueva_cantidad, $tipo_codigo, $tipo_inventario);
+}
             
             echo "<script>
             Swal.fire({
@@ -1252,12 +1270,12 @@ if (!empty($errors)) {
                                     </div>
 
                                     <div class="form-group mb-2" id="edit_tipo_codigo_group">
-                                        <label style="font-size: 0.75rem; font-weight: 600;">Tipo de código</label>
-                                        <select id="edit_tipo_codigo" name="tipo_codigo" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;">
-                                            <option value="unico" selected>Código único (un código para todo el producto)</option>
-                                            <option value="multiple">Múltiple (un código por unidad)</option>
-                                        </select>
-                                    </div>
+    <label style="font-size: 0.75rem; font-weight: 600;">Tipo de código</label>
+    <select id="edit_tipo_codigo" name="tipo_codigo" class="form-control form-control-sm">
+        <option value="unico">Código único (un código para todo el producto)</option>
+        <option value="multiple">Múltiple (un código por unidad)</option>
+    </select>
+</div>
 
                                     <div class="form-group" id="edit_adquisicion_group">
                                         <label style="font-size: 0.75rem; font-weight: 600;">Adquisición</label>
