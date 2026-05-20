@@ -29,14 +29,13 @@ function obtenerCategorias($conn) {
 }
 
 function obtenerProveedores($conn) {
-    $result = $conn->query("SELECT DISTINCT proveedor FROM productos WHERE activo = 1 AND proveedor IS NOT NULL AND proveedor != '' ORDER BY proveedor");
+    $result = $conn->query("SELECT id, nombre FROM proveedores WHERE activo = 1 ORDER BY nombre");
     $proveedores = [];
     while ($row = $result->fetch_assoc()) {
-        $proveedores[] = $row['proveedor'];
+        $proveedores[] = ['id' => $row['id'], 'nombre' => $row['nombre']];
     }
     return $proveedores;
 }
-
 // ========================= AGREGAR STOCK =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_stock') {
     csrf_check();
@@ -203,107 +202,178 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
     $id = intval($_POST['id']);
     $nombre = trim($_POST['nombre']);
-    $categoria = trim($_POST['categoria']);
-    $proveedor = trim($_POST['proveedor']);
-    $precio_compra = floatval($_POST['precio_compra']);
-    $precio_venta = floatval($_POST['precio_venta']);
-    $tipo_codigo = $_POST['tipo_codigo'] ?? 'multiple';
-    $tipo_inventario = $_POST['tipo_inventario'] ?? 'producto';
     
-    $atributos = [];
-    $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
-    foreach ($campos_atributos as $campo) {
-        if (!empty($_POST[$campo])) {
-            $atributos[$campo] = $_POST[$campo];
-        }
-    }
-    $atributos_json = !empty($atributos) ? json_encode($atributos, JSON_UNESCAPED_UNICODE) : null;
-
-    $stmt = $conn->prepare("SELECT imagen, cantidad FROM productos WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $producto_actual = $result->fetch_assoc();
-    $imagen_path = $producto_actual['imagen'];
-    $cantidad_actual = $producto_actual['cantidad'];
-
-    if (!empty($_FILES['imagen']['name'])) {
-        $upload_dir = __DIR__.'/uploads/productos/';
-        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-
-        $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-        
-        $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
-        $nombre_limpio = preg_replace('/[\s]+/', '_', $nombre_limpio);
-        $nombre_limpio = trim($nombre_limpio, '_');
-        
-        if (empty($nombre_limpio)) {
-            $nombre_limpio = 'producto';
-        }
-        
-        $nombre_base = $nombre_limpio;
-        $imagen_name = $nombre_base . '.' . $extension;
-        $contador = 1;
-        
-        while (file_exists($upload_dir . $imagen_name)) {
-            $imagen_name = $nombre_base . '_' . $contador . '.' . $extension;
-            $contador++;
-        }
-        
-        $nueva_imagen = 'uploads/productos/' . $imagen_name;
-        
-        if (move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
-            if ($imagen_path && file_exists($imagen_path)) {
-                unlink($imagen_path);
-            }
-            $imagen_path = $nueva_imagen;
-        }
-    }
-
-    $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado'; // Agregar esta línea al inicio de la sección
-
-    if ($imagen_path) {
-        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
-        $stmt->bind_param("sssssiddssi", $nombre, $categoria, $atributos_json, $proveedor, $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id);
-    } else {
-        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
-        $stmt->bind_param("ssssiddssi", $nombre, $categoria, $atributos_json, $proveedor, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id);
-    }
-
-    if ($stmt->execute()) {
-        if ($tipo_inventario === 'producto') {
-            $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
-            $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
-            if (file_exists($old_pdf)) @unlink($old_pdf);
-            
-            generarCodigosBarras($conn, $nombre, $id, $cantidad_actual, $tipo_codigo, $tipo_inventario);
+    // ===== CATEGORÍA: Verificar si es nueva =====
+    $categoria = trim($_POST['categoria']);
+    
+    // Si el select envió '__NUEVA__', tomar del campo categoria_nueva
+    if ($categoria === '__NUEVA__') {
+        if (isset($_POST['categoria_nueva']) && !empty($_POST['categoria_nueva'])) {
+            $categoria = trim($_POST['categoria_nueva']);
         } else {
-            $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
-            $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
-            if (file_exists($old_pdf)) @unlink($old_pdf);
+            $errors[] = "Debe escribir el nombre de la nueva categoría.";
         }
+    }
+    
+    // Validar categoría
+    if (empty($categoria)) {
+        $errors[] = "La categoría es requerida.";
+    }
+    
+    // ===== PROVEEDOR =====
+    $proveedor_id = null;
+    $proveedor_nombre = null;
+    
+    // Si es un proveedor existente (viene como ID numérico)
+    if (isset($_POST['proveedor']) && !empty($_POST['proveedor']) && is_numeric($_POST['proveedor'])) {
+        $proveedor_id = intval($_POST['proveedor']);
+        $stmt = $conn->prepare("SELECT nombre FROM proveedores WHERE id = ? AND activo = 1");
+        $stmt->bind_param("i", $proveedor_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $proveedor_nombre = $row['nombre'];
+        }
+    } 
+    // Si es un nuevo proveedor
+    elseif (isset($_POST['proveedor_nuevo']) && !empty($_POST['proveedor_nuevo'])) {
+        $nuevo_nombre = trim($_POST['proveedor_nuevo']);
         
-        echo "<script>
-        Swal.fire({
-            icon: 'success',
-            title: 'Producto actualizado',
-            text: 'Los cambios se guardaron correctamente.',
-            confirmButtonColor: '#f97316'
-        }).then(() => {
-            window.location='ajustes_productos.php';
-        });
-        </script>";
-        exit;
-    }else {
+        // Verificar si ya existe
+        $stmt = $conn->prepare("SELECT id, nombre FROM proveedores WHERE nombre = ?");
+        $stmt->bind_param("s", $nuevo_nombre);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($row = $result->fetch_assoc()) {
+            $proveedor_id = $row['id'];
+            $proveedor_nombre = $row['nombre'];
+        } else {
+            // Insertar nuevo proveedor
+            $stmt = $conn->prepare("INSERT INTO proveedores (nombre, activo) VALUES (?, 1)");
+            $stmt->bind_param("s", $nuevo_nombre);
+            if ($stmt->execute()) {
+                $proveedor_id = $conn->insert_id;
+                $proveedor_nombre = $nuevo_nombre;
+            }
+        }
+    }
+    
+    // Si hay errores, mostrarlos
+    if (!empty($errors)) {
         echo "<script>
         Swal.fire({
             icon: 'error',
-            title: 'Error al actualizar',
-            text: 'No se pudo actualizar el producto. Intenta nuevamente.',
-            confirmButtonText: 'Aceptar',
+            title: 'Error de validación',
+            html: '" . implode('<br>', $errors) . "',
             confirmButtonColor: '#f97316'
         });
         </script>";
+    } else {
+        // Resto del código de actualización...
+        $precio_compra = floatval($_POST['precio_compra']);
+        $precio_venta = floatval($_POST['precio_venta']);
+        $tipo_codigo = $_POST['tipo_codigo'] ?? 'multiple';
+        $tipo_inventario = $_POST['tipo_inventario'] ?? 'producto';
+        
+        $atributos = [];
+        $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
+        foreach ($campos_atributos as $campo) {
+            if (!empty($_POST[$campo])) {
+                $atributos[$campo] = $_POST[$campo];
+            }
+        }
+        $atributos_json = !empty($atributos) ? json_encode($atributos, JSON_UNESCAPED_UNICODE) : null;
+
+        // Obtener imagen actual
+        $stmt = $conn->prepare("SELECT imagen, cantidad FROM productos WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $producto_actual = $result->fetch_assoc();
+        $imagen_path = $producto_actual['imagen'];
+        $cantidad_actual = $producto_actual['cantidad'];
+
+        // Procesar nueva imagen
+        if (!empty($_FILES['imagen']['name'])) {
+            $upload_dir = __DIR__.'/uploads/productos/';
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+
+            $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
+            
+            $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
+            $nombre_limpio = preg_replace('/[\s]+/', '_', $nombre_limpio);
+            $nombre_limpio = trim($nombre_limpio, '_');
+            
+            if (empty($nombre_limpio)) {
+                $nombre_limpio = 'producto';
+            }
+            
+            $nombre_base = $nombre_limpio;
+            $imagen_name = $nombre_base . '.' . $extension;
+            $contador = 1;
+            
+            while (file_exists($upload_dir . $imagen_name)) {
+                $imagen_name = $nombre_base . '_' . $contador . '.' . $extension;
+                $contador++;
+            }
+            
+            $nueva_imagen = 'uploads/productos/' . $imagen_name;
+            
+            if (move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
+                if ($imagen_path && file_exists($imagen_path)) {
+                    unlink($imagen_path);
+                }
+                $imagen_path = $nueva_imagen;
+            }
+        }
+
+        $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado';
+
+        // Actualizar producto
+        if ($imagen_path) {
+            $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
+            $stmt->bind_param("ssssissddssi", 
+                $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
+                $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
+            );
+        } else {
+            $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
+            $stmt->bind_param("sssssiddssi", 
+                $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
+                $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
+            );
+        }
+
+        if ($stmt->execute()) {
+            if ($tipo_inventario === 'producto') {
+                $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
+                $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
+                if (file_exists($old_pdf)) @unlink($old_pdf);
+                generarCodigosBarras($conn, $nombre, $id, $cantidad_actual, $tipo_codigo, $tipo_inventario);
+            }
+            
+            echo "<script>
+            Swal.fire({
+                icon: 'success',
+                title: 'Producto actualizado',
+                text: 'Los cambios se guardaron correctamente.',
+                confirmButtonColor: '#f97316'
+            }).then(() => {
+                window.location='ajustes_productos.php';
+            });
+            </script>";
+            exit;
+        } else {
+            echo "<script>
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al actualizar',
+                text: 'Error: " . addslashes($stmt->error) . "',
+                confirmButtonColor: '#f97316'
+            });
+            </script>";
+        }
     }
 }
 
@@ -1112,7 +1182,7 @@ if (!empty($errors)) {
 
                                     <div class="form-group mb-2">
                                         <label style="font-size: 0.75rem; font-weight: 600;">Categoría *</label>
-                                        <select id="edit_categoria" name="categoria" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" required>
+                                        <select id="edit_categoria" name="categoria" class="form-control form-control-sm" required>
                                             <option value="">Seleccionar categoría</option>
                                             <?php foreach ($categorias as $cat): ?>
                                                 <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
@@ -1127,17 +1197,21 @@ if (!empty($errors)) {
                                         <select id="edit_proveedor" name="proveedor" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;">
                                             <option value="">Seleccionar proveedor</option>
                                             <?php foreach ($proveedores as $prov): ?>
-                                                <option value="<?= htmlspecialchars($prov) ?>"><?= htmlspecialchars($prov) ?></option>
+                                                <option value="<?= $prov['id'] ?>"><?= htmlspecialchars($prov['nombre']) ?></option>
                                             <?php endforeach; ?>
                                             <option value="__NUEVO__">+ Crear nuevo proveedor</option>
                                         </select>
-                                        <input type="text" id="edit_proveedor_nuevo" class="form-control form-control-sm mt-1" style="border-radius: 8px; font-size: 0.85rem; display: none;" placeholder="Nuevo proveedor">
+                                        <input type="text" id="edit_proveedor_nuevo" name="proveedor_nuevo" class="form-control form-control-sm mt-1" style="border-radius: 8px; font-size: 0.85rem; display: none;" placeholder="Nuevo proveedor">
                                     </div>
 
                                     <div class="form-group">
-                                        <label style="font-size: 0.75rem; font-weight: 600;">Imagen</label>
-                                        <input type="file" name="imagen" class="form-control-file form-control-sm" style="font-size: 0.8rem; padding: 4px;" accept="image/*">
-                                        <small class="text-muted" style="font-size: 0.7rem;">Dejar en blanco para mantener actual</small>
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Imagen actual</label>
+                                        <div id="imagen_preview_container" style="text-align: center; margin-bottom: 10px;">
+                                            <img id="imagen_preview" src="" alt="Vista previa" style="max-width: 100%; max-height: 150px; border-radius: 8px; display: none; object-fit: cover; border: 1px solid #e2e8f0; padding: 5px;">
+                                        </div>
+                                        <label style="font-size: 0.75rem; font-weight: 600;">Cambiar imagen</label>
+                                        <input type="file" name="imagen" id="edit_imagen" class="form-control-file form-control-sm" style="font-size: 0.8rem; padding: 4px;" accept="image/*">
+                                        <small class="text-muted" style="font-size: 0.7rem;">Dejar en blanco para mantener actual. Tamaño recomendado: 500x500px</small>
                                     </div>
                                 </div>
                             </div>
@@ -1180,8 +1254,8 @@ if (!empty($errors)) {
                                     <div class="form-group mb-2" id="edit_tipo_codigo_group">
                                         <label style="font-size: 0.75rem; font-weight: 600;">Tipo de código</label>
                                         <select id="edit_tipo_codigo" name="tipo_codigo" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;">
-                                            <option value="unico">Código único</option>
-                                            <option value="multiple">Múltiple (uno por unidad)</option>
+                                            <option value="unico" selected>Código único (un código para todo el producto)</option>
+                                            <option value="multiple">Múltiple (un código por unidad)</option>
                                         </select>
                                     </div>
 
@@ -1416,64 +1490,78 @@ function calcularDiferencia(actual, nueva) {
     else span.innerHTML = `Diferencia: 0 (sin cambios)`;
 }
 
-// Manejo de selects dinámicos para categoría y proveedor
+// Manejo de selects dinámicos
 document.addEventListener('DOMContentLoaded', function() {
-    // Configurar eventos para los selects dinámicos
     const categoriaSelect = document.getElementById('edit_categoria');
     const categoriaNueva = document.getElementById('edit_categoria_nueva');
     const proveedorSelect = document.getElementById('edit_proveedor');
     const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
 
+    // Categoría - NO deshabilitar el select
     if (categoriaSelect && categoriaNueva) {
         categoriaSelect.addEventListener('change', function() {
             if (this.value === '__NUEVA__') {
                 categoriaNueva.style.display = 'block';
-                categoriaNueva.required = true;
                 categoriaNueva.focus();
-                this.disabled = true;
+                // IMPORTANTE: NO deshabilitar el select
+                // this.disabled = true;  <--- ELIMINAR ESTA LÍNEA
             } else {
                 categoriaNueva.style.display = 'none';
                 categoriaNueva.value = '';
-                categoriaNueva.required = false;
-                this.disabled = false;
+                // this.disabled = false; <--- ELIMINAR ESTA LÍNEA
             }
         });
     }
 
+    // Proveedor
     if (proveedorSelect && proveedorNuevo) {
         proveedorSelect.addEventListener('change', function() {
             if (this.value === '__NUEVO__') {
                 proveedorNuevo.style.display = 'block';
                 proveedorNuevo.focus();
-                this.disabled = true;
+                this.value = ''; // Limpiar para no enviar '__NUEVO__'
             } else {
                 proveedorNuevo.style.display = 'none';
                 proveedorNuevo.value = '';
-                this.disabled = false;
             }
         });
     }
 
-    // Capturar valores antes de enviar el formulario
+    // Submit del formulario
     const formEditar = document.getElementById('formEditarProducto');
     if (formEditar) {
         formEditar.addEventListener('submit', function() {
-            // Procesar categoría
-            if (categoriaSelect.value === '__NUEVA__' && categoriaNueva.value.trim() !== '') {
-                document.getElementById('edit_categoria_nueva_input').value = categoriaNueva.value.trim();
-                categoriaSelect.value = categoriaNueva.value.trim();
+            const categoriaSelect = document.getElementById('edit_categoria');
+            const categoriaNueva = document.getElementById('edit_categoria_nueva');
+            const categoriaHidden = document.getElementById('edit_categoria_nueva_input');
+            
+            // Si hay nueva categoría, guardarla en el hidden input
+            if (categoriaSelect.value === '__NUEVA__') {
+                if (categoriaNueva.value.trim() !== '') {
+                    categoriaHidden.value = categoriaNueva.value.trim();
+                    console.log('Nueva categoría guardada:', categoriaHidden.value);
+                }
+            } else {
+                categoriaHidden.value = '';
             }
             
-            // Procesar proveedor
-            if (proveedorSelect.value === '__NUEVO__' && proveedorNuevo.value.trim() !== '') {
-                document.getElementById('edit_proveedor_nuevo_input').value = proveedorNuevo.value.trim();
-                proveedorSelect.value = proveedorNuevo.value.trim();
+            // Proveedor
+            const proveedorSelect = document.getElementById('edit_proveedor');
+            const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
+            const proveedorHidden = document.getElementById('edit_proveedor_nuevo_input');
+            
+            if (proveedorSelect.value === '__NUEVO__') {
+                if (proveedorNuevo.value.trim() !== '') {
+                    proveedorHidden.value = proveedorNuevo.value.trim();
+                    proveedorSelect.value = '';
+                }
+            } else {
+                proveedorHidden.value = '';
             }
         });
     }
 });
 
-// Función editarProducto actualizada
 function editarProducto(id) {
     fetch(`get_producto.php?id=${id}`)
         .then(response => response.json())
@@ -1481,12 +1569,14 @@ function editarProducto(id) {
             if (data.success) {
                 const p = data.producto;
                 
-                // Resetear campos
                 const categoriaSelect = document.getElementById('edit_categoria');
                 const categoriaNueva = document.getElementById('edit_categoria_nueva');
                 const proveedorSelect = document.getElementById('edit_proveedor');
                 const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
+                const preview = document.getElementById('imagen_preview');
+                const inputImagen = document.getElementById('edit_imagen');
                 
+                // Resetear campos
                 categoriaSelect.disabled = false;
                 categoriaNueva.style.display = 'none';
                 categoriaNueva.value = '';
@@ -1494,42 +1584,81 @@ function editarProducto(id) {
                 proveedorNuevo.style.display = 'none';
                 proveedorNuevo.value = '';
                 
-                // Llenar datos básicos
+                // Limpiar input de imagen
+                if (inputImagen) inputImagen.value = '';
+                
+                // Datos básicos
                 document.getElementById('edit_id').value = p.id;
                 document.getElementById('edit_nombre').value = p.nombre;
                 document.getElementById('edit_precio_compra').value = p.precio_compra;
                 document.getElementById('edit_precio_venta').value = p.precio_venta;
-                document.getElementById('edit_tipo_codigo').value = p.tipo_codigo;
+                document.getElementById('edit_tipo_codigo').value = p.tipo_codigo || 'unico';
                 document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;
                 
-                // Stock
                 const stockText = p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz';
                 document.getElementById('edit_cantidad_actual').textContent = stockText;
                 
-                // Cargar categoría
-                const categoriaExiste = Array.from(categoriaSelect.options).some(opt => opt.value === p.categoria);
-                if (categoriaExiste && p.categoria) {
-                    categoriaSelect.value = p.categoria;
-                } else if (p.categoria) {
-                    categoriaSelect.value = '__NUEVA__';
-                    categoriaNueva.value = p.categoria;
-                    categoriaNueva.style.display = 'block';
-                    categoriaSelect.disabled = true;
+                // ===== CARGAR IMAGEN ACTUAL =====
+                if (p.imagen && p.imagen_exists) {
+                    preview.src = p.imagen;
+                    preview.style.display = 'block';
+                } else {
+                    preview.style.display = 'none';
+                    preview.src = '';
+                }
+                
+                // ===== CARGAR CATEGORÍA =====
+                if (p.categoria && p.categoria.trim() !== '') {
+                    let existe = false;
+                    for (let i = 0; i < categoriaSelect.options.length; i++) {
+                        if (categoriaSelect.options[i].value === p.categoria) {
+                            existe = true;
+                            break;
+                        }
+                    }
+                    
+                    if (existe) {
+                        categoriaSelect.value = p.categoria;
+                    } else {
+                        categoriaSelect.value = '__NUEVA__';
+                        categoriaNueva.value = p.categoria;
+                        categoriaNueva.style.display = 'block';
+                    }
                 } else {
                     categoriaSelect.value = '';
                 }
                 
-                // Cargar proveedor
-                const proveedorExiste = Array.from(proveedorSelect.options).some(opt => opt.value === p.proveedor);
-                if (proveedorExiste && p.proveedor) {
-                    proveedorSelect.value = p.proveedor;
+                // ===== CARGAR PROVEEDOR =====
+                if (p.proveedor_id && p.proveedor_id > 0) {
+                    let existe = false;
+                    for (let i = 0; i < proveedorSelect.options.length; i++) {
+                        if (proveedorSelect.options[i].value == p.proveedor_id) {
+                            existe = true;
+                            break;
+                        }
+                    }
+                    if (existe) {
+                        proveedorSelect.value = p.proveedor_id;
+                    } else if (p.proveedor) {
+                        proveedorNuevo.value = p.proveedor;
+                        proveedorNuevo.style.display = 'block';
+                    }
                 } else if (p.proveedor) {
-                    proveedorSelect.value = '__NUEVO__';
                     proveedorNuevo.value = p.proveedor;
                     proveedorNuevo.style.display = 'block';
-                    proveedorSelect.disabled = true;
+                }
+                
+                // ===== ATRIBUTOS =====
+                if (p.atributos_array) {
+                    document.getElementById('edit_marca').value = p.atributos_array.marca || '';
+                    document.getElementById('edit_color').value = p.atributos_array.color || '';
+                    document.getElementById('edit_talla').value = p.atributos_array.talla || '';
+                    document.getElementById('edit_material').value = p.atributos_array.material || '';
                 } else {
-                    proveedorSelect.value = '';
+                    document.getElementById('edit_marca').value = '';
+                    document.getElementById('edit_color').value = '';
+                    document.getElementById('edit_talla').value = '';
+                    document.getElementById('edit_material').value = '';
                 }
                 
                 // Adquisición
@@ -1541,10 +1670,15 @@ function editarProducto(id) {
                 
                 // Mostrar/ocultar según tipo
                 const isProducto = p.tipo_inventario === 'producto';
-                document.getElementById('edit_precio_venta_group').style.display = isProducto ? '' : 'none';
-                document.getElementById('edit_tipo_codigo_group').style.display = isProducto ? '' : 'none';
-                document.getElementById('edit_atributos_section').style.display = isProducto ? '' : 'none';
-                document.getElementById('edit_adquisicion_group').style.display = isProducto ? '' : 'none';
+                const ventaGroup = document.getElementById('edit_precio_venta_group');
+                const codigoGroup = document.getElementById('edit_tipo_codigo_group');
+                const atributosSection = document.getElementById('edit_atributos_section');
+                const adquisicionGroup = document.getElementById('edit_adquisicion_group');
+                
+                if (ventaGroup) ventaGroup.style.display = isProducto ? 'block' : 'none';
+                if (codigoGroup) codigoGroup.style.display = isProducto ? 'block' : 'none';
+                if (atributosSection) atributosSection.style.display = isProducto ? 'block' : 'none';
+                if (adquisicionGroup) adquisicionGroup.style.display = isProducto ? 'block' : 'none';
                 
                 // Abrir modal
                 $('#modalEditar').modal('show');
@@ -1610,7 +1744,47 @@ document.addEventListener('DOMContentLoaded', function() {
         aplicarFiltros();
         buscadorInput.focus();
     });
+    initImagePreview();
 });
+
+// Previsualización de imagen
+function initImagePreview() {
+    const inputImagen = document.getElementById('edit_imagen');
+    const preview = document.getElementById('imagen_preview');
+    
+    if (inputImagen) {
+        inputImagen.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.src = event.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // Si se cancela, mostrar la imagen actual si existe
+                const productoId = document.getElementById('edit_id').value;
+                if (productoId) {
+                    fetch(`get_producto.php?id=${productoId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success && data.producto.imagen && data.producto.imagen_exists) {
+                                preview.src = data.producto.imagen;
+                                preview.style.display = 'block';
+                            } else {
+                                preview.style.display = 'none';
+                            }
+                        })
+                        .catch(() => preview.style.display = 'none');
+                } else {
+                    preview.style.display = 'none';
+                }
+            }
+        });
+    }
+}
+
 </script>
 
 <?php

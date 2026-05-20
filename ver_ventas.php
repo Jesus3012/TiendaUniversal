@@ -3,11 +3,6 @@ include 'includes/db.php';
 include('includes/header.php');
 include('includes/navbar.php');
 
-// ======================= PRODUCTO ESPECIAL (PAGADO) =======================
-// Este producto NO debe aparecer en la deuda con proveedores
-define('PRODUCTO_ESPECIAL_NOMBRE', 'libretas');
-define('PROVEEDOR_ESPECIAL', 'Nevaris 3D');
-
 // --- Filtros (proveedor y fechas) ---
 $filtroProveedor = $_GET['proveedor'] ?? '';
 $filtroInicio = $_GET['fecha_inicio'] ?? '';
@@ -27,30 +22,27 @@ SELECT
     p.cantidad AS stock_actual,
     p.precio_compra,
     p.precio_venta,
+    p.tipo_adquisicion,
     SUM(v.cantidad_vendida) AS total_vendido,
     COUNT(v.id) AS numero_ventas,
     
-    -- Deuda: es 0 para el producto especial, precio_compra * vendidos para los demás
+    -- Deuda: es 0 si el producto es PAGADO, de lo contrario precio_compra * vendidos
     CASE 
-        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
-             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
-        THEN 0
+        WHEN p.tipo_adquisicion = 'pagado' THEN 0
         ELSE (p.precio_compra * SUM(v.cantidad_vendida))
     END AS deuda_total,
     
-    -- Venta total (siempre se calcula normal, independientemente del producto)
+    -- Venta total (siempre se calcula normal)
     (p.precio_venta * SUM(v.cantidad_vendida)) AS venta_total,
     
     -- Ganancia total (venta - compra, normal para todos)
     ((p.precio_venta - p.precio_compra) * SUM(v.cantidad_vendida)) AS ganancia_total,
     
-    -- Indicador de producto especial (para mostrarlo en la tabla)
+    -- Indicador de producto pagado
     CASE 
-        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
-             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
-        THEN 1
+        WHEN p.tipo_adquisicion = 'pagado' THEN 1
         ELSE 0
-    END AS es_producto_especial
+    END AS es_producto_pagado
     
 FROM ventas v
 INNER JOIN productos p ON v.id_producto = p.id
@@ -84,8 +76,8 @@ if ($resultadoVentasAgrupadas) {
         $ventasAgrupadas[] = $row;
         $prov = $row['proveedor'];
         
-        // Solo acumular deuda si NO es el producto especial
-        if (!$row['es_producto_especial']) {
+        // Solo acumular deuda si NO es producto pagado
+        if (!$row['es_producto_pagado']) {
             // Acumular deuda por proveedor
             if (!isset($deudaPorProveedor[$prov])) {
                 $deudaPorProveedor[$prov] = 0;
@@ -95,7 +87,7 @@ if ($resultadoVentasAgrupadas) {
             // Acumular deuda total global
             $totalesGlobales['total_deuda'] += $row['deuda_total'];
         }
-        
+
         // Las ventas y ganancias siempre se acumulan (para todos los productos)
         $totalesGlobales['total_ventas'] += $row['venta_total'];
         $totalesGlobales['total_ganancia'] += $row['ganancia_total'];
@@ -110,12 +102,11 @@ SELECT
     cantidad AS stock_actual,
     precio_compra,
     precio_venta,
+    tipo_adquisicion,
     CASE 
-        WHEN LOWER(nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
-             AND LOWER(proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
-        THEN 1
+        WHEN tipo_adquisicion = 'pagado' THEN 1
         ELSE 0
-    END AS es_producto_especial
+    END AS es_producto_pagado
 FROM productos
 WHERE activo = 1 
 AND tipo_inventario = 'producto'  /* EXCLUIR INSUMOS */
@@ -148,12 +139,11 @@ SELECT
     p.precio_compra,
     p.precio_venta,
     p.cantidad,
+    p.tipo_adquisicion,
     CASE 
-        WHEN LOWER(p.nombre) LIKE LOWER('%".PRODUCTO_ESPECIAL_NOMBRE."%') 
-             AND LOWER(p.proveedor) LIKE LOWER('%".PROVEEDOR_ESPECIAL."%') 
-        THEN 1
+        WHEN p.tipo_adquisicion = 'pagado' THEN 1
         ELSE 0
-    END AS es_producto_especial,
+    END AS es_producto_pagado,
     IFNULL((
         SELECT SUM(v.cantidad_vendida)
         FROM ventas v
@@ -168,7 +158,7 @@ if ($filtroInicio !== '' && $filtroFin !== '') {
 $sql .= "
     ), 0) AS total_vendida
 FROM productos p
-WHERE 1
+WHERE p.tipo_inventario = 'producto'
 ";
 
 if ($filtroProveedor !== '') {
@@ -190,8 +180,8 @@ if ($resultado && $resultado->num_rows > 0) {
 
         $ganancia = ($row['precio_venta'] - $row['precio_compra']) * $vendidos;
         
-        // Para la deuda, si es producto especial, la deuda es 0
-        if ($row['es_producto_especial']) {
+        // Para la deuda, si es producto pagado, la deuda es 0
+        if ($row['es_producto_pagado']) {
             $costoProveedor = 0;
         } else {
             $costoProveedor = $row['precio_compra'] * $vendidos;
@@ -213,7 +203,7 @@ if ($resultado && $resultado->num_rows > 0) {
             'precio_compra' => $row['precio_compra'],
             'precio_venta' => $row['precio_venta'],
             'ganancia' => $ganancia,
-            'es_especial' => $row['es_producto_especial']
+            'es_pagado' => $row['es_producto_pagado']
         ];
     }
 } else {
@@ -256,7 +246,7 @@ foreach ($todosProductos as $producto) {
 // Verificar si hay producto especial para mostrar mensajes
 $hayProductoEspecial = false;
 foreach ($ventasAgrupadas as $v) {
-    if ($v['es_producto_especial']) {
+    if ($v['es_producto_pagado']) {
         $hayProductoEspecial = true;
         break;
     }
@@ -489,14 +479,19 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
             
             <!-- TABLA PRODUCTOS CON PAGINACIÓN Y ORDENAMIENTO -->
             <div class="card card-outline card-warning shadow-sm mt-4">
-                <div class="card-header">
-                    <h3 class="card-title font-weight-bold">
+                <div class="card-header d-flex flex-column flex-md-row align-items-md-center">
+                    <h3 class="card-title font-weight-bold mb-2 mb-md-0">
                         <i class="fas fa-boxes mr-2"></i>Productos y Ventas
                     </h3>
-                    <div class="card-tools">
-                        <span class="badge badge-warning p-2">
+                    <div class="ml-md-auto">
+                        <span class="badge badge-warning p-2 mr-2">
                             Total ganancias: $<?= number_format(array_sum(array_column($productos, 'ganancia')), 2) ?>
                         </span>
+                        <?php if ($hayProductoEspecial): ?>
+                        <span class="badge badge-success p-2">
+                            <i class="fas fa-check-circle"></i> Incluye productos pagados
+                        </span>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="card-body table-responsive p-0">
@@ -510,32 +505,34 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                 <th class="sortable text-right" data-column="4">Compra</th>
                                 <th class="sortable text-right" data-column="5">Venta</th>
                                 <th class="sortable text-right" data-column="6">Ganancia</th>
+                                <th class="text-center">Adquisición</th>
                             </tr>
                         </thead>
                         <tbody id="tablaProductosBody">
-                            <?php if (!$hayDatosTablaProductos): ?>
-                                <tr>
-                                    <td colspan="7" class="text-center py-5">
-                                        <div class="no-data-message" style="margin: 0;">
-                                            <i class="fas fa-chart-line" style="font-size: 4rem; color: #dee2e6;"></i>
-                                            <p class="mt-3 mb-0">No hay productos con ventas en el período seleccionado</p>
-                                            <small class="text-muted">Prueba con otro proveedor o rango de fechas</small>
-                                        </div>
-                                    </td>
-                                </tr>
+                            <?php if (empty($productos)): ?>
+                            <tr>
+                                <td colspan="8" class="text-center py-5">
+                                    <div class="no-data-message" style="margin: 0;">
+                                        <i class="fas fa-chart-line" style="font-size: 4rem; color: #dee2e6;"></i>
+                                        <p class="mt-3 mb-0">No hay productos con ventas en el período seleccionado</p>
+                                        <small class="text-muted">Prueba con otro proveedor o rango de fechas</small>
+                                    </div>
+                                </td>
+                            </tr>
                             <?php else: ?>
                                 <?php foreach ($productos as $p): ?>
-                                <tr class="<?= $p['es_especial'] ? 'table-success' : '' ?>">
-                                    <td><?= $p['nombre'] ?>
-                                        <?php if ($p['es_especial']): ?>
+                                <tr class="<?= $p['es_pagado'] ? 'table-success' : '' ?>">
+                                    <td>
+                                        <?= htmlspecialchars($p['nombre']) ?>
+                                        <?php if ($p['es_pagado']): ?>
                                             <span class="badge badge-success ml-1"><i class="fas fa-check-circle"></i> Pagado</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td><?= $p['proveedor'] ?></td>
-                                    <td class="text-center"><?= $p['vendidos'] ?></td>
+                                    <td><?= htmlspecialchars($p['proveedor']) ?></td>
+                                    <td class="text-center"><?= number_format($p['vendidos']) ?></td>
                                     <td class="text-center">
                                         <span class="badge <?= $p['stock'] <= 0 ? 'badge-danger' : ($p['stock'] <= 5 ? 'badge-warning' : 'badge-success') ?>">
-                                            <?= $p['stock'] ?>
+                                            <?= number_format($p['stock']) ?>
                                         </span>
                                     </td>
                                     <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
@@ -543,13 +540,20 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                     <td class="text-right font-weight-bold text-success">
                                         $<?= number_format($p['ganancia'], 2) ?>
                                     </td>
-                                </tr>
+                                    <td class="text-center">
+                                        <?php if ($p['es_pagado']): ?>
+                                            <span class="badge badge-success"><i class="fas fa-check-circle"></i> Pagado</span>
+                                        <?php else: ?>
+                                            <span class="badge badge-warning"><i class="fas fa-handshake"></i> Concesión</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </td>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
-                <?php if ($hayDatosTablaProductos): ?>
+                <?php if (!empty($productos)): ?>
                 <div class="card-body">
                     <div class="pagination-controls">
                         <div class="records-per-page">
@@ -582,15 +586,15 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                     </span>
                 </div>
                 <div class="card-body">
-                    <!-- ALERTA PARA EL PRODUCTO ESPECIAL -->
+                    <!-- ALERTA PARA PRODUCTOS PAGADOS -->
                     <?php if ($hayProductoEspecial): ?>
                     <div class="alert alert-success alert-dismissible fade show" id="alertaProductoEspecial" style="display: none;">
                         <button type="button" class="close" onclick="cerrarAlertaProductoEspecial()" aria-label="Close">
                             <span aria-hidden="true">&times;</span>
                         </button>
-                        <h5><i class="icon fas fa-check-circle"></i> Producto pagado por adelantado</h5>
+                        <h5><i class="icon fas fa-check-circle"></i> Productos pagados por adelantado</h5>
                         <p>
-                            Las <strong>libretas del proveedor Nevaris 3D</strong> están excluidas de esta deuda porque se pagaron por adelantado. 
+                            Los productos con tipo de adquisición <strong>PAGADO</strong> están excluidos de esta deuda.
                             Sin embargo, su ganancia SÍ está incluida en el reporte de ventas.
                         </p>
                     </div>
@@ -610,46 +614,48 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                     <th class="sortable text-center" data-column="2">Vendidos</th>
                                     <th class="sortable text-right" data-column="3">Costo unitario</th>
                                     <th class="sortable text-right" data-column="4">Deuda total</th>
+                                    <th class="text-center">Adquisición</th>
                                 </tr>
                             </thead>
                             <tbody id="tablaDeudaBody">
-                                <?php if (!$hayDatosTablaDeuda): ?>
-                                    <tr>
-                                        <td colspan="5" class="text-center py-5">
-                                            <div class="no-data-message" style="margin: 0;">
-                                                <i class="fas fa-hand-holding-usd" style="font-size: 4rem; color: #dee2e6;"></i>
-                                                <p class="mt-3 mb-0">No hay deudas registradas en el período seleccionado</p>
-                                                <small class="text-muted">Prueba con otro proveedor o rango de fechas</small>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                <?php if (empty($ventasAgrupadas)): ?>
+                                <tr>
+                                    <td colspan="6" class="text-center py-5">
+                                        <div class="no-data-message" style="margin: 0;">
+                                            <i class="fas fa-hand-holding-usd" style="font-size: 4rem; color: #dee2e6;"></i>
+                                            <p class="mt-3 mb-0">No hay deudas registradas en el período seleccionado</p>
+                                            <small class="text-muted">Prueba con otro proveedor o rango de fechas</small>
+                                        </div>
+                                    </td>
+                                </tr>
                                 <?php else: ?>
-                                    <?php foreach ($ventasAgrupadas as $p): 
-                                        $deuda = $p['deuda_total'];
-                                        $esEspecial = $p['es_producto_especial'];
-                                        if ($deuda > 0 || $esEspecial):
-                                    ?>
-                                    <tr class="<?= $esEspecial ? 'table-success' : '' ?>">
-                                        <td><?= $p['producto'] ?></td>
-                                        <td><?= $p['proveedor'] ?></td>
-                                        <td class="text-center"><?= $p['total_vendido'] ?></td>
-                                        <td class="text-right">$<?= number_format($p['precio_compra'], 2) ?></td>
-                                        <td class="text-right font-weight-bold <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
-                                            <?php if ($esEspecial): ?>
-                                                <span class="badge badge-success">PAGADO</span>
+                                    <?php foreach ($ventasAgrupadas as $v): ?>
+                                    <tr class="<?= $v['es_producto_pagado'] ? 'table-success' : '' ?>">
+                                        <td><?= htmlspecialchars($v['producto']) ?></td>
+                                        <td><?= htmlspecialchars($v['proveedor']) ?></td>
+                                        <td class="text-center"><?= number_format($v['total_vendido']) ?></td>
+                                        <td class="text-right">$<?= number_format($v['precio_compra'], 2) ?></td>
+                                        <td class="text-right font-weight-bold <?= $v['es_producto_pagado'] ? 'text-success' : 'text-danger' ?>">
+                                            <?php if ($v['es_producto_pagado']): ?>
+                                                <span class="badge badge-success"><i class="fas fa-check-circle"></i> PAGADO</span>
                                             <?php else: ?>
-                                                $<?= number_format($deuda, 2) ?>
+                                                $<?= number_format($v['deuda_total'], 2) ?>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if ($v['es_producto_pagado']): ?>
+                                                <span class="badge badge-success"><i class="fas fa-check-circle"></i> Pagado</span>
+                                            <?php else: ?>
+                                                <span class="badge badge-warning"><i class="fas fa-handshake"></i> Concesión</span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
-                                    <?php 
-                                        endif; 
-                                    endforeach; 
-                                endif; ?>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
-                    <?php if ($hayDatosTablaDeuda): ?>
+                    <?php if (!empty($ventasAgrupadas)): ?>
                     <div class="pagination-controls">
                         <div class="records-per-page">
                             <label>Mostrar:</label>
@@ -669,18 +675,18 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                     <div class="card-footer text-right">
                         <small class="text-muted">
                             <i class="fas fa-info-circle mr-1"></i>
-                            Este monto representa el total pendiente de pago a proveedores. 
-                            Las <strong>libretas de Nevaris 3D</strong> están excluidas (ya pagadas).
+                            Este monto representa el total pendiente de pago a proveedores.
+                            Los productos con tipo de adquisición <strong>PAGADO</strong> están excluidos.
                         </small>
                     </div>
                     <?php endif; ?>
                 </div>
-                <?php if ($hayDatosTablaDeuda): ?>
+                <?php if (!empty($ventasAgrupadas)): ?>
                 <div class="card-footer text-right">
                     <small class="text-muted">
                         <i class="fas fa-info-circle mr-1"></i>
-                        Este monto representa el total pendiente de pago a proveedores. 
-                        Las <strong>libretas de Nevaris 3D</strong> están excluidas (ya pagadas).
+                        Este monto representa el total pendiente de pago a proveedores.
+                        Los productos con tipo de adquisición <strong>PAGADO</strong> están excluidos.
                     </small>
                 </div>
                 <?php endif; ?>
