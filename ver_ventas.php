@@ -257,7 +257,7 @@ $hayDatosTablaProductos = count($productos) > 0;
 $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
 ?>
 
-<link rel="stylesheet" href="css/ver_ventas.css">
+<link rel="stylesheet" href="css/ver_ventas.css?v=<?= time() ?>">
 
 <div class="content-wrapper">
 

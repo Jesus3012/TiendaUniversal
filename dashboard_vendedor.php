@@ -395,45 +395,47 @@ if ($resSemanas) {
 
 <div class="content-wrapper <?= $mostrar_modal_password ? 'modal-active' : '' ?>">
     
-    <!-- MODAL CAMBIO CONTRASEÑA OBLIGATORIO -->
+    <!-- MODAL CAMBIO CONTRASEÑA -->
     <?php if ($mostrar_modal_password): ?>
-    <div id="modalCambiarPassword">
-        <div class="modal-dialog" style="max-width: 450px;">
-            <div class="modal-content">
-                <div class="modal-header" style="background: #f97316; color: white; border-bottom: none;">
-                    <h5 class="modal-title"><i class="fas fa-shield-alt me-2"></i> Cambiar Contraseña</h5>
+    <div id="modalCambiarPassword" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85) !important; backdrop-filter: blur(4px); z-index: 99999; display: flex; align-items: center; justify-content: center;">
+        <div class="modal-dialog" style="max-width: 450px; width: 90%; margin: 0;">
+            <div class="modal-content" style="background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #f97316, #ea580c); border: none; padding: 18px 24px;">
+                    <h5 class="modal-title" style="color: white; margin: 0; font-size: 1.1rem; font-weight: 600;">
+                        <i class="fas fa-shield-alt me-2"></i> Cambiar Contraseña
+                    </h5>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning py-2" style="background: #fef3c7; border-left: 3px solid #f59e0b;">
-                        <small><i class="fas fa-exclamation-triangle me-2"></i> Cambia tu contraseña por defecto <strong>"Pescadores1"</strong></small>
+                <div class="modal-body" style="background: white; padding: 24px;">
+                    <div class="alert alert-warning py-2" style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;">
+                        <small style="color: #92400e;"><i class="fas fa-exclamation-triangle me-2"></i> Cambia tu contraseña por defecto <strong>"Pescadores1"</strong></small>
                     </div>
-                    <div id="error-mensaje" class="alert alert-danger py-2" style="display: none; font-size: 0.8rem;"></div>
+                    <div id="error-mensaje" class="alert alert-danger py-2" style="display: none; border-radius: 12px; font-size: 0.75rem; padding: 10px 14px;"></div>
                     
                     <form id="formCambiarPassword">
                         <input type="hidden" name="csrf_token" value="<?= csrf_token(); ?>">
                         <input type="hidden" name="ajax_cambio_password" value="1">
                         
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Nueva Contraseña</label>
+                            <label class="form-label" style="font-weight: 600; font-size: 0.75rem; color: #374151; margin-bottom: 6px;">Nueva Contraseña</label>
                             <div class="input-group">
-                                <input type="password" class="form-control" id="password_nueva" name="password_nueva">
-                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordField('password_nueva', this)">
+                                <input type="password" class="form-control" id="password_nueva" name="password_nueva" style="border-radius: 12px; border: 1px solid #e2e8f0; padding: 10px 14px;">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordField('password_nueva', this)" style="border-radius: 0 12px 12px 0;">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Confirmar Contraseña</label>
+                            <label class="form-label" style="font-weight: 600; font-size: 0.75rem; color: #374151; margin-bottom: 6px;">Confirmar Contraseña</label>
                             <div class="input-group">
-                                <input type="password" class="form-control" id="password_confirmar" name="password_confirmar">
-                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordField('password_confirmar', this)">
+                                <input type="password" class="form-control" id="password_confirmar" name="password_confirmar" style="border-radius: 12px; border: 1px solid #e2e8f0; padding: 10px 14px;">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordField('password_confirmar', this)" style="border-radius: 0 12px 12px 0;">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
                         </div>
                         
-                        <button type="submit" class="btn w-100" style="background: #f97316; color: white;" id="btnCambiar">
+                        <button type="submit" class="btn w-100" id="btnCambiar" style="background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 12px; padding: 12px; font-weight: 600; color: white;">
                             <i class="fas fa-sync-alt me-2"></i> Cambiar Contraseña
                         </button>
                     </form>

@@ -619,718 +619,194 @@ if ($fecha_obtenida) {
 ?>
 
 <!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>Panel de Configuración - Pescadores de la Prehistoria</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-        <style>
-        /* =====================================================
-           ESTILOS NARANJA - MÓDULO DE CONFIGURACIÓN RESPONSIVE
-        ===================================================== */
-        :root {
-            --primary: #f97316;
-            --primary-dark: #ea580c;
-            --primary-light: #ffedd5;
-            --success: #22c55e;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --info: #3b82f6;
-        }
+    <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+            <title>Panel de Configuración - Pescadores de la Prehistoria</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+        </head>
+    <body>
+        <link rel="stylesheet" href="css/configuracion.css?v=<?= time() ?>">
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: linear-gradient(135deg, #fef9f1 0%, #f8fafc 100%);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        }
-
-        .content-wrapper {
-            min-height: 100vh;
-            padding: 20px;
-            padding-bottom: 80px;
-        }
-
-        .content-header h1 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 8px;
-        }
-        .content-header h1 i { color: #f97316; }
-        .content-header small {
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-
-        .card {
-            border-radius: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            border: 1px solid #eef2f6;
-            margin-bottom: 20px;
-            background: white;
-        }
-        .card-header {
-            background: white;
-            border-bottom: 2px solid #f97316;
-            padding: 0.8rem 1.2rem;
-            border-radius: 20px 20px 0 0;
-        }
-        .card-header .card-title {
-            font-weight: 700;
-            color: #1e293b;
-            font-size: 1rem;
-            margin: 0;
-        }
-        .card-header .card-title i { color: #f97316; margin-right: 8px; }
-        .card-body { padding: 1.2rem; }
-        .card-footer {
-            background: white;
-            border-top: 1px solid #eef2f6;
-            padding: 0.8rem 1.2rem;
-            border-radius: 0 0 20px 20px;
-        }
-
-        .form-group { margin-bottom: 1rem; }
-        .form-group label {
-            font-weight: 600;
-            font-size: 0.75rem;
-            color: #475569;
-            margin-bottom: 0.3rem;
-            display: block;
-        }
-        .form-control, .form-select {
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            padding: 0.5rem 0.8rem;
-            font-size: 0.85rem;
-            width: 100%;
-            background: white;
-            transition: all 0.2s ease;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #f97316;
-            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-            outline: none;
-        }
-
-        .btn {
-            border-radius: 10px;
-            padding: 0.5rem 1rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            cursor: pointer;
-            border: none;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        .btn-primary { background: #f97316; color: white; }
-        .btn-primary:hover, .btn-primary:active { background: #ea580c; }
-        .btn-success { background: #22c55e; color: white; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-warning { background: #f59e0b; color: white; }
-        .btn-secondary { background: #64748b; color: white; }
-        .btn-info { background: #3b82f6; color: white; }
-        .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.7rem; }
-
-        .acciones-btns {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-            justify-content: flex-start;
-        }
-        .acciones-btns .btn {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.7rem;
-            white-space: nowrap;
-        }
-
-        .table {
-            margin-bottom: 0;
-            background: white;
-            font-size: 0.8rem;
-        }
-        .table thead th {
-            background: #f97316;
-            color: white;
-            font-weight: 600;
-            padding: 10px 12px;
-            border-bottom: none;
-            font-size: 0.75rem;
-            white-space: nowrap;
-        }
-        .table tbody td {
-            padding: 8px 12px;
-            vertical-align: middle;
-            border-bottom: 1px solid #eef2f6;
-            font-size: 0.75rem;
-        }
-        .table tbody tr:hover td { background-color: #fef9f1; }
-
-        .badge {
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .badge-success { background: #22c55e; color: white; }
-        .badge-danger { background: #ef4444; color: white; }
-        .badge-warning { background: #f59e0b; color: white; }
-        .badge-info { background: #3b82f6; color: white; }
-        .badge-secondary { background: #64748b; color: white; }
-
-        /* Tabs - Distribución uniforme */
-        .nav-tabs-wrapper {
-            margin-bottom: 1.5rem;
-            background: white;
-            border-radius: 16px;
-            width: 100%;
-        }
-        
-        .nav-tabs {
-            display: flex;
-            flex-wrap: wrap;
-            border-bottom: 2px solid #e2e8f0;
-            padding: 0;
-            margin: 0;
-            list-style: none;
-            background: white;
-            border-radius: 16px 16px 0 0;
-            width: 100%;
-        }
-        
-        .nav-tabs .nav-item {
-            margin-bottom: -2px;
-            flex: 1;
-            text-align: center;
-        }
-        
-        .nav-tabs .nav-link {
-            display: block;
-            padding: 0.75rem 0.5rem;
-            color: #64748b;
-            font-weight: 600;
-            font-size: 0.85rem;
-            border: none;
-            background: transparent;
-            border-radius: 12px 12px 0 0;
-            transition: all 0.2s;
-            cursor: pointer;
-            text-decoration: none;
-            text-align: center;
-            width: 100%;
-        }
-        
-        .nav-tabs .nav-link i {
-            margin-right: 8px;
-            font-size: 0.85rem;
-        }
-        
-        .nav-tabs .nav-link:hover {
-            color: #f97316;
-            background: rgba(249, 115, 22, 0.1);
-        }
-        
-        .nav-tabs .nav-link.active {
-            color: #f97316;
-            background: white;
-            border-bottom: 3px solid #f97316;
-        }
-        
-        /* En móvil: scroll horizontal si es necesario */
-        @media (max-width: 768px) {
-            .nav-tabs-wrapper {
-                overflow-x: auto;
-                overflow-y: hidden;
-                -webkit-overflow-scrolling: touch;
-                scrollbar-width: thin;
-            }
-            
-            .nav-tabs {
-                flex-wrap: nowrap;
-                min-width: max-content;
-                width: auto;
-            }
-            
-            .nav-tabs .nav-item {
-                flex: 0 0 auto;
-            }
-            
-            .nav-tabs .nav-link {
-                padding: 0.6rem 1rem;
-                white-space: nowrap;
-            }
-        }
-        
-        /* Para tablets */
-        @media (min-width: 769px) and (max-width: 1024px) {
-            .nav-tabs .nav-link {
-                padding: 0.7rem 0.8rem;
-                font-size: 0.8rem;
-            }
-            
-            .nav-tabs .nav-link i {
-                margin-right: 5px;
-                font-size: 0.8rem;
-            }
-        }
-        
-        /* Grid de imágenes responsivo */
-        .imagenes-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            margin-top: 10px;
-        }
-        .imagen-card {
-            border: 1px solid #eef2f6;
-            border-radius: 16px;
-            padding: 16px;
-            text-align: center;
-            background: white;
-        }
-        .imagen-preview {
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 15px;
-            min-height: 130px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 15px;
-        }
-        .imagen-preview img {
-            max-height: 80px;
-            max-width: 100%;
-            object-fit: contain;
-        }
-        .custom-file {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-        .custom-file-input {
-            position: relative;
-            z-index: 2;
-            width: 100%;
-            height: 40px;
-            margin: 0;
-            opacity: 0;
-        }
-        .custom-file-label {
-            position: absolute;
-            top: 0;
-            right: 0;
-            left: 0;
-            z-index: 1;
-            height: 40px;
-            padding: 0.5rem 0.8rem;
-            font-size: 0.75rem;
-            font-weight: 400;
-            line-height: 1.5;
-            color: #495057;
-            background-color: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .custom-file-label::after {
-            content: "Buscar";
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 3;
-            display: block;
-            height: 38px;
-            padding: 0.5rem 0.8rem;
-            line-height: 1.5;
-            color: #f97316;
-            content: "Buscar";
-            background-color: #fef9f1;
-            border-left: 1px solid #e2e8f0;
-            border-radius: 0 10px 10px 0;
-        }
-
-        /* Acerca del Sistema */
-        .acerca-card {
-            background: linear-gradient(135deg, #fff 0%, #fef9f1 100%);
-            border-radius: 20px;
-            padding: 20px;
-            text-align: center;
-            margin-top: 20px;
-        }
-        .acerca-logo {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-bottom: 15px;
-            border: 3px solid #f97316;
-            padding: 4px;
-            background: white;
-        }
-        .acerca-titulo {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 8px;
-        }
-        .acerca-subtitulo {
-            color: #f97316;
-            font-size: 0.8rem;
-            margin-bottom: 15px;
-        }
-        .acerca-info {
-            background: white;
-            border-radius: 16px;
-            padding: 15px;
-            margin-top: 15px;
-            text-align: left;
-        }
-        .acerca-info-item {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #eef2f6;
-            font-size: 0.75rem;
-        }
-        .acerca-info-item:last-child { border-bottom: none; }
-        .acerca-info-label { font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px; }
-        .acerca-info-value { color: #1e293b; text-align: right; word-break: break-word; }
-
-        .card-header-flex {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .pagination {
-            margin-top: 1rem;
-            margin-bottom: 0;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .page-link {
-            color: #f97316;
-            border-radius: 8px;
-            margin: 2px;
-            padding: 0.3rem 0.6rem;
-            font-size: 0.7rem;
-            border: 1px solid #e2e8f0;
-        }
-        .page-item.active .page-link {
-            background-color: #f97316;
-            border-color: #f97316;
-            color: white;
-        }
-
-        .table-responsive {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Modal Responsive */
-        .modal-dialog {
-            margin: 10px;
-        }
-        .modal-content {
-            border-radius: 20px;
-        }
-        .modal-header {
-            border-bottom: 2px solid #f97316;
-            padding: 0.8rem 1rem;
-        }
-        .modal-body {
-            padding: 1rem;
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-        .modal-footer {
-            padding: 0.8rem 1rem;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        /* Media Queries para Móvil */
-        @media (max-width: 768px) {
-            .content-wrapper { 
-                padding: 12px; 
-            }
-            .card-header {
-                padding: 0.6rem 1rem;
-            }
-            .card-body {
-                padding: 1rem;
-            }
-            .card-footer {
-                padding: 0.6rem 1rem;
-            }
-            .card-header-flex {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .btn-header {
-                width: 100%;
-            }
-            .table thead th {
-                font-size: 0.65rem;
-                padding: 6px 8px;
-            }
-            .table tbody td {
-                font-size: 0.65rem;
-                padding: 6px 8px;
-            }
-            .btn {
-                width: 100%;
-            }
-            .card-footer .btn {
-                width: 100%;
-            }
-            .modal-footer {
-                flex-direction: column;
-            }
-            .modal-footer .btn {
-                width: 100%;
-                margin: 4px 0;
-            }
-            .acerca-info-item {
-                flex-direction: column;
-                gap: 5px;
-            }
-            .acerca-info-value {
-                text-align: left;
-            }
-            .acciones-btns {
-                justify-content: center;
-            }
-        }
-
-        @media (min-width: 769px) {
-            .imagenes-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            .btn {
-                width: auto;
-            }
-            .card-footer .btn {
-                width: auto;
-            }
-        }
-
-        /* Sidebar protection */
-        .sidebar-custom .nav-link,
-        .sidebar-custom .nav-link:hover,
-        .sidebar-custom .nav-link:focus,
-        .sidebar-custom .nav-link.active,
-        .nav-links a,
-        .nav-links a:hover,
-        .nav-links a:focus,
-        .submenu-toggle,
-        .submenu-toggle:hover,
-        .submenu-items a,
-        .submenu-items a:hover {
-            color: white !important;
-            background: transparent !important;
-            background-color: transparent !important;
-        }
-    </style>
-</head>
-<body>
-<div class="content-wrapper">
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-12">
-                    <h1><i class="fas fa-cog mr-2"></i> Panel de Configuración</h1>
-                    <small class="text-muted">Administra todos los aspectos del sistema</small>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="content">
-        <div class="container-fluid">
-            <!-- Tabs de navegación -->
-            <div class="nav-tabs-wrapper">
-                <ul class="nav nav-tabs" id="configTabs" role="tablist">
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'backup' ? 'active' : '' ?>" data-tab="backup"><i class="fas fa-database"></i> Respaldos</button></li>
-                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" data-tab="auditoria"><i class="fas fa-history"></i> Auditoría</button></li>
-                </ul>
-            </div>
-
-            <div class="tab-content">
-                <form method="POST" id="tabForm">
-                    <input type="hidden" name="tab_activo" id="tab_activo_input" value="<?= $tab_activo ?>">
-                </form>
-                
-                <!-- TAB GENERAL -->
-                <div class="tab-pane <?= $tab_activo == 'general' ? 'active' : '' ?>" id="tab-general" data-tab-content="general">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title"><i class="fas fa-store mr-2"></i> Información de la Tienda</h3>
-                        </div>
-                        <form method="POST" enctype="multipart/form-data" id="formGeneral">
-                            <input type="hidden" name="tab_activo" value="general">
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Nombre de la tienda</label>
-                                            <input type="text" class="form-control" name="nombre" value="<?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Teléfono</label>
-                                            <input type="text" class="form-control" name="telefono" value="<?= htmlspecialchars($config_general['telefono'] ?? '') ?>">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Correo electrónico</label>
-                                            <input type="email" class="form-control" name="email" value="<?= htmlspecialchars($config_general['email'] ?? '') ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Horario de atención</label>
-                                            <input type="text" class="form-control" name="horario" value="<?= htmlspecialchars($config_general['horario'] ?? 'Lunes a Domingo 10:00 - 20:00') ?>">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Dirección</label>
-                                    <textarea class="form-control" name="direccion" rows="3"><?= htmlspecialchars($config_general['direccion'] ?? '') ?></textarea>
-                                </div>
-                                
-                                <!-- Sección de Logo mejorada -->
-                            <!-- Sección de Logo y Dashboard mejorada -->
-                            <div class="imagenes-grid">
-                                <!-- Logo de la tienda -->
-                                <div class="imagen-card">
-                                    <h6 class="mb-3"><i class="fas fa-image mr-2"></i> Logo de la tienda</h6>
-                                    <div class="imagen-preview">
-                                        <?php if ($logo_path && file_exists($logo_path)): ?>
-                                            <img src="<?= $logo_path ?>?v=<?= time() ?>" id="currentLogo">
-                                        <?php else: ?>
-                                            <div class="text-center" id="currentLogo">
-                                                <i class="fas fa-store fa-3x text-muted"></i>
-                                                <p class="small text-muted mt-2 mb-0">Sin logo</p>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="custom-file">
-                                        <input type="file" name="logo" accept="image/*" id="logoInput" class="custom-file-input" onchange="previewLogo(this, 'logoPreview', 'logoPreviewContainer')">
-                                        <label class="custom-file-label" for="logoInput">Seleccionar logo</label>
-                                        <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
-                                    </div>
-                                    <div id="logoPreviewContainer" style="display: none;" class="mt-3">
-                                        <label class="text-muted small">Vista previa:</label>
-                                        <img id="logoPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
-                                    </div>
-                                </div>
-                                
-                                <!-- Imagen del Dashboard Principal -->
-                                <div class="imagen-card">
-                                    <h6 class="mb-3"><i class="fas fa-tachometer-alt mr-2"></i> Imagen del Dashboard</h6>
-                                    <div class="imagen-preview">
-                                        <?php 
-                                        $dashboard_img = $config_general['imagen_dashboard'] ?? '';
-                                        if ($dashboard_img && file_exists($dashboard_img)): ?>
-                                            <img src="<?= $dashboard_img ?>?v=<?= time() ?>" id="currentDashboardImg">
-                                        <?php else: ?>
-                                            <div class="text-center" id="currentDashboardImg">
-                                                <i class="fas fa-chart-line fa-3x text-muted"></i>
-                                                <p class="small text-muted mt-2 mb-0">Imagen por defecto</p>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="custom-file">
-                                        <input type="file" name="imagen_dashboard" accept="image/*" id="dashboardInput" class="custom-file-input" onchange="previewLogo(this, 'dashboardPreview', 'dashboardPreviewContainer')">
-                                        <label class="custom-file-label" for="dashboardInput">Seleccionar imagen</label>
-                                        <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
-                                    </div>
-                                    <div id="dashboardPreviewContainer" style="display: none;" class="mt-3">
-                                        <label class="text-muted small">Vista previa:</label>
-                                        <img id="dashboardPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
-                                    </div>
-                                </div>
+            <div class="content-wrapper">
+                <section class="content-header">
+                    <div class="container-fluid">
+                        <div class="row mb-2">
+                            <div class="col-12">
+                                <h1><i class="fas fa-cog mr-2"></i> Panel de Configuración</h1>
+                                <small class="text-muted">Administra todos los aspectos del sistema</small>
                             </div>
-                            </div>
-                            <div class="card-footer text-right">
-                                <button type="submit" name="action" value="update_general" class="btn btn-primary">
-                                    <i class="fas fa-save mr-1"></i> Guardar Cambios
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Acerca del Sistema -->
-                    <div class="acerca-card">
-                        <div class="text-center">
-                            <div id="acercaLogoContainer">
-                                <?php if ($logo_path && file_exists($logo_path)): ?>
-                                    <img src="<?= $logo_path ?>?v=<?= time() ?>" class="acerca-logo" id="acercaLogo">
-                                <?php else: ?>
-                                    <div class="acerca-logo d-flex align-items-center justify-content-center mx-auto bg-light" id="acercaLogo">
-                                        <i class="fas fa-fish fa-4x" style="color: #f97316;"></i>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            <h2 class="acerca-titulo"><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h2>
-                            <p class="acerca-subtitulo">Sistema de Gestión de Inventario y Ventas</p>
-                        </div>
-                        <div class="acerca-info">
-    <h5 class="mb-3" style="color: #f97316;"><i class="fas fa-info-circle mr-2"></i>Información del Sistema</h5>
-    <div class="acerca-info-item">
-        <span class="acerca-info-label"><i class="fas fa-calendar-alt mr-2"></i>Última actualización:</span>
-        <span class="acerca-info-value"><?= $ultima_actualizacion ?></span>
-    </div>
-    <div class="acerca-info-item">
-        <span class="acerca-info-label"><i class="fas fa-user-cog mr-2"></i>Desarrollado por:</span>
-        <span class="acerca-info-value">Jesus Martinez Vidal</span>
-    </div>
-    <div class="acerca-info-item">
-        <span class="acerca-info-label"><i class="fas fa-envelope mr-2"></i>Contacto:</span>
-        <span class="acerca-info-value">soportepescadores@gmail.com</span>
-    </div>
-    <div class="acerca-info-item">
-        <span class="acerca-info-label"><i class="fas fa-phone-alt mr-2"></i>Teléfono:</span>
-        <span class="acerca-info-value">+52 222 980 4687</span>
-    </div>
-</div>
-                        <div class="alert alert-info mt-3 text-center">
-                            <i class="fas fa-copyright mr-2"></i> 2026 Pescadores de la Prehistoria - Todos los derechos reservados.
                         </div>
                     </div>
-                </div>
+                </section>
+
+                <section class="content">
+                    <div class="container-fluid">
+                        <!-- Tabs de navegación -->
+                        <div class="nav-tabs-wrapper">
+                            <ul class="nav nav-tabs" id="configTabs" role="tablist">
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'backup' ? 'active' : '' ?>" data-tab="backup"><i class="fas fa-database"></i> Respaldos</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" data-tab="auditoria"><i class="fas fa-history"></i> Auditoría</button></li>
+                            </ul>
+                        </div>
+
+                        <div class="tab-content">
+                            <form method="POST" id="tabForm">
+                                <input type="hidden" name="tab_activo" id="tab_activo_input" value="<?= $tab_activo ?>">
+                            </form>
+                            
+                            <!-- TAB GENERAL -->
+                            <div class="tab-pane <?= $tab_activo == 'general' ? 'active' : '' ?>" id="tab-general" data-tab-content="general">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title"><i class="fas fa-store mr-2"></i> Información de la Tienda</h3>
+                                    </div>
+                                    <form method="POST" enctype="multipart/form-data" id="formGeneral">
+                                        <input type="hidden" name="tab_activo" value="general">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Nombre de la tienda</label>
+                                                        <input type="text" class="form-control" name="nombre" value="<?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Teléfono</label>
+                                                        <input type="text" class="form-control" name="telefono" value="<?= htmlspecialchars($config_general['telefono'] ?? '') ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Correo electrónico</label>
+                                                        <input type="email" class="form-control" name="email" value="<?= htmlspecialchars($config_general['email'] ?? '') ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Horario de atención</label>
+                                                        <input type="text" class="form-control" name="horario" value="<?= htmlspecialchars($config_general['horario'] ?? 'Lunes a Domingo 10:00 - 20:00') ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Dirección</label>
+                                                <textarea class="form-control" name="direccion" rows="3"><?= htmlspecialchars($config_general['direccion'] ?? '') ?></textarea>
+                                            </div>
+                                            
+                                            <!-- Sección de Logo mejorada -->
+                                        <!-- Sección de Logo y Dashboard mejorada -->
+                                        <div class="imagenes-grid">
+                                            <!-- Logo de la tienda -->
+                                            <div class="imagen-card">
+                                                <h6 class="mb-3"><i class="fas fa-image mr-2"></i> Logo de la tienda</h6>
+                                                <div class="imagen-preview">
+                                                    <?php if ($logo_path && file_exists($logo_path)): ?>
+                                                        <img src="<?= $logo_path ?>?v=<?= time() ?>" id="currentLogo">
+                                                    <?php else: ?>
+                                                        <div class="text-center" id="currentLogo">
+                                                            <i class="fas fa-store fa-3x text-muted"></i>
+                                                            <p class="small text-muted mt-2 mb-0">Sin logo</p>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="custom-file">
+                                                    <input type="file" name="logo" accept="image/*" id="logoInput" class="custom-file-input" onchange="previewLogo(this, 'logoPreview', 'logoPreviewContainer')">
+                                                    <label class="custom-file-label" for="logoInput">Seleccionar logo</label>
+                                                    <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
+                                                </div>
+                                                <div id="logoPreviewContainer" style="display: none;" class="mt-3">
+                                                    <label class="text-muted small">Vista previa:</label>
+                                                    <img id="logoPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Imagen del Dashboard Principal -->
+                                            <div class="imagen-card">
+                                                <h6 class="mb-3"><i class="fas fa-tachometer-alt mr-2"></i> Imagen del Dashboard</h6>
+                                                <div class="imagen-preview">
+                                                    <?php 
+                                                    $dashboard_img = $config_general['imagen_dashboard'] ?? '';
+                                                    if ($dashboard_img && file_exists($dashboard_img)): ?>
+                                                        <img src="<?= $dashboard_img ?>?v=<?= time() ?>" id="currentDashboardImg">
+                                                    <?php else: ?>
+                                                        <div class="text-center" id="currentDashboardImg">
+                                                            <i class="fas fa-chart-line fa-3x text-muted"></i>
+                                                            <p class="small text-muted mt-2 mb-0">Imagen por defecto</p>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="custom-file">
+                                                    <input type="file" name="imagen_dashboard" accept="image/*" id="dashboardInput" class="custom-file-input" onchange="previewLogo(this, 'dashboardPreview', 'dashboardPreviewContainer')">
+                                                    <label class="custom-file-label" for="dashboardInput">Seleccionar imagen</label>
+                                                    <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
+                                                </div>
+                                                <div id="dashboardPreviewContainer" style="display: none;" class="mt-3">
+                                                    <label class="text-muted small">Vista previa:</label>
+                                                    <img id="dashboardPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        </div>
+                                        <div class="card-footer text-right">
+                                            <button type="submit" name="action" value="update_general" class="btn btn-primary">
+                                                <i class="fas fa-save mr-1"></i> Guardar Cambios
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <!-- Acerca del Sistema -->
+                                <div class="acerca-card">
+                                    <div class="text-center">
+                                        <div id="acercaLogoContainer">
+                                            <?php if ($logo_path && file_exists($logo_path)): ?>
+                                                <img src="<?= $logo_path ?>?v=<?= time() ?>" class="acerca-logo" id="acercaLogo">
+                                            <?php else: ?>
+                                                <div class="acerca-logo d-flex align-items-center justify-content-center mx-auto bg-light" id="acercaLogo">
+                                                    <i class="fas fa-fish fa-4x" style="color: #f97316;"></i>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <h2 class="acerca-titulo"><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h2>
+                                        <p class="acerca-subtitulo">Sistema de Gestión de Inventario y Ventas</p>
+                                    </div>
+                                    <div class="acerca-info">
+                                        <h5 class="mb-3" style="color: #f97316;"><i class="fas fa-info-circle mr-2"></i>Información del Sistema</h5>
+                                        <div class="acerca-info-item">
+                                            <span class="acerca-info-label"><i class="fas fa-calendar-alt mr-2"></i>Última actualización:</span>
+                                            <span class="acerca-info-value"><?= $ultima_actualizacion ?></span>
+                                        </div>
+                                        <div class="acerca-info-item">
+                                            <span class="acerca-info-label"><i class="fas fa-user-cog mr-2"></i>Desarrollado por:</span>
+                                            <span class="acerca-info-value">Jesus Martinez Vidal</span>
+                                        </div>
+                                        <div class="acerca-info-item">
+                                            <span class="acerca-info-label"><i class="fas fa-envelope mr-2"></i>Contacto:</span>
+                                            <span class="acerca-info-value">soportepescadores@gmail.com</span>
+                                        </div>
+                                        <div class="acerca-info-item">
+                                            <span class="acerca-info-label"><i class="fas fa-phone-alt mr-2"></i>Teléfono:</span>
+                                            <span class="acerca-info-value">+52 222 980 4687</span>
+                                        </div>
+                                    </div>
+                                <div class="alert alert-info mt-3 text-center">
+                                    <i class="fas fa-copyright mr-2"></i> 2026 Pescadores de la Prehistoria - Todos los derechos reservados.
+                                </div>
+                            </div>
+                        </div>
 
                 <!-- TAB CORREO -->
                 <div class="tab-pane <?= $tab_activo == 'correo' ? 'active' : '' ?>" id="tab-correo" data-tab-content="correo">
@@ -1365,16 +841,24 @@ if ($fecha_obtenida) {
                 <!-- TAB USUARIOS -->
                 <div class="tab-pane <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" id="tab-usuarios" data-tab-content="usuarios">
                     <div class="card">
-                        <div class="card-header card-header-flex">
-                            <h3 class="card-title"><i class="fas fa-users mr-2"></i> Gestión de Usuarios</h3>
-                            <button class="btn btn-success btn-sm btn-header" onclick="abrirModalUsuario()">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0"><i class="fas fa-users mr-2"></i> Gestión de Usuarios</h3>
+                            <button class="btn btn-success btn-sm" onclick="abrirModalUsuario()">
                                 <i class="fas fa-plus mr-1"></i> Nuevo Usuario
                             </button>
                         </div>
                         <div class="card-body table-responsive">
                             <table class="table table-hover">
                                 <thead>
-                                    <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Cambio Pwd</th><th>Fecha Registro</th><th>Acciones</th></tr>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Email</th>
+                                        <th>Rol</th>
+                                        <th>Estado</th>
+                                        <th>Cambio Pwd</th>
+                                        <th>Fecha Registro</th>
+                                        <th>Acciones</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     <?php while ($u = $usuarios->fetch_assoc()): ?>
@@ -1406,16 +890,23 @@ if ($fecha_obtenida) {
                 <!-- TAB PROVEEDORES -->
                 <div class="tab-pane <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" id="tab-proveedores" data-tab-content="proveedores">
                     <div class="card">
-                        <div class="card-header card-header-flex">
-                            <h3 class="card-title"><i class="fas fa-truck mr-2"></i> Gestión de Proveedores</h3>
-                            <button class="btn btn-success btn-sm btn-header" onclick="abrirModalProveedor()">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0"><i class="fas fa-truck mr-2"></i> Gestión de Proveedores</h3>
+                            <button class="btn btn-success btn-sm" onclick="abrirModalProveedor()">
                                 <i class="fas fa-plus mr-1"></i> Nuevo Proveedor
                             </button>
                         </div>
                         <div class="card-body table-responsive">
                             <table class="table table-hover">
                                 <thead>
-                                    <tr><th>Nombre</th><th>Correo</th><th>Teléfono</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Correo</th>
+                                        <th>Teléfono</th>
+                                        <th>Dirección</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     <?php while ($p = $proveedores->fetch_assoc()): ?>
@@ -1440,24 +931,31 @@ if ($fecha_obtenida) {
                     </div>
                 </div>
 
-                <!-- TAB RESPALDOS -->
+                <!-- TAB RESPALDOS - Con clases de Bootstrap -->
                 <div class="tab-pane <?= $tab_activo == 'backup' ? 'active' : '' ?>" id="tab-backup" data-tab-content="backup">
                     <div class="card">
-                        <div class="card-header"><h3 class="card-title"><i class="fas fa-database mr-2"></i> Respaldos de Base de Datos</h3></div>
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0"><i class="fas fa-database mr-2"></i> Respaldos de Base de Datos</h3>
+                            <button type="button" class="btn btn-success" id="btnBackup">
+                                <i class="fas fa-download mr-1"></i> Crear Nuevo Respaldo
+                            </button>
+                        </div>
                         <div class="card-body">
-                            <div class="mb-4">
-                                <button type="button" class="btn btn-success" id="btnBackup">
-                                    <i class="fas fa-download mr-1"></i> Crear Nuevo Respaldo
-                                </button>
-                            </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
-                                    <thead><tr><th>Nombre del archivo</th><th>Fecha</th><th>Tamaño</th><th>Acciones</th></tr></thead>
+                                    <thead>
+                                        <tr><th>Nombre del archivo</th><th>Fecha</th><th>Tamaño</th><th>Acciones</th></tr>
+                                    </thead>
                                     <tbody>
                                         <?php if (empty($backups)): ?>
-                                        <tr><td colspan="4" class="text-center py-4"><i class="fas fa-folder-open fa-2x text-muted mb-2 d-block"></i>No hay respaldos disponibles</td></tr>
+                                        <td><td colspan="4" class="text-center py-4"><i class="fas fa-folder-open fa-2x text-muted mb-2 d-block"></i>No hay respaldos disponibles</td></tr>
                                         <?php else: foreach ($backups as $b): ?>
-                                        <tr><td><i class="fas fa-file-archive mr-2 text-warning"></i> <?= $b['nombre'] ?></td><td><?= $b['fecha'] ?></td><td><?= $b['tamaño'] ?></td><td><a href="backups/<?= $b['nombre'] ?>" class="btn btn-sm btn-primary" download><i class="fas fa-download"></i> Descargar</a></td></tr>
+                                        <tr>
+                                            <td><i class="fas fa-file-archive mr-2 text-warning"></i> <?= $b['nombre'] ?></td>
+                                            <td><?= $b['fecha'] ?></td>
+                                            <td><?= $b['tamaño'] ?></td>
+                                            <td><a href="backups/<?= $b['nombre'] ?>" class="btn btn-sm btn-primary" download><i class="fas fa-download"></i> Descargar</a></td>
+                                        </tr>
                                         <?php endforeach; endif; ?>
                                     </tbody>
                                 </table>
@@ -1469,20 +967,25 @@ if ($fecha_obtenida) {
                 <!-- TAB AUDITORÍA -->
                 <div class="tab-pane <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" id="tab-auditoria" data-tab-content="auditoria">
                     <div class="card">
-                        <div class="card-header">
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <h3 class="card-title" style="margin: 0;"><i class="fas fa-history mr-2"></i> Registro de Auditoría</h3>
-                                <form method="POST" id="formLimpiarAuditoria" style="margin: 0;">
-                                    <input type="hidden" name="tab_activo" value="auditoria">
-                                    <button type="submit" name="action" value="limpiar_auditoria" class="btn btn-warning btn-sm"><i class="fas fa-trash-alt mr-1"></i> Limpiar Antiguos</button>
-                                </form>
-                            </div>
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0"><i class="fas fa-history mr-2"></i> Registro de Auditoría</h3>
+                            <form method="POST" id="formLimpiarAuditoria" class="mb-0">
+                                <input type="hidden" name="tab_activo" value="auditoria">
+                                <button type="submit" name="action" value="limpiar_auditoria" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-trash-alt mr-1"></i> Limpiar Antiguos
+                                </button>
+                            </form>
                         </div>
                         <div class="card-body table-responsive">
                             <?php if ($auditoria->num_rows > 0): ?>
                                 <table class="table table-hover">
                                     <thead>
-                                        <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Usuario</th>
+                                            <th>Acción</th>
+                                            <th>Detalle</th>
+                                        </tr>
                                     </thead>
                                     <tbody>
                                         <?php while ($a = $auditoria->fetch_assoc()): ?>
@@ -1512,39 +1015,160 @@ if ($fecha_obtenida) {
 </div>
 
 <!-- Modal Usuario -->
-<div class="modal fade" id="modalUsuario" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <form method="POST" id="formUsuario">
-        <input type="hidden" name="tab_activo" value="usuarios">
-        <div class="modal-header" style="border-bottom: 2px solid #f97316;"><h5 class="modal-title"><i class="fas fa-user mr-2"></i><span id="modalUsuarioTitulo">Nuevo Usuario</span></h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" name="action" id="usuarioAction" value="crear_usuario">
-            <input type="hidden" name="id_usuario" id="id_usuario">
-            <div class="form-group"><label>Nombre completo</label><input type="text" class="form-control" name="nombre" id="usuario_nombre" required></div>
-            <div class="form-group"><label>Correo electrónico</label><input type="email" class="form-control" name="email" id="usuario_email" required></div>
-            <div class="form-group"><label>Contraseña</label><input type="password" class="form-control" name="password" id="usuario_password" placeholder="Dejar en blanco"><small class="text-muted" id="passwordHelp">Contraseña por defecto: <strong>Pescadores1</strong></small></div>
-            <div class="form-group"><label>Rol</label><select class="form-control" name="rol" id="usuario_rol"><option value="vendedor">Vendedor</option><option value="administrador">Administrador</option></select></div>
-            <div class="form-group"><label>Estado</label><select class="form-control" name="activo" id="usuario_activo"><option value="1">Activo</option><option value="0">Inactivo</option></select></div>
+<div class="modal fade" id="modalUsuario" tabindex="-1" role="dialog" aria-labelledby="modalUsuarioLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formUsuario">
+                <input type="hidden" name="tab_activo" value="usuarios">
+                <div class="modal-header" style="border-bottom: 2px solid #f97316;">
+                    <h5 class="modal-title" id="modalUsuarioLabel">
+                        <i class="fas fa-user mr-2"></i><span id="modalUsuarioTitulo">Nuevo Usuario</span>
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" id="usuarioAction" value="crear_usuario">
+                    <input type="hidden" name="id_usuario" id="id_usuario">
+                    <div class="form-group">
+                        <label>Nombre completo</label>
+                        <input type="text" class="form-control" name="nombre" id="usuario_nombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Correo electrónico</label>
+                        <input type="email" class="form-control" name="email" id="usuario_email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Contraseña</label>
+                        <input type="password" class="form-control" name="password" id="usuario_password" placeholder="Dejar en blanco">
+                        <small class="text-muted" id="passwordHelp">Contraseña por defecto: <strong>Pescadores1</strong></small>
+                    </div>
+                    <div class="form-group">
+                        <label>Rol</label>
+                        <select class="form-control" name="rol" id="usuario_rol">
+                            <option value="vendedor">Vendedor</option>
+                            <option value="administrador">Administrador</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select class="form-control" name="activo" id="usuario_activo">
+                            <option value="1">Activo</option>
+                            <option value="0">Inactivo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id="btnGuardarUsuario">
+                        <i class="fas fa-save mr-1"></i> Guardar
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary" id="btnGuardarUsuario"><i class="fas fa-save mr-1"></i> Guardar</button><button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button></div>
-    </form>
-</div></div></div>
+    </div>
+</div>
 
 <!-- Modal Proveedor -->
-<div class="modal fade" id="modalProveedor" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <form method="POST" id="formProveedor">
-        <input type="hidden" name="tab_activo" value="proveedores">
-        <div class="modal-header" style="border-bottom: 2px solid #f97316;"><h5 class="modal-title"><i class="fas fa-truck mr-2"></i><span id="modalProveedorTitulo">Nuevo Proveedor</span></h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" name="action" id="proveedorAction" value="crear_proveedor">
-            <input type="hidden" name="id_proveedor" id="id_proveedor">
-            <div class="row"><div class="col-md-6"><div class="form-group"><label>Nombre</label><input type="text" class="form-control" name="nombre" id="proveedor_nombre" required></div></div><div class="col-md-6"><div class="form-group"><label>Correo</label><input type="email" class="form-control" name="correo" id="proveedor_correo"></div></div></div>
-            <div class="row"><div class="col-md-6"><div class="form-group"><label>Teléfono</label><input type="text" class="form-control" name="telefono" id="proveedor_telefono"></div></div><div class="col-md-6"><div class="form-group"><label>Estado</label><select class="form-control" name="activo" id="proveedor_activo"><option value="1">Activo</option><option value="0">Inactivo</option></select></div></div></div>
-            <div class="row"><div class="col-md-6"><div class="form-group"><label>Calle</label><input type="text" class="form-control" name="calle" id="proveedor_calle"></div></div><div class="col-md-2"><div class="form-group"><label>Número</label><input type="text" class="form-control" name="numero" id="proveedor_numero"></div></div><div class="col-md-4"><div class="form-group"><label>Colonia</label><input type="text" class="form-control" name="colonia" id="proveedor_colonia"></div></div></div>
-            <div class="row"><div class="col-md-4"><div class="form-group"><label>Ciudad</label><input type="text" class="form-control" name="ciudad" id="proveedor_ciudad"></div></div><div class="col-md-4"><div class="form-group"><label>Estado (ubicación)</label><input type="text" class="form-control" name="estado" id="proveedor_estado"></div></div><div class="col-md-4"><div class="form-group"><label>Código Postal</label><input type="text" class="form-control" name="codigo_postal" id="proveedor_codigo_postal"></div></div></div>
+<div class="modal fade" id="modalProveedor" tabindex="-1" role="dialog" aria-labelledby="modalProveedorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formProveedor">
+                <input type="hidden" name="tab_activo" value="proveedores">
+                <div class="modal-header" style="border-bottom: 2px solid #f97316;">
+                    <h5 class="modal-title" id="modalProveedorLabel">
+                        <i class="fas fa-truck mr-2"></i><span id="modalProveedorTitulo">Nuevo Proveedor</span>
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" id="proveedorAction" value="crear_proveedor">
+                    <input type="hidden" name="id_proveedor" id="id_proveedor">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Nombre</label>
+                                <input type="text" class="form-control" name="nombre" id="proveedor_nombre" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Correo</label>
+                                <input type="email" class="form-control" name="correo" id="proveedor_correo">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Teléfono</label>
+                                <input type="text" class="form-control" name="telefono" id="proveedor_telefono">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Estado</label>
+                                <select class="form-control" name="activo" id="proveedor_activo">
+                                    <option value="1">Activo</option>
+                                    <option value="0">Inactivo</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Calle</label>
+                                <input type="text" class="form-control" name="calle" id="proveedor_calle">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label>Número</label>
+                                <input type="text" class="form-control" name="numero" id="proveedor_numero">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Colonia</label>
+                                <input type="text" class="form-control" name="colonia" id="proveedor_colonia">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Ciudad</label>
+                                <input type="text" class="form-control" name="ciudad" id="proveedor_ciudad">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Estado (ubicación)</label>
+                                <input type="text" class="form-control" name="estado" id="proveedor_estado">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Código Postal</label>
+                                <input type="text" class="form-control" name="codigo_postal" id="proveedor_codigo_postal">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id="btnGuardarProveedor">
+                        <i class="fas fa-save mr-1"></i> Guardar
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary" id="btnGuardarProveedor"><i class="fas fa-save mr-1"></i> Guardar</button><button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button></div>
-    </form>
-</div></div></div>
+    </div>
+</div>
 
 <script>
 // ==================== FUNCIÓN GENÉRICA PARA ENVIAR FORMULARIOS CON FETCH ====================
@@ -2056,6 +1680,18 @@ Swal.fire({
     confirmButtonText: 'Aceptar'
 });
 <?php endif; ?>
+
+// Forzar centrado de modales cuando se abren
+$('#modalUsuario, #modalProveedor').on('show.bs.modal', function(e) {
+    $(this).css('display', 'flex').css('align-items', 'center');
+});
+
+// También al redimensionar la ventana
+$(window).on('resize', function() {
+    $('.modal.show').each(function() {
+        $(this).css('display', 'flex').css('align-items', 'center');
+    });
+});
 
 </script>
 </body>

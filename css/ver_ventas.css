@@ -103,7 +103,9 @@ table {
     text-align: right;
 }
 
-/* ESTILOS PARA EL DROPDOWN PDF */
+/* =====================================================
+   ESTILOS RESPONSIVE PARA DROPDOWN PDF
+   ===================================================== */
 .pdf-dropdown-container {
     position: relative;
     display: inline-block;
@@ -116,7 +118,7 @@ table {
     margin-top: 8px;
     background: white;
     border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     width: 320px;
     opacity: 0;
     visibility: hidden;
@@ -133,7 +135,6 @@ table {
     pointer-events: all;
 }
 
-/* Flecha superior del dropdown */
 .pdf-dropdown-menu::before {
     content: '';
     position: absolute;
@@ -143,9 +144,7 @@ table {
     height: 12px;
     background: white;
     transform: rotate(45deg);
-    box-shadow: -2px -2px 5px rgba(0, 0, 0, 0.04);
-    border-left: 1px solid rgba(0, 0, 0, 0.05);
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: -1px -1px 1px rgba(0,0,0,0.05);
 }
 
 .pdf-dropdown-header {
@@ -158,7 +157,7 @@ table {
 
 .pdf-dropdown-header h3 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
     color: #2c3e50;
 }
@@ -169,8 +168,6 @@ table {
     font-size: 20px;
     cursor: pointer;
     color: #95a5a6;
-    transition: color 0.2s;
-    line-height: 1;
     padding: 0 5px;
 }
 
@@ -185,7 +182,7 @@ table {
 .pdf-dropdown-options {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .pdf-dropdown-btn {
@@ -193,9 +190,6 @@ table {
     border: 1px solid #e9ecef;
     border-radius: 8px;
     background: white;
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: #2c3e50;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -206,15 +200,13 @@ table {
 
 .pdf-dropdown-btn:hover {
     background: #f8f9fa;
-    border-color: #3498db;
-    transform: translateX(2px);
-    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
+    border-color: #f97316;
 }
 
 .pdf-dropdown-btn .btn-icon {
     font-size: 1.2rem;
     margin-right: 12px;
-    width: 24px;
+    width: 28px;
     text-align: center;
 }
 
@@ -224,12 +216,12 @@ table {
 
 .pdf-dropdown-btn .btn-text strong {
     display: block;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     margin-bottom: 2px;
 }
 
 .pdf-dropdown-btn .btn-text small {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     color: #7f8c8d;
     font-weight: normal;
 }
@@ -237,11 +229,115 @@ table {
 .pdf-dropdown-footer {
     padding: 12px 20px;
     border-top: 1px solid #e9ecef;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     color: #7f8c8d;
     background: #f8f9fa;
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 12px;
+    border-radius: 0 0 12px 12px;
+}
+
+.dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    display: none;
+}
+
+.dropdown-overlay.active {
+    display: block;
+}
+
+/* ===== RESPONSIVE MÓVIL - MODAL CENTRADO ===== */
+@media (max-width: 768px) {
+    .pdf-dropdown-menu {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: translate(-50%, -50%) scale(0.9) !important;
+        width: 90% !important;
+        max-width: 350px !important;
+        margin: 0 !important;
+        border-radius: 16px !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    .pdf-dropdown-menu.active {
+        transform: translate(-50%, -50%) scale(1) !important;
+    }
+    
+    .pdf-dropdown-menu::before {
+        display: none;
+    }
+    
+    .pdf-dropdown-header {
+        padding: 16px 20px;
+        border-radius: 16px 16px 0 0;
+    }
+    
+    .pdf-dropdown-header h3 {
+        font-size: 1rem;
+    }
+    
+    .pdf-dropdown-body {
+        padding: 16px;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+    
+    .pdf-dropdown-btn {
+        padding: 14px 16px;
+    }
+    
+    .pdf-dropdown-btn .btn-icon {
+        font-size: 1.3rem;
+        width: 32px;
+    }
+    
+    .pdf-dropdown-btn .btn-text strong {
+        font-size: 0.95rem;
+    }
+    
+    .pdf-dropdown-btn .btn-text small {
+        font-size: 0.7rem;
+    }
+    
+    .pdf-dropdown-footer {
+        padding: 12px 20px;
+        border-radius: 0 0 16px 16px;
+    }
+    
+    /* Overlay más oscuro en móvil */
+    .dropdown-overlay.active {
+        background: rgba(0, 0, 0, 0.5);
+    }
+    
+    /* Ajuste del botón PDF en móvil */
+    #btnPDF {
+        width: auto;
+        min-width: 140px;
+    }
+    
+    .content-header .row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .content-header .col-12.col-md-6.mb-2.mb-md-0 {
+        text-align: center !important;
+    }
+    
+    .content-header .col-12.col-md-6.text-md-right.text-left {
+        text-align: center !important;
+        margin-top: 10px;
+    }
+    
+    .pdf-dropdown-container {
+        display: inline-block;
+    }
 }
 
 /* Colores para cada opción */
