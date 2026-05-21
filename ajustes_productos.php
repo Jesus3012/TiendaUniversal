@@ -207,7 +207,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     // ===== CATEGORÍA: Verificar si es nueva =====
     $categoria = trim($_POST['categoria']);
     
-    // Si el select envió '__NUEVA__', tomar del campo categoria_nueva
     if ($categoria === '__NUEVA__') {
         if (isset($_POST['categoria_nueva']) && !empty($_POST['categoria_nueva'])) {
             $categoria = trim($_POST['categoria_nueva']);
@@ -216,7 +215,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         }
     }
     
-    // Validar categoría
     if (empty($categoria)) {
         $errors[] = "La categoría es requerida.";
     }
@@ -225,7 +223,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $proveedor_id = null;
     $proveedor_nombre = null;
     
-    // Si es un proveedor existente (viene como ID numérico)
     if (isset($_POST['proveedor']) && !empty($_POST['proveedor']) && is_numeric($_POST['proveedor'])) {
         $proveedor_id = intval($_POST['proveedor']);
         $stmt = $conn->prepare("SELECT nombre FROM proveedores WHERE id = ? AND activo = 1");
@@ -236,11 +233,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $proveedor_nombre = $row['nombre'];
         }
     } 
-    // Si es un nuevo proveedor
     elseif (isset($_POST['proveedor_nuevo']) && !empty($_POST['proveedor_nuevo'])) {
         $nuevo_nombre = trim($_POST['proveedor_nuevo']);
-        
-        // Verificar si ya existe
         $stmt = $conn->prepare("SELECT id, nombre FROM proveedores WHERE nombre = ?");
         $stmt->bind_param("s", $nuevo_nombre);
         $stmt->execute();
@@ -250,7 +244,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $proveedor_id = $row['id'];
             $proveedor_nombre = $row['nombre'];
         } else {
-            // Insertar nuevo proveedor
             $stmt = $conn->prepare("INSERT INTO proveedores (nombre, activo) VALUES (?, 1)");
             $stmt->bind_param("s", $nuevo_nombre);
             if ($stmt->execute()) {
@@ -260,7 +253,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         }
     }
     
-    // Si hay errores, mostrarlos
     if (!empty($errors)) {
         echo "<script>
         Swal.fire({
@@ -271,11 +263,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         });
         </script>";
     } else {
-        // Resto del código de actualización...
         $precio_compra = floatval($_POST['precio_compra']);
         $precio_venta = floatval($_POST['precio_venta']);
-        $tipo_codigo = $_POST['tipo_codigo'] ?? 'multiple';
         $tipo_inventario = $_POST['tipo_inventario'] ?? 'producto';
+        
+        // ===== CORRECCIÓN DEFINITIVA PARA TIPO_CODIGO =====
+        $tipo_codigo = 'multiple'; // valor por defecto
+        
+        if ($tipo_inventario === 'producto') {
+            // Obtener valor enviado, limpiar y validar
+            $tipo_codigo_enviado = isset($_POST['tipo_codigo']) ? trim($_POST['tipo_codigo']) : '';
+            
+            if ($tipo_codigo_enviado === 'unico') {
+                $tipo_codigo = 'unico';
+            } else {
+                $tipo_codigo = 'multiple';
+            }
+            
+            // DEBUG: Guardar en log
+            error_log("=== UPDATE PRODUCTO ID: $id ===");
+            error_log("tipo_codigo_enviado: '" . $tipo_codigo_enviado . "'");
+            error_log("tipo_codigo_asignado: '" . $tipo_codigo . "'");
+        }
         
         $atributos = [];
         $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
@@ -329,47 +338,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             }
         }
 
-        $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado';
+        $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'concesion';
 
-       // Actualizar producto
+        // ===== ACTUALIZAR PRODUCTO CON CONSULTA DIRECTA =====
+        // Usar consulta preparada pero con validación
+        $sql = "UPDATE productos SET 
+            nombre = ?,
+            categoria = ?,
+            atributos = ?,
+            proveedor = ?,
+            proveedor_id = ?,
+            imagen = ?,
+            precio_compra = ?,
+            precio_venta = ?,
+            tipo_codigo = ?,
+            tipo_inventario = ?,
+            tipo_adquisicion = ?
+            WHERE id = ?";
 
-$stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, atributos=?, proveedor=?, proveedor_id=?, imagen=?, precio_compra=?, precio_venta=?, tipo_codigo=?, tipo_inventario=?, tipo_adquisicion=? WHERE id=?");
-
-// Valor por defecto para tipo_codigo si está vacío
-if ($tipo_inventario === 'producto' && empty($tipo_codigo)) {
-    $tipo_codigo = 'multiple';
-}
-
-if ($imagen_path) {
-    $stmt->bind_param("ssssissddssi", 
-        $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
-        $imagen_path, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
-    );
-} else {
-    // Usar el mismo bind_param, pero con $imagen_path (que puede ser null o cadena vacía)
-    $imagen_actual = $imagen_path ?? '';
-    $stmt->bind_param("ssssissddssi", 
-        $nombre, $categoria, $atributos_json, $proveedor_nombre, $proveedor_id, 
-        $imagen_actual, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $id
-    );
-}
-
+        $stmt = $conn->prepare($sql);
+        
+        // Asegurar que $tipo_codigo nunca sea null
+        $tipo_codigo_final = ($tipo_inventario === 'producto') ? $tipo_codigo : 'multiple';
+        $imagen_valor = $imagen_path ?? '';
+        
+        $stmt->bind_param(
+            "ssssissddssi",
+            $nombre,
+            $categoria,
+            $atributos_json,
+            $proveedor_nombre,
+            $proveedor_id,
+            $imagen_valor,
+            $precio_compra,
+            $precio_venta,
+            $tipo_codigo_final,  // Valor asegurado
+            $tipo_inventario,
+            $tipo_adquisicion,
+            $id
+        );
 
         if ($stmt->execute()) {
-if ($tipo_inventario === 'producto') {
-    $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
-    $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
-    if (file_exists($old_pdf)) @unlink($old_pdf);
-    
-    // Obtener la cantidad NUEVA después de la actualización
-    $stmt_cantidad = $conn->prepare("SELECT cantidad FROM productos WHERE id = ?");
-    $stmt_cantidad->bind_param("i", $id);
-    $stmt_cantidad->execute();
-    $result_cantidad = $stmt_cantidad->get_result();
-    $nueva_cantidad = $result_cantidad->fetch_assoc()['cantidad'];
-    
-    generarCodigosBarras($conn, $nombre, $id, $nueva_cantidad, $tipo_codigo, $tipo_inventario);
-}
+            // Verificar que se guardó correctamente
+            $verify = $conn->query("SELECT tipo_codigo FROM productos WHERE id = $id");
+            $verificado = $verify->fetch_assoc();
+            error_log("TIPO_CODIGO VERIFICADO EN BD: '" . ($verificado['tipo_codigo'] ?? 'NULL') . "'");
+            
+            // Si por alguna razón quedó vacío, forzar actualización directa
+            if (empty($verificado['tipo_codigo']) && $tipo_inventario === 'producto') {
+                $conn->query("UPDATE productos SET tipo_codigo = '$tipo_codigo_final' WHERE id = $id");
+                error_log("SE FORZÓ ACTUALIZACIÓN DIRECTA DE tipo_codigo a: '$tipo_codigo_final'");
+            }
+            
+            if ($tipo_inventario === 'producto') {
+                $conn->query("DELETE FROM codigos_barras WHERE producto_id = $id");
+                $old_pdf = __DIR__ . '/uploads/codigos/producto_' . $id . '.pdf';
+                if (file_exists($old_pdf)) @unlink($old_pdf);
+                
+                $stmt_cantidad = $conn->prepare("SELECT cantidad FROM productos WHERE id = ?");
+                $stmt_cantidad->bind_param("i", $id);
+                $stmt_cantidad->execute();
+                $result_cantidad = $stmt_cantidad->get_result();
+                $nueva_cantidad = $result_cantidad->fetch_assoc()['cantidad'];
+                
+                generarCodigosBarras($conn, $nombre, $id, $nueva_cantidad, $tipo_codigo_final, $tipo_inventario);
+            }
             
             echo "<script>
             Swal.fire({
@@ -1610,7 +1643,16 @@ function editarProducto(id) {
                 document.getElementById('edit_nombre').value = p.nombre;
                 document.getElementById('edit_precio_compra').value = p.precio_compra;
                 document.getElementById('edit_precio_venta').value = p.precio_venta;
-                document.getElementById('edit_tipo_codigo').value = p.tipo_codigo || 'unico';
+                const tipoCodigoSelect = document.getElementById('edit_tipo_codigo');
+                if (tipoCodigoSelect) {
+                    // Asegurar que el valor sea 'unico' o 'multiple'
+                    let valorTipoCodigo = p.tipo_codigo;
+                    if (!valorTipoCodigo || valorTipoCodigo === '') {
+                        valorTipoCodigo = 'multiple';
+                    }
+                    tipoCodigoSelect.value = valorTipoCodigo;
+                    console.log('Tipo código asignado:', valorTipoCodigo);
+                }
                 document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;
                 
                 const stockText = p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz';

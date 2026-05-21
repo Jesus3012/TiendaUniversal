@@ -6,10 +6,6 @@ include 'includes/db.php';
 include 'includes/header.php';
 include 'includes/navbar.php';
 
-// Este producto NO debe aparecer en la deuda con proveedores
-define('PRODUCTO_ESPECIAL_NOMBRE', 'libretas');
-define('PROVEEDOR_ESPECIAL', 'Nevaris 3D');
-
 // Verificar autenticación
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: login.php");
@@ -115,11 +111,11 @@ while ($p = $provResult->fetch_assoc()) {
 
         <?php if ($proveedorSeleccionado):
 
-            // ========== CONSULTA SIMPLIFICADA - SIN COLLATE ==========
+            // ========== CONSULTA CON TIPO_ADQUISICION ==========
             $productos = [];
             
-            // Consulta simple sin CASE
-            $sql = "SELECT id, nombre, cantidad, precio_compra, precio_venta, fecha_registro, proveedor
+            // Consulta incluyendo tipo_adquisicion
+            $sql = "SELECT id, nombre, cantidad, precio_compra, precio_venta, fecha_registro, proveedor, tipo_adquisicion
                     FROM productos 
                     WHERE activo = 1 
                     AND tipo_inventario = 'producto'
@@ -137,16 +133,10 @@ while ($p = $provResult->fetch_assoc()) {
                 
                 // Comparar ignorando acentos
                 if ($provBDNormalizado == $proveedorNormalizado) {
-                    // Verificar si es producto especial
-                    $nombreNormalizado = quitarAcentos(strtolower(trim($row['nombre'])));
-                    $esEspecial = 0;
+                    // Determinar si es pagado basado en tipo_adquisicion de la BD
+                    $esPagado = ($row['tipo_adquisicion'] ?? 'concesion') === 'pagado';
                     
-                    if ($nombreNormalizado == quitarAcentos(strtolower(PRODUCTO_ESPECIAL_NOMBRE)) && 
-                        $provBDNormalizado == quitarAcentos(strtolower(PROVEEDOR_ESPECIAL))) {
-                        $esEspecial = 1;
-                    }
-                    
-                    $row['es_producto_especial'] = $esEspecial;
+                    $row['es_pagado'] = $esPagado;
                     $productos[] = $row;
                 }
             }
@@ -268,20 +258,24 @@ while ($p = $provResult->fetch_assoc()) {
                                         <?php foreach ($productos as $p):
                                             $stockInicial = (int)$p['cantidad'];
                                             $fechaRegistro = date('d/m/Y', strtotime($p['fecha_registro']));
-                                            $esEspecial = $p['es_producto_especial'];
+                                            $esPagado = $p['es_pagado']; // Usar el valor de tipo_adquisicion
                                         ?>
                                         <tr data-id="<?= $p['id'] ?>"
                                             data-stock-inicial="<?= $stockInicial ?>"
                                             data-precio-venta="<?= $p['precio_venta'] ?>"
                                             data-precio-compra="<?= $p['precio_compra'] ?>"
                                             data-nombre="<?= strtolower(htmlspecialchars($p['nombre'])) ?>"
-                                            data-es-especial="<?= $esEspecial ?>">
+                                            data-es-pagado="<?= $esPagado ? '1' : '0' ?>">
                                             
                                             <td class="nombre-producto">
                                                 <strong><?= htmlspecialchars($p['nombre']) ?></strong>
-                                                <?php if ($esEspecial): ?>
+                                                <?php if ($esPagado): ?>
                                                     <span class="badge-pagado">
                                                         <i class="fas fa-check-circle"></i> Pagado
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="badge-concesion">
+                                                        <i class="fas fa-handshake"></i> Concesión
                                                     </span>
                                                 <?php endif; ?>
                                                 <br><small class="text-muted">Reg: <?= $fechaRegistro ?></small>
@@ -298,19 +292,19 @@ while ($p = $provResult->fetch_assoc()) {
                                                     min="0" 
                                                     max="<?= $stockInicial ?>"
                                                     data-original="<?= $stockInicial ?>"
-                                                    data-es-especial="<?= $esEspecial ?>"
+                                                    data-es-pagado="<?= $esPagado ? '1' : '0' ?>"
                                                     style="width: 90px;">
                                                 <input type="hidden" name="ventas[<?= $p['id'] ?>]" class="ventas-input" value="0">
                                                 <input type="hidden" name="stock_final[<?= $p['id'] ?>]" class="stock-final-input" value="<?= $stockInicial ?>">
-                                                <input type="hidden" name="es_especial[<?= $p['id'] ?>]" class="es-especial-input" value="<?= $esEspecial ?>">
-                                            </td>
+                                                <input type="hidden" name="es_pagado[<?= $p['id'] ?>]" class="es-pagado-input" value="<?= $esPagado ? '1' : '0' ?>">
+                                             </td>
 
                                             <td class="text-center ventasCalculadas fw-bold">0</td>
                                             <td class="text-center stockFinal fw-bold"><?= number_format($stockInicial) ?></td>
                                             <td class="text-right ventaMonto text-success fw-bold">$0.00</td>
-                                            <td class="text-right deudaMonto <?= $esEspecial ? 'text-success' : 'text-danger' ?>">
-                                                <?= $esEspecial ? '<span class="badge-pagado">PAGADO</span>' : '$0.00' ?>
-                                            </td>
+                                            <td class="text-right deudaMonto <?= $esPagado ? 'text-success' : 'text-danger' ?>">
+                                                <?= $esPagado ? '<span class="badge-pagado">PAGADO</span>' : '$0.00' ?>
+                                             </td>
                                             <td class="text-right gananciaMonto text-success fw-bold">$0.00</td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -609,7 +603,7 @@ document.addEventListener('DOMContentLoaded', function() {
             let si = parseInt(tr.dataset.stockInicial);
             let pv = parseFloat(tr.dataset.precioVenta);
             let pc = parseFloat(tr.dataset.precioCompra);
-            let esEspecial = tr.dataset.esEspecial === '1';
+            let esPagado = tr.dataset.esPagado === '1';
 
             let input = tr.querySelector('.stock-conteo');
             let sc = parseInt(input.value) || 0;
@@ -618,7 +612,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let ventas = si - sc;
             let vm = ventas * pv;
-            let dm = esEspecial ? 0 : ventas * pc;
+            // Si es pagado, la deuda es 0
+            let dm = esPagado ? 0 : ventas * pc;
             let gm = vm - dm;
 
             tr.querySelector('.ventasCalculadas').innerHTML = ventas;
@@ -626,7 +621,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tr.querySelector('.ventaMonto').innerHTML = '$' + vm.toFixed(2);
             
             let deudaCell = tr.querySelector('.deudaMonto');
-            if (esEspecial) {
+            if (esPagado) {
                 deudaCell.innerHTML = '<span class="badge-pagado">PAGADO</span>';
             } else {
                 deudaCell.innerHTML = '$' + dm.toFixed(2);
@@ -744,9 +739,6 @@ document.getElementById('btnGenerarPDF')?.addEventListener('click', function() {
     
     // Construir URL con parámetros
     const url = `reporte_pdf.php?proveedor=${encodeURIComponent(proveedor)}&fecha_inicio=${encodeURIComponent(fechaInicio)}&fecha_fin=${encodeURIComponent(fechaFin)}`;
-    
-    // Opción 1: Abrir en nueva ventana y descargar automáticamente
-    // Esto funciona si el PHP envía los headers correctos (Content-Disposition: attachment)
     
     // Crear un enlace temporal para descargar
     const link = document.createElement('a');

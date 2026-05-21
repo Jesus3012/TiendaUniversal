@@ -28,11 +28,22 @@ if ($result->num_rows === 0) {
 
 $producto = $result->fetch_assoc();
 
+// ===== CORRECCIÓN: Asegurar que tipo_codigo tenga valor =====
+if ($producto['tipo_inventario'] === 'producto') {
+    // Para productos, si está vacío o null, asignar 'multiple'
+    if (empty($producto['tipo_codigo']) || $producto['tipo_codigo'] === '') {
+        $producto['tipo_codigo'] = 'multiple';
+    }
+} else {
+    // Para insumos, no aplica
+    $producto['tipo_codigo'] = null;
+}
+
 // Decodificar atributos JSON
 $producto['atributos_array'] = $producto['atributos'] ? json_decode($producto['atributos'], true) : [];
 
 // Verificar si la imagen existe
-$producto['imagen_exists'] = $producto['imagen'] && file_exists($producto['imagen']);
+$producto['imagen_exists'] = !empty($producto['imagen']) && file_exists($producto['imagen']);
 
 // Verificar si el PDF existe
 $pdf_file = __DIR__ . '/uploads/codigos/producto_' . $producto['id'] . '.pdf';

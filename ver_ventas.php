@@ -2722,6 +2722,8 @@ class TablaDinamica {
         this.infoHasta = document.getElementById(infoIds.hasta);
         this.infoTotal = document.getElementById(infoIds.total);
         
+        // Guardar los datos originales de las filas con sus clases
+        this.datosOriginales = [];
         this.datos = [];
         this.paginaActual = 1;
         this.itemsPorPagina = 10;
@@ -2732,9 +2734,9 @@ class TablaDinamica {
     }
     
     init() {
+        this.cargarDatosOriginales();
         this.cargarDatos();
         
-        // ✅ Si no hay datos, no inicializar paginación ni sorting
         if (this.datos.length === 0) {
             this.hidePaginationControls();
             return;
@@ -2749,12 +2751,47 @@ class TablaDinamica {
         }
         
         if (this.tabla) {
-            this.tabla.querySelectorAll('.sortable').forEach((th, index) => {
+            this.tabla.querySelectorAll('th').forEach((th, index) => {
+                th.style.cursor = 'pointer';
                 th.addEventListener('click', () => this.ordenarPor(index));
             });
         }
         
         this.renderizar();
+    }
+    
+    cargarDatosOriginales() {
+        const filas = this.tbody.querySelectorAll('tr');
+        this.datosOriginales = Array.from(filas)
+            .filter(fila => {
+                const celdas = fila.querySelectorAll('td');
+                if (celdas.length <= 1) return false;
+                if (celdas.length === 1 && celdas[0].innerText.includes('No hay')) return false;
+                const texto = Array.from(celdas).map(c => c.innerText.trim()).join('');
+                if (texto === '') return false;
+                return true;
+            })
+            .map(fila => {
+                return {
+                    celdas: Array.from(fila.querySelectorAll('td')).map(celda => ({
+                        texto: celda.innerText.trim(),
+                        html: celda.innerHTML,
+                        clase: celda.className
+                    })),
+                    claseFila: fila.className,
+                    dataTipo: fila.getAttribute('data-tipo') || '',
+                    dataNombre: fila.getAttribute('data-nombre') || '',
+                    dataCategoria: fila.getAttribute('data-categoria') || '',
+                    dataProveedor: fila.getAttribute('data-proveedor') || ''
+                };
+            });
+    }
+    
+    cargarDatos() {
+        this.datos = this.datosOriginales.map(item => ({
+            ...item,
+            textoSimple: item.celdas.map(c => c.texto)
+        }));
     }
     
     hidePaginationControls() {
@@ -2767,37 +2804,12 @@ class TablaDinamica {
         }
     }
     
-    cargarDatos() {
-        const filas = this.tbody.querySelectorAll('tr');
-        this.datos = Array.from(filas)
-            .filter(fila => {
-                const celdas = fila.querySelectorAll('td');
-                if (celdas.length <= 1) return false;
-                // Verificar si es el mensaje de "no datos"
-                if (celdas.length === 1 && celdas[0].innerText.includes('No hay')) return false;
-                const texto = Array.from(celdas).map(c => c.innerText.trim()).join('');
-                if (texto === '') return false;
-                return true;
-            })
-            .map(fila => {
-                return Array.from(fila.querySelectorAll('td')).map(celda => celda.innerText.trim());
-            });
-    }
-    
     ordenarPor(columna) {
         if (this.columnaOrden === columna) {
             this.direccionOrden = this.direccionOrden === 'asc' ? 'desc' : 'asc';
         } else {
             this.columnaOrden = columna;
             this.direccionOrden = 'asc';
-        }
-        
-        if (this.tabla) {
-            this.tabla.querySelectorAll('.sortable').forEach(th => {
-                th.classList.remove('asc', 'desc');
-            });
-            const thActual = this.tabla.querySelector(`.sortable[data-column="${columna}"]`);
-            if (thActual) thActual.classList.add(this.direccionOrden);
         }
         
         this.ordenarDatos();
@@ -2814,8 +2826,8 @@ class TablaDinamica {
         };
         
         this.datos.sort((a, b) => {
-            let valA = a[columna];
-            let valB = b[columna];
+            let valA = a.textoSimple[columna];
+            let valB = b.textoSimple[columna];
             
             if (esNumero(valA) && esNumero(valB)) {
                 valA = parseFloat(valA.replace(/[$,]/g, ''));
@@ -2828,74 +2840,125 @@ class TablaDinamica {
         });
     }
     
-renderizar() {
-    if (this.datos.length === 0) {
-        this.tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="no-data-message"><i class="fas fa-box-open" style="font-size: 4rem; color: #dee2e6;"></i><p class="mt-3 mb-0">No hay datos para mostrar</p></div></td></tr>';
-        if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
-            this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'none';
+    renderizar() {
+        if (this.datos.length === 0) {
+            this.tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5"><div class="no-data-message"><i class="fas fa-box-open" style="font-size: 4rem; color: #dee2e6;"></i><p class="mt-3 mb-0">No hay datos para mostrar</p></div></td></tr>';
+            if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
+                this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'none';
+            }
+            if (this.paginacionDiv) this.paginacionDiv.style.display = 'none';
+            if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
+                this.infoDesde.closest('.pagination-info').style.display = 'none';
+            }
+            return;
         }
-        if (this.paginacionDiv) this.paginacionDiv.style.display = 'none';
-        if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
-            this.infoDesde.closest('.pagination-info').style.display = 'none';
-        }
-        return;
-    }
-    
-    const inicio = (this.paginaActual - 1) * this.itemsPorPagina;
-    const fin = inicio + this.itemsPorPagina;
-    const paginaDatos = this.datos.slice(inicio, fin);
-    const totalPaginas = Math.ceil(this.datos.length / this.itemsPorPagina);
-    
-    this.tbody.innerHTML = '';
-    paginaDatos.forEach(filaData => {
-        const fila = document.createElement('tr');
         
-        filaData.forEach((celdaData, index) => {
-            const celda = document.createElement('td');
+        const inicio = (this.paginaActual - 1) * this.itemsPorPagina;
+        const fin = inicio + this.itemsPorPagina;
+        const paginaDatos = this.datos.slice(inicio, fin);
+        const totalPaginas = Math.ceil(this.datos.length / this.itemsPorPagina);
+        
+        this.tbody.innerHTML = '';
+        
+        paginaDatos.forEach(item => {
+            const fila = document.createElement('tr');
             
-            // CENTRAR TODAS LAS CELDAS
-            celda.style.textAlign = 'center';
-            celda.style.verticalAlign = 'middle';
+            // Restaurar la clase original de la fila
+            fila.className = item.claseFila;
             
-            // Detectar si es la columna de Adquisición (última columna)
-            const esUltimaColumna = index === filaData.length - 1;
+            // Restaurar atributos data
+            if (item.dataTipo) fila.setAttribute('data-tipo', item.dataTipo);
+            if (item.dataNombre) fila.setAttribute('data-nombre', item.dataNombre);
+            if (item.dataCategoria) fila.setAttribute('data-categoria', item.dataCategoria);
+            if (item.dataProveedor) fila.setAttribute('data-proveedor', item.dataProveedor);
             
-            if (esUltimaColumna && (celdaData.includes('Pagado') || celdaData.includes('PAGADO'))) {
-                // Solo el badge con color, sin animaciones
-                celda.innerHTML = `<span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
-                                    <i class="fas fa-check-circle"></i> Pagado
-                                </span>`;
-            } 
-            else if (esUltimaColumna && (celdaData.includes('Concesión') || celdaData.includes('concesion'))) {
-                celda.innerHTML = `<span style="background: #f59e0b; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
-                                    <i class="fas fa-handshake"></i> Concesión
-                                </span>`;
-            }
-            else {
-                celda.innerHTML = celdaData;
-            }
+            item.celdas.forEach((celda, idx) => {
+                const td = document.createElement('td');
+                td.innerHTML = celda.html;
+                td.className = celda.clase;
+                td.style.textAlign = 'center';
+                td.style.verticalAlign = 'middle';
+                fila.appendChild(td);
+            });
             
-            fila.appendChild(celda);
+            this.tbody.appendChild(fila);
         });
-        this.tbody.appendChild(fila);
-    });
-    
-    const desde = this.datos.length > 0 ? inicio + 1 : 0;
-    const hasta = Math.min(fin, this.datos.length);
-    if (this.infoDesde) this.infoDesde.textContent = desde;
-    if (this.infoHasta) this.infoHasta.textContent = hasta;
-    if (this.infoTotal) this.infoTotal.textContent = this.datos.length;
-    
-    this.renderizarPaginacion(totalPaginas);
-    
-    if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
-        this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'flex';
+        
+        const desde = this.datos.length > 0 ? inicio + 1 : 0;
+        const hasta = Math.min(fin, this.datos.length);
+        if (this.infoDesde) this.infoDesde.textContent = desde;
+        if (this.infoHasta) this.infoHasta.textContent = hasta;
+        if (this.infoTotal) this.infoTotal.textContent = this.datos.length;
+        
+        this.renderizarPaginacion(totalPaginas);
+        
+        if (this.itemsPorPaginaSelect && this.itemsPorPaginaSelect.closest('.pagination-controls')) {
+            this.itemsPorPaginaSelect.closest('.pagination-controls').style.display = 'flex';
+        }
+        if (this.paginacionDiv) this.paginacionDiv.style.display = 'block';
+        if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
+            this.infoDesde.closest('.pagination-info').style.display = 'block';
+        }
+        
+        // Aplicar estilos después de renderizar
+        this.aplicarEstilosTabla();
     }
-    if (this.paginacionDiv) this.paginacionDiv.style.display = 'block';
-    if (this.infoDesde && this.infoDesde.closest('.pagination-info')) {
-        this.infoDesde.closest('.pagination-info').style.display = 'block';
+    
+    aplicarEstilosTabla() {
+        // Aplicar estilos a todas las filas
+        const filas = this.tbody.querySelectorAll('tr');
+        filas.forEach(fila => {
+            const celdas = fila.querySelectorAll('td');
+            
+            // Verificar si es un producto pagado (por la clase de la fila)
+            const esPagado = fila.classList.contains('table-success');
+            
+            celdas.forEach((celda, idx) => {
+                // Centrar todas las celdas
+                celda.style.textAlign = 'center';
+                celda.style.verticalAlign = 'middle';
+                celda.style.padding = '12px 8px';
+                
+                // Columna de Ganancia (índice 6) - Color verde como en la imagen
+                if (idx === 6) {
+                    celda.style.fontWeight = 'bold';
+                    celda.style.color = '#2e7d32';  // Verde oscuro como en la imagen
+                }
+                
+                // Columna de Stock Restante (índice 3) - Badge como en la imagen
+                if (idx === 3) {
+                    const stockText = celda.innerText.trim();
+                    const stockNum = parseInt(stockText);
+                    if (!isNaN(stockNum)) {
+                        let badgeClass = '';
+                        if (stockNum <= 0) {
+                            badgeClass = 'badge-danger';
+                        } else if (stockNum <= 5) {
+                            badgeClass = 'badge-warning';
+                        } else {
+                            badgeClass = 'badge-success';
+                        }
+                        // Mantener el badge original de Bootstrap como en la imagen
+                        celda.innerHTML = `<span class="badge ${badgeClass}" style="padding: 5px 10px; border-radius: 4px; font-size: 0.75rem;">${stockText}</span>`;
+                    }
+                }
+                
+                // Columna de Adquisición (última columna) - Badges como en la imagen
+                if (idx === celdas.length - 1) {
+                    const texto = celda.innerText.trim();
+                    if (texto.includes('Pagado') || texto.includes('PAGADO')) {
+                        celda.innerHTML = `<span class="badge-adquisicion badge-pagado" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 5px;">
+                            <i class="fas fa-check-circle"></i> Pagado
+                        </span>`;
+                    } else if (texto.includes('Concesión') || texto.includes('concesion')) {
+                        celda.innerHTML = `<span class="badge-adquisicion badge-concesion" style="background: #fd7e14; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 5px;">
+                            <i class="fas fa-handshake"></i> Concesión
+                        </span>`;
+                    }
+                }
+            });
+        });
     }
-}
     
     renderizarPaginacion(totalPaginas) {
         if (!this.paginacionDiv) return;
@@ -2947,6 +3010,43 @@ renderizar() {
                 if (!isNaN(pagina) && pagina !== this.paginaActual) {
                     this.paginaActual = pagina;
                     this.renderizar();
+                }
+            });
+        });
+    }
+}
+
+// Clase para la tabla de Deuda con los mismos colores
+class TablaDeudaDinamica extends TablaDinamica {
+    aplicarEstilosTabla() {
+        const filas = this.tbody.querySelectorAll('tr');
+        filas.forEach(fila => {
+            const celdas = fila.querySelectorAll('td');
+            const esPagado = fila.classList.contains('table-success');
+            
+            celdas.forEach((celda, idx) => {
+                celda.style.textAlign = 'center';
+                celda.style.verticalAlign = 'middle';
+                celda.style.padding = '12px 8px';
+                
+                // Columna de Deuda total (índice 4) - Color rojo como en la imagen
+                if (idx === 4 && !esPagado) {
+                    celda.style.fontWeight = 'bold';
+                    celda.style.color = '#dc3545';  // Rojo como en la imagen
+                }
+                
+                // Columna de Adquisición (última columna)
+                if (idx === celdas.length - 1) {
+                    const texto = celda.innerText.trim();
+                    if (texto.includes('Pagado') || texto.includes('PAGADO')) {
+                        celda.innerHTML = `<span class="badge-adquisicion badge-pagado" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.7rem;">
+                            <i class="fas fa-check-circle"></i> Pagado
+                        </span>`;
+                    } else {
+                        celda.innerHTML = `<span class="badge-adquisicion badge-concesion" style="background: #fd7e14; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.7rem;">
+                            <i class="fas fa-handshake"></i> Concesión
+                        </span>`;
+                    }
                 }
             });
         });

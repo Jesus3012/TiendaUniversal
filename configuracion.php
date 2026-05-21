@@ -1,5 +1,4 @@
 <?php
-
 date_default_timezone_set('America/Mexico_City');
 
 session_start();
@@ -623,16 +622,16 @@ if ($fecha_obtenida) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>Panel de Configuración - Pescadores de la Prehistoria</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-    <style>
+        <style>
         /* =====================================================
-           ESTILOS NARANJA - MÓDULO DE CONFIGURACIÓN
+           ESTILOS NARANJA - MÓDULO DE CONFIGURACIÓN RESPONSIVE
         ===================================================== */
         :root {
             --primary: #f97316;
@@ -644,38 +643,62 @@ if ($fecha_obtenida) {
             --info: #3b82f6;
         }
 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #fef9f1 0%, #f8fafc 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
         .content-wrapper {
             min-height: 100vh;
-            padding: 24px;
-            background: linear-gradient(135deg, #fef9f1 0%, #f8fafc 100%);
+            padding: 20px;
+            padding-bottom: 80px;
         }
 
         .content-header h1 {
             font-size: 1.5rem;
             font-weight: 700;
             color: #1e293b;
+            margin-bottom: 8px;
         }
         .content-header h1 i { color: #f97316; }
+        .content-header small {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
 
         .card {
             border-radius: 20px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             border: 1px solid #eef2f6;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
+            background: white;
         }
         .card-header {
             background: white;
             border-bottom: 2px solid #f97316;
-            padding: 1rem 1.5rem;
+            padding: 0.8rem 1.2rem;
             border-radius: 20px 20px 0 0;
         }
         .card-header .card-title {
             font-weight: 700;
             color: #1e293b;
-            font-size: 1.1rem;
+            font-size: 1rem;
+            margin: 0;
         }
-        .card-header .card-title i { color: #f97316; }
-        .card-body { padding: 1.5rem; }
+        .card-header .card-title i { color: #f97316; margin-right: 8px; }
+        .card-body { padding: 1.2rem; }
+        .card-footer {
+            background: white;
+            border-top: 1px solid #eef2f6;
+            padding: 0.8rem 1.2rem;
+            border-radius: 0 0 20px 20px;
+        }
 
         .form-group { margin-bottom: 1rem; }
         .form-group label {
@@ -683,12 +706,15 @@ if ($fecha_obtenida) {
             font-size: 0.75rem;
             color: #475569;
             margin-bottom: 0.3rem;
+            display: block;
         }
         .form-control, .form-select {
             border-radius: 10px;
             border: 1px solid #e2e8f0;
             padding: 0.5rem 0.8rem;
             font-size: 0.85rem;
+            width: 100%;
+            background: white;
             transition: all 0.2s ease;
         }
         .form-control:focus, .form-select:focus {
@@ -697,174 +723,299 @@ if ($fecha_obtenida) {
             outline: none;
         }
 
-        .btn-primary { background: #f97316; border-color: #f97316; border-radius: 10px; }
-        .btn-primary:hover { background: #ea580c; transform: translateY(-1px); }
-        .btn-success { background: #22c55e; border-color: #22c55e; border-radius: 10px; }
-        .btn-danger { background: #ef4444; border-color: #ef4444; border-radius: 10px; }
-        .btn-warning { background: #f59e0b; border-color: #f59e0b; color: white; border-radius: 10px; }
-        .btn-secondary { background: #64748b; border-color: #64748b; border-radius: 10px; }
-        .btn-info { background: #3b82f6; border-color: #3b82f6; color: white; border-radius: 10px; }
-        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+        .btn {
+            border-radius: 10px;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-primary { background: #f97316; color: white; }
+        .btn-primary:hover, .btn-primary:active { background: #ea580c; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-secondary { background: #64748b; color: white; }
+        .btn-info { background: #3b82f6; color: white; }
+        .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.7rem; }
 
         .acciones-btns {
             display: flex;
             gap: 5px;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             justify-content: flex-start;
         }
         .acciones-btns .btn {
             padding: 0.25rem 0.5rem;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             white-space: nowrap;
         }
 
         .table {
             margin-bottom: 0;
             background: white;
+            font-size: 0.8rem;
         }
         .table thead th {
             background: #f97316;
             color: white;
             font-weight: 600;
-            padding: 12px 16px;
+            padding: 10px 12px;
             border-bottom: none;
-            font-size: 0.85rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
         }
         .table tbody td {
-            padding: 10px 16px;
+            padding: 8px 12px;
             vertical-align: middle;
             border-bottom: 1px solid #eef2f6;
-            font-size: 0.85rem;
+            font-size: 0.75rem;
         }
         .table tbody tr:hover td { background-color: #fef9f1; }
 
+        .badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
         .badge-success { background: #22c55e; color: white; }
         .badge-danger { background: #ef4444; color: white; }
         .badge-warning { background: #f59e0b; color: white; }
         .badge-info { background: #3b82f6; color: white; }
         .badge-secondary { background: #64748b; color: white; }
 
-        .logo-preview {
-            max-width: 120px;
-            max-height: 80px;
-            border-radius: 10px;
-            border: 2px solid #e2e8f0;
-            padding: 5px;
-            background: white;
-            object-fit: contain;
-        }
-
-        .nav-tabs {
-            border-bottom: 2px solid #e2e8f0;
+        /* Tabs - Distribución uniforme */
+        .nav-tabs-wrapper {
             margin-bottom: 1.5rem;
+            background: white;
+            border-radius: 16px;
+            width: 100%;
+        }
+        
+        .nav-tabs {
             display: flex;
             flex-wrap: wrap;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 0;
+            margin: 0;
             list-style: none;
-            padding-left: 0;
             background: white;
             border-radius: 16px 16px 0 0;
-            padding: 0.5rem 1rem 0 1rem;
+            width: 100%;
         }
+        
         .nav-tabs .nav-item {
             margin-bottom: -2px;
+            flex: 1;
+            text-align: center;
         }
+        
         .nav-tabs .nav-link {
             display: block;
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem 0.5rem;
             color: #64748b;
             font-weight: 600;
+            font-size: 0.85rem;
             border: none;
             background: transparent;
             border-radius: 12px 12px 0 0;
             transition: all 0.2s;
             cursor: pointer;
             text-decoration: none;
+            text-align: center;
+            width: 100%;
         }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+            font-size: 0.85rem;
+        }
+        
         .nav-tabs .nav-link:hover {
             color: #f97316;
             background: rgba(249, 115, 22, 0.1);
         }
+        
         .nav-tabs .nav-link.active {
             color: #f97316;
             background: white;
             border-bottom: 3px solid #f97316;
         }
-        .nav-tabs .nav-link i {
-            margin-right: 8px;
+        
+        /* En móvil: scroll horizontal si es necesario */
+        @media (max-width: 768px) {
+            .nav-tabs-wrapper {
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+            }
+            
+            .nav-tabs {
+                flex-wrap: nowrap;
+                min-width: max-content;
+                width: auto;
+            }
+            
+            .nav-tabs .nav-item {
+                flex: 0 0 auto;
+            }
+            
+            .nav-tabs .nav-link {
+                padding: 0.6rem 1rem;
+                white-space: nowrap;
+            }
         }
-
-        .tab-content {
-            margin-top: 0;
+        
+        /* Para tablets */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .nav-tabs .nav-link {
+                padding: 0.7rem 0.8rem;
+                font-size: 0.8rem;
+            }
+            
+            .nav-tabs .nav-link i {
+                margin-right: 5px;
+                font-size: 0.8rem;
+            }
         }
-        .tab-pane {
-            display: none;
-            animation: fadeIn 0.3s ease;
+        
+        /* Grid de imágenes responsivo */
+        .imagenes-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-top: 10px;
         }
-        .tab-pane.active {
+        .imagen-card {
+            border: 1px solid #eef2f6;
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+            background: white;
+        }
+        .imagen-preview {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 15px;
+            min-height: 130px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        .imagen-preview img {
+            max-height: 80px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        .custom-file {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        .custom-file-input {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 40px;
+            margin: 0;
+            opacity: 0;
+        }
+        .custom-file-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            z-index: 1;
+            height: 40px;
+            padding: 0.5rem 0.8rem;
+            font-size: 0.75rem;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #495057;
+            background-color: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .custom-file-label::after {
+            content: "Buscar";
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 3;
             display: block;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            height: 38px;
+            padding: 0.5rem 0.8rem;
+            line-height: 1.5;
+            color: #f97316;
+            content: "Buscar";
+            background-color: #fef9f1;
+            border-left: 1px solid #e2e8f0;
+            border-radius: 0 10px 10px 0;
         }
 
+        /* Acerca del Sistema */
         .acerca-card {
             background: linear-gradient(135deg, #fff 0%, #fef9f1 100%);
             border-radius: 20px;
-            padding: 30px;
+            padding: 20px;
             text-align: center;
             margin-top: 20px;
         }
         .acerca-logo {
-            width: 120px;
-            height: 120px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
             object-fit: cover;
-            margin-bottom: 20px;
-            border: 4px solid #f97316;
-            padding: 5px;
+            margin-bottom: 15px;
+            border: 3px solid #f97316;
+            padding: 4px;
             background: white;
         }
         .acerca-titulo {
-            font-size: 1.8rem;
+            font-size: 1.3rem;
             font-weight: 700;
             color: #1e293b;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .acerca-subtitulo {
             color: #f97316;
-            font-size: 1rem;
-            margin-bottom: 20px;
+            font-size: 0.8rem;
+            margin-bottom: 15px;
         }
         .acerca-info {
             background: white;
             border-radius: 16px;
-            padding: 20px;
-            margin-top: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 15px;
+            margin-top: 15px;
+            text-align: left;
         }
         .acerca-info-item {
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
-            padding: 12px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #eef2f6;
+            font-size: 0.75rem;
         }
         .acerca-info-item:last-child { border-bottom: none; }
-        .acerca-info-label { font-weight: 600; color: #475569; }
-        .acerca-info-value { color: #1e293b; }
-
-        .image-preview-container {
-            margin-top: 10px;
-        }
-        #logoPreview {
-            max-width: 150px;
-            max-height: 100px;
-            border-radius: 10px;
-            border: 2px solid #f97316;
-            padding: 5px;
-            background: #fef9f1;
-            display: none;
-        }
+        .acerca-info-label { font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px; }
+        .acerca-info-value { color: #1e293b; text-align: right; word-break: break-word; }
 
         .card-header-flex {
             display: flex;
@@ -873,42 +1024,121 @@ if ($fecha_obtenida) {
             flex-wrap: wrap;
             gap: 10px;
         }
-        .btn-header {
-            margin-left: auto;
-        }
 
         .pagination {
             margin-top: 1rem;
             margin-bottom: 0;
+            flex-wrap: wrap;
+            justify-content: center;
         }
         .page-link {
             color: #f97316;
             border-radius: 8px;
-            margin: 0 2px;
+            margin: 2px;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.7rem;
+            border: 1px solid #e2e8f0;
         }
         .page-item.active .page-link {
             background-color: #f97316;
             border-color: #f97316;
-        }
-        .page-link:hover {
-            color: #ea580c;
+            color: white;
         }
 
         .table-responsive {
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
+        /* Modal Responsive */
+        .modal-dialog {
+            margin: 10px;
+        }
+        .modal-content {
+            border-radius: 20px;
+        }
+        .modal-header {
+            border-bottom: 2px solid #f97316;
+            padding: 0.8rem 1rem;
+        }
+        .modal-body {
+            padding: 1rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .modal-footer {
+            padding: 0.8rem 1rem;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        /* Media Queries para Móvil */
         @media (max-width: 768px) {
-            .content-wrapper { padding: 16px; }
-            .nav-tabs .nav-link { padding: 0.5rem 1rem; font-size: 0.85rem; }
-            .table td, .table th { font-size: 0.7rem; padding: 8px; }
-            .card-header-flex { flex-direction: column; align-items: stretch; }
-            .btn-header { margin-left: 0; width: 100%; }
-            .acciones-btns { flex-wrap: wrap; }
+            .content-wrapper { 
+                padding: 12px; 
+            }
+            .card-header {
+                padding: 0.6rem 1rem;
+            }
+            .card-body {
+                padding: 1rem;
+            }
+            .card-footer {
+                padding: 0.6rem 1rem;
+            }
+            .card-header-flex {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .btn-header {
+                width: 100%;
+            }
+            .table thead th {
+                font-size: 0.65rem;
+                padding: 6px 8px;
+            }
+            .table tbody td {
+                font-size: 0.65rem;
+                padding: 6px 8px;
+            }
+            .btn {
+                width: 100%;
+            }
+            .card-footer .btn {
+                width: 100%;
+            }
+            .modal-footer {
+                flex-direction: column;
+            }
+            .modal-footer .btn {
+                width: 100%;
+                margin: 4px 0;
+            }
+            .acerca-info-item {
+                flex-direction: column;
+                gap: 5px;
+            }
+            .acerca-info-value {
+                text-align: left;
+            }
+            .acciones-btns {
+                justify-content: center;
+            }
         }
 
-        /* ==================== PROTEGER SIDEBAR DE ESTILOS EXTERNOS ==================== */
-        /* Evita que Bootstrap u otros estilos pinten el sidebar de azul */
+        @media (min-width: 769px) {
+            .imagenes-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .btn {
+                width: auto;
+            }
+            .card-footer .btn {
+                width: auto;
+            }
+        }
+
+        /* Sidebar protection */
         .sidebar-custom .nav-link,
         .sidebar-custom .nav-link:hover,
         .sidebar-custom .nav-link:focus,
@@ -942,14 +1172,16 @@ if ($fecha_obtenida) {
     <section class="content">
         <div class="container-fluid">
             <!-- Tabs de navegación -->
-            <ul class="nav nav-tabs" id="configTabs" role="tablist">
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'backup' ? 'active' : '' ?>" data-tab="backup"><i class="fas fa-database"></i> Respaldos</button></li>
-                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" data-tab="auditoria"><i class="fas fa-history"></i> Auditoría</button></li>
-            </ul>
+            <div class="nav-tabs-wrapper">
+                <ul class="nav nav-tabs" id="configTabs" role="tablist">
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'backup' ? 'active' : '' ?>" data-tab="backup"><i class="fas fa-database"></i> Respaldos</button></li>
+                    <li class="nav-item"><button class="nav-link <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" data-tab="auditoria"><i class="fas fa-history"></i> Auditoría</button></li>
+                </ul>
+            </div>
 
             <div class="tab-content">
                 <form method="POST" id="tabForm">
@@ -999,69 +1231,58 @@ if ($fecha_obtenida) {
                                 </div>
                                 
                                 <!-- Sección de Logo mejorada -->
-<!-- Sección de Logo y Dashboard mejorada -->
-<div class="form-group">
-    <label class="font-weight-bold mb-3">Imágenes de la tienda</label>
-    <div class="row">
-        <!-- Logo de la tienda -->
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h6 class="card-title mb-3"><i class="fas fa-image mr-2"></i> Logo de la tienda</h6>
-                    <div class="border rounded p-3 bg-light mb-3" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
-                        <?php if ($logo_path && file_exists($logo_path)): ?>
-                            <img src="<?= $logo_path ?>?v=<?= time() ?>" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;" id="currentLogo">
-                        <?php else: ?>
-                            <div class="text-center" id="currentLogo">
-                                <i class="fas fa-store fa-3x text-muted"></i>
-                                <p class="small text-muted mt-1 mb-0">Sin logo</p>
+                            <!-- Sección de Logo y Dashboard mejorada -->
+                            <div class="imagenes-grid">
+                                <!-- Logo de la tienda -->
+                                <div class="imagen-card">
+                                    <h6 class="mb-3"><i class="fas fa-image mr-2"></i> Logo de la tienda</h6>
+                                    <div class="imagen-preview">
+                                        <?php if ($logo_path && file_exists($logo_path)): ?>
+                                            <img src="<?= $logo_path ?>?v=<?= time() ?>" id="currentLogo">
+                                        <?php else: ?>
+                                            <div class="text-center" id="currentLogo">
+                                                <i class="fas fa-store fa-3x text-muted"></i>
+                                                <p class="small text-muted mt-2 mb-0">Sin logo</p>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="custom-file">
+                                        <input type="file" name="logo" accept="image/*" id="logoInput" class="custom-file-input" onchange="previewLogo(this, 'logoPreview', 'logoPreviewContainer')">
+                                        <label class="custom-file-label" for="logoInput">Seleccionar logo</label>
+                                        <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
+                                    </div>
+                                    <div id="logoPreviewContainer" style="display: none;" class="mt-3">
+                                        <label class="text-muted small">Vista previa:</label>
+                                        <img id="logoPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
+                                    </div>
+                                </div>
+                                
+                                <!-- Imagen del Dashboard Principal -->
+                                <div class="imagen-card">
+                                    <h6 class="mb-3"><i class="fas fa-tachometer-alt mr-2"></i> Imagen del Dashboard</h6>
+                                    <div class="imagen-preview">
+                                        <?php 
+                                        $dashboard_img = $config_general['imagen_dashboard'] ?? '';
+                                        if ($dashboard_img && file_exists($dashboard_img)): ?>
+                                            <img src="<?= $dashboard_img ?>?v=<?= time() ?>" id="currentDashboardImg">
+                                        <?php else: ?>
+                                            <div class="text-center" id="currentDashboardImg">
+                                                <i class="fas fa-chart-line fa-3x text-muted"></i>
+                                                <p class="small text-muted mt-2 mb-0">Imagen por defecto</p>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="custom-file">
+                                        <input type="file" name="imagen_dashboard" accept="image/*" id="dashboardInput" class="custom-file-input" onchange="previewLogo(this, 'dashboardPreview', 'dashboardPreviewContainer')">
+                                        <label class="custom-file-label" for="dashboardInput">Seleccionar imagen</label>
+                                        <small class="text-muted d-block mt-2">Formatos: JPG, PNG, GIF, WEBP</small>
+                                    </div>
+                                    <div id="dashboardPreviewContainer" style="display: none;" class="mt-3">
+                                        <label class="text-muted small">Vista previa:</label>
+                                        <img id="dashboardPreview" class="img-fluid border rounded p-1" style="max-height: 60px;">
+                                    </div>
+                                </div>
                             </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="custom-file">
-                        <input type="file" name="logo" accept="image/*" id="logoInput" class="custom-file-input" onchange="previewLogo(this, 'logoPreview', 'logoPreviewContainer')">
-                        <label class="custom-file-label" for="logoInput">Seleccionar logo</label>
-                        <small class="text-muted d-block mt-1">Formatos: JPG, PNG, GIF, WEBP</small>
-                    </div>
-                    <div id="logoPreviewContainer" style="display: none;" class="mt-3">
-                        <label class="text-muted small">Vista previa:</label>
-                        <img id="logoPreview" class="img-fluid border rounded p-1" style="max-height: 80px;">
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Imagen del Dashboard Principal -->
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h6 class="card-title mb-3"><i class="fas fa-tachometer-alt mr-2"></i> Imagen del Dashboard</h6>
-                    <div class="border rounded p-3 bg-light mb-3" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
-                        <?php 
-                        $dashboard_img = $config_general['imagen_dashboard'] ?? '';
-                        if ($dashboard_img && file_exists($dashboard_img)): ?>
-                            <img src="<?= $dashboard_img ?>?v=<?= time() ?>" class="img-fluid" style="max-height: 100px; max-width: 100%; object-fit: contain;" id="currentDashboardImg">
-                        <?php else: ?>
-                            <div class="text-center" id="currentDashboardImg">
-                                <i class="fas fa-chart-line fa-3x text-muted"></i>
-                                <p class="small text-muted mt-1 mb-0">Imagen por defecto</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="custom-file">
-                        <input type="file" name="imagen_dashboard" accept="image/*" id="dashboardInput" class="custom-file-input" onchange="previewLogo(this, 'dashboardPreview', 'dashboardPreviewContainer')">
-                        <label class="custom-file-label" for="dashboardInput">Seleccionar imagen</label>
-                        <small class="text-muted d-block mt-1">Formatos: JPG, PNG, GIF, WEBP (Tamaño recomendado: 1200x400px)</small>
-                    </div>
-                    <div id="dashboardPreviewContainer" style="display: none;" class="mt-3">
-                        <label class="text-muted small">Vista previa:</label>
-                        <img id="dashboardPreview" class="img-fluid border rounded p-1" style="max-height: 80px;">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
                             </div>
                             <div class="card-footer text-right">
                                 <button type="submit" name="action" value="update_general" class="btn btn-primary">
