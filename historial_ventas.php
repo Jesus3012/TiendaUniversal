@@ -335,6 +335,113 @@ table.dataTable tbody td:first-child {
     border-top: 1px solid #e2e8f0;
     padding: 15px 20px;
 }
+
+/* =====================================================
+   VERSIÓN ULTRA COMPACTA PARA MÓVIL
+   TODO EN UNA SOLA LÍNEA
+===================================================== */
+@media (max-width: 768px) {
+    /* Ocultar thead */
+    .dataTable thead {
+        display: none;
+    }
+    
+    /* Cada venta como tarjeta compacta */
+    .dataTable tbody tr {
+        display: block;
+        margin-bottom: 8px;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    
+    /* Todas las celdas en UNA SOLA LÍNEA */
+    .dataTable tbody td {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px !important;
+        font-size: 0.7rem !important;
+        border: none !important;
+        background: white;
+        width: auto !important;
+    }
+    
+    /* Primera celda (Folio) - más ancha */
+    .dataTable tbody td:first-child {
+        background: linear-gradient(135deg, #fff7ed, #ffffff);
+        font-weight: 700;
+        font-size: 0.7rem;
+        padding: 8px 10px !important;
+        display: flex !important;
+        width: 100% !important;
+        border-bottom: 1px solid #fef3c7 !important;
+    }
+    
+    /* Ocultar data-label en primera celda */
+    .dataTable tbody td:first-child:before {
+        display: none;
+    }
+    
+    /* Resto de celdas en línea horizontal */
+    .dataTable tbody td:not(:first-child) {
+        display: inline-flex !important;
+        width: auto !important;
+        padding: 5px 8px !important;
+        gap: 4px;
+    }
+    
+    /* Etiquetas pequeñas */
+    .dataTable tbody td:not(:first-child):before {
+        content: attr(data-label);
+        font-size: 0.55rem;
+        font-weight: 600;
+        color: #f97316;
+        margin-right: 4px;
+    }
+    
+    /* Badge de estado compacto */
+    .badge-pedido {
+        font-size: 0.55rem !important;
+        padding: 2px 6px !important;
+        border-radius: 15px !important;
+    }
+    
+    .badge-pedido i {
+        font-size: 0.5rem;
+        margin-right: 2px;
+    }
+    
+    /* Contenedor de acciones en línea */
+    .dataTable tbody td:last-child {
+        display: inline-flex !important;
+        gap: 5px;
+        background: transparent;
+        padding: 5px 8px !important;
+    }
+    
+    /* Botones de acción compactos */
+    .btn-ver-ticket {
+        padding: 2px 6px !important;
+        font-size: 0.55rem !important;
+        border-radius: 12px !important;
+    }
+    
+    .dataTable tbody td:last-child a {
+        font-size: 0.6rem;
+        padding: 2px 3px;
+    }
+    
+    .dataTable tbody td:last-child a i {
+        font-size: 0.55rem;
+    }
+    
+    /* Separador entre elementos */
+    .dataTable tbody td:not(:first-child) + td:not(:first-child) {
+        border-left: 1px solid #e9ecef;
+    }
+}
 </style>
 
 <!-- Content Wrapper -->
@@ -761,7 +868,8 @@ function cargarVentas() {
         drawCallback: function(settings) {
             $('.dataTables_paginate .paginate_button').addClass('btn btn-sm');
             bindAcciones();
-            
+            agregarDataLabels();
+
             var api = this.api();
             if (api.rows().count() === 0) {
                 $('#tablaVentas tbody').html(`
@@ -782,6 +890,23 @@ function cargarVentas() {
         }
     });
 }
+
+function agregarDataLabels() {
+    var columnas = ['', '', '', '', ''];
+    
+    $('#tablaVentas tbody tr').each(function() {
+        $(this).find('td').each(function(index) {
+            if (index > 0 && columnas[index-1]) {
+                $(this).attr('data-label', columnas[index-1]);
+            }
+        });
+    });
+}
+
+// Llamar después de cada recarga
+$('#tablaVentas').on('draw.dt', function() {
+    agregarDataLabels();
+});
 
 function bindAcciones() {
     // Botón Ver Ticket

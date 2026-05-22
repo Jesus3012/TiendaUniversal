@@ -880,7 +880,7 @@ if (!empty($errors)) {
 }
 ?>
 
-<link rel="stylesheet" href="css/ajustes_productos.css">
+<link rel="stylesheet" href="css/ajustes_productos.css?v=<?= time() ?>">
 
 <div class="content-wrapper">
     <div class="container-fluid">
@@ -1064,6 +1064,94 @@ if (!empty($errors)) {
                                     <?php endif; ?>
                                 </tbody>
                             </table>
+                        </div>
+                        <!-- VISTA MÓVIL - TARJETAS COMPACTAS -->
+                        <div class="productos-grid-mobile" id="productosGridMobile">
+                            <?php foreach ($productos as $p): 
+                                $stockClass = $p['cantidad'] <= 0 ? 'stock-bajo' : ($p['cantidad'] <= 5 ? 'stock-bajo' : 'stock-alto');
+                                $stockText = $p['tipo_inventario'] == 'insumo' ? number_format($p['cantidad'], 2) . ' m' : number_format($p['cantidad'], 0) . ' pz';
+                            ?>
+                            <div class="producto-card-mobile" data-tipo="<?= $p['tipo_inventario'] ?>" data-nombre="<?= strtolower($p['nombre']) ?>">
+                                
+                                <!-- Fila 1: Tipo + Nombre + Stock -->
+                                <div class="card-row-top">
+                                    <span class="tipo-badge <?= $p['tipo_inventario'] == 'producto' ? 'tipo-producto' : 'tipo-insumo' ?>">
+                                        <i class="fas <?= $p['tipo_inventario'] == 'producto' ? 'fa-box' : 'fa-cubes' ?>"></i>
+                                        <?= $p['tipo_inventario'] == 'producto' ? 'Producto' : 'Insumo' ?>
+                                    </span>
+                                    <span class="nombre-producto-mobile" title="<?= htmlspecialchars($p['nombre']) ?>">
+                                        <?= htmlspecialchars(substr($p['nombre'], 0, 30)) ?>
+                                    </span>
+                                    <span class="stock-badge-mobile <?= $stockClass ?>">
+                                        <i class="fas fa-boxes"></i> <?= $stockText ?>
+                                    </span>
+                                </div>
+                                
+                                <!-- Fila 2: Categoría + Proveedor + Imagen -->
+                                <div class="card-row-middle">
+                                    <div class="info-group">
+                                        <span class="info-item">
+                                            <i class="fas fa-tag"></i>
+                                            <span class="badge"><?= htmlspecialchars($p['categoria'] ?? 'Sin categoría') ?></span>
+                                        </span>
+                                        <span class="info-item">
+                                            <i class="fas fa-truck"></i>
+                                            <span class="badge"><?= htmlspecialchars($p['proveedor'] ?? 'Sin proveedor') ?></span>
+                                        </span>
+                                    </div>
+                                    <div class="imagen-miniatura">
+                                        <?php if ($p['imagen'] && file_exists($p['imagen'])): ?>
+                                            <img src="<?= $p['imagen'] ?>" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;">
+                                        <?php else: ?>
+                                            <i class="fas fa-image"></i>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                
+                                <!-- Fila 3: Precios + Adquisición + Acciones -->
+                                <div class="card-row-bottom">
+                                    <div class="precios-group">
+                                        <div class="precio-item">
+                                            <span>Compra</span>
+                                            <span class="precio-compra">$<?= number_format($p['precio_compra'], 2) ?></span>
+                                        </div>
+                                        <?php if ($p['tipo_inventario'] == 'producto'): ?>
+                                        <div class="precio-item">
+                                            <span>Venta</span>
+                                            <span class="precio-venta">$<?= number_format($p['precio_venta'], 2) ?></span>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    
+                                    <?php if ($p['tipo_inventario'] == 'producto'): ?>
+                                    <span class="adquisicion-badge <?= $p['tipo_adquisicion'] == 'pagado' ? 'adq-pagado' : 'adq-concesion' ?>">
+                                        <i class="fas <?= $p['tipo_adquisicion'] == 'pagado' ? 'fa-check-circle' : 'fa-handshake' ?>"></i>
+                                        <?= $p['tipo_adquisicion'] == 'pagado' ? 'Pagado' : 'Concesión' ?>
+                                    </span>
+                                    <?php endif; ?>
+                                    
+                                    <div class="acciones-group">
+                                        <?php if ($p['tipo_inventario'] == 'producto'): ?>
+                                        <button class="accion-btn pdf-link" onclick="window.open('uploads/codigos/producto_<?= $p['id'] ?>.pdf', '_blank')">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </button>
+                                        <?php endif; ?>
+                                        <button class="accion-btn agregar" onclick="abrirModalAgregarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <button class="accion-btn ajustar" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                            <i class="fas fa-sliders-h"></i>
+                                        </button>
+                                        <button class="accion-btn editar" onclick="editarProducto(<?= $p['id'] ?>)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="accion-btn eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
                         </div>
 
                         <!-- Mensaje sin resultados -->
@@ -1374,16 +1462,25 @@ if (!empty($errors)) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-// ===== FILTROS Y BÚSQUEDA =====
+// ===== FILTROS Y BÚSQUEDA - VERSIÓN COMPLETA (TABLA + TARJETAS MÓVIL) =====
 let filtroActual = 'todos';
 let busquedaActual = '';
 let filasVisibles = [];
+let tarjetasVisibles = [];
 let paginaActual = 1;
-let filasPorPagina = 15;
+let filasPorPagina = 10;
+
+// Detectar si es móvil
+function isMobile() {
+    return window.innerWidth <= 768;
+}
 
 function aplicarFiltros() {
+    const esMovil = isMobile();
+    
+    // ===== FILTRAR TABLA (DESKTOP) =====
     const filasTabla = document.querySelectorAll('#tablaBody .producto-fila');
-    let visibles = 0;
+    let visiblesTabla = 0;
     
     filasTabla.forEach(fila => {
         const tipo = fila.getAttribute('data-tipo');
@@ -1408,57 +1505,103 @@ function aplicarFiltros() {
         
         if (mostrar) {
             fila.style.display = '';
-            visibles++;
+            visiblesTabla++;
         } else {
             fila.style.display = 'none';
         }
     });
     
+    // ===== FILTRAR TARJETAS (MÓVIL) =====
+    const tarjetas = document.querySelectorAll('.producto-card-mobile');
+    let visiblesTarjetas = 0;
+    
+    tarjetas.forEach(tarjeta => {
+        const tipo = tarjeta.getAttribute('data-tipo');
+        const nombre = tarjeta.getAttribute('data-nombre') || '';
+        
+        let mostrar = true;
+        
+        if (filtroActual !== 'todos') {
+            if (tipo !== filtroActual) {
+                mostrar = false;
+            }
+        }
+        
+        if (mostrar && busquedaActual !== '') {
+            if (!nombre.includes(busquedaActual.toLowerCase())) {
+                mostrar = false;
+            }
+        }
+        
+        if (mostrar) {
+            tarjeta.style.display = '';
+            visiblesTarjetas++;
+        } else {
+            tarjeta.style.display = 'none';
+        }
+    });
+    
     const sinResultadosMsg = document.getElementById('sinResultadosMsg');
     const paginacionWrapper = document.getElementById('paginacionWrapper');
+    const totalVisibles = esMovil ? visiblesTarjetas : visiblesTabla;
     
-    if (visibles === 0) {
-        sinResultadosMsg.style.display = 'block';
-        paginacionWrapper.style.display = 'none';
+    if (totalVisibles === 0) {
+        if (sinResultadosMsg) sinResultadosMsg.style.display = 'block';
+        if (paginacionWrapper) paginacionWrapper.style.display = 'none';
         document.getElementById('paginacion_desde').textContent = '0';
         document.getElementById('paginacion_hasta').textContent = '0';
         document.getElementById('paginacion_total').textContent = '0';
     } else {
-        sinResultadosMsg.style.display = 'none';
-        paginacionWrapper.style.display = 'flex';
+        if (sinResultadosMsg) sinResultadosMsg.style.display = 'none';
+        if (paginacionWrapper) paginacionWrapper.style.display = 'flex';
         
-        filasVisibles = Array.from(filasTabla).filter(f => f.style.display !== 'none');
+        if (esMovil) {
+            tarjetasVisibles = Array.from(tarjetas).filter(t => t.style.display !== 'none');
+        } else {
+            filasVisibles = Array.from(filasTabla).filter(f => f.style.display !== 'none');
+        }
         paginaActual = 1;
         actualizarPaginacion();
     }
 }
 
 function actualizarPaginacion() {
-    const totalFilas = filasVisibles.length;
-    const totalPaginas = Math.ceil(totalFilas / filasPorPagina);
+    const esMovil = isMobile();
+    const elementos = esMovil ? tarjetasVisibles : filasVisibles;
+    const totalElementos = elementos.length;
+    const totalPaginas = Math.ceil(totalElementos / filasPorPagina);
     
-    document.querySelectorAll('#tablaBody .producto-fila').forEach(f => f.style.display = 'none');
-    
-    const inicio = (paginaActual - 1) * filasPorPagina;
-    const fin = Math.min(inicio + filasPorPagina, totalFilas);
-    for (let i = inicio; i < fin; i++) {
-        if (filasVisibles[i]) filasVisibles[i].style.display = '';
+    // Ocultar todos los elementos
+    if (esMovil) {
+        document.querySelectorAll('.producto-card-mobile').forEach(el => el.style.display = 'none');
+    } else {
+        document.querySelectorAll('#tablaBody .producto-fila').forEach(el => el.style.display = 'none');
     }
     
-    document.getElementById('paginacion_desde').textContent = totalFilas > 0 ? inicio + 1 : 0;
+    // Mostrar solo los de la página actual
+    const inicio = (paginaActual - 1) * filasPorPagina;
+    const fin = Math.min(inicio + filasPorPagina, totalElementos);
+    for (let i = inicio; i < fin; i++) {
+        if (elementos[i]) elementos[i].style.display = '';
+    }
+    
+    // Actualizar contadores
+    document.getElementById('paginacion_desde').textContent = totalElementos > 0 ? inicio + 1 : 0;
     document.getElementById('paginacion_hasta').textContent = fin;
-    document.getElementById('paginacion_total').textContent = totalFilas;
+    document.getElementById('paginacion_total').textContent = totalElementos;
     
     const paginacionUl = document.getElementById('paginacion');
     paginacionUl.innerHTML = '';
     
     if (totalPaginas === 0) return;
     
+    // Botón anterior
     const liPrev = document.createElement('li');
     liPrev.className = `page-item ${paginaActual === 1 ? 'disabled' : ''}`;
     liPrev.innerHTML = `<a class="page-link" href="#" ${paginaActual !== 1 ? 'onclick="cambiarPagina(' + (paginaActual - 1) + ')"' : ''}>«</a>`;
     paginacionUl.appendChild(liPrev);
     
+    // Números de página
     const maxBotones = 5;
     let inicioPaginas = Math.max(1, paginaActual - Math.floor(maxBotones / 2));
     let finPaginas = Math.min(totalPaginas, inicioPaginas + maxBotones - 1);
@@ -1496,6 +1639,7 @@ function actualizarPaginacion() {
         paginacionUl.appendChild(liLast);
     }
     
+    // Botón siguiente
     const liNext = document.createElement('li');
     liNext.className = `page-item ${paginaActual === totalPaginas ? 'disabled' : ''}`;
     liNext.innerHTML = `<a class="page-link" ${paginaActual !== totalPaginas ? 'onclick="cambiarPagina(' + (paginaActual + 1) + ')"' : ''}>»</a>`;
@@ -1529,7 +1673,11 @@ function abrirModalAjustarStock(id, nombre, cantidadActual, tipoInventario) {
     document.getElementById('ajuste_nueva_cantidad').value = cantidadActual;
     document.getElementById('ajuste_razon').value = '';
     document.getElementById('ajuste_producto_info').innerHTML = `<div class="card border-warning"><div class="card-body py-2"><h6 class="mb-1 font-weight-bold">${escapeHtml(nombre)}</h6><small class="text-muted">${tipoInventario === 'producto' ? 'Producto' : 'Insumo'}</small></div></div>`;
-    document.getElementById('ajuste_nueva_cantidad').addEventListener('input', function() { calcularDiferencia(cantidadActual, this.value); });
+    // Remover event listener anterior para evitar duplicados
+    const nuevaCantidadInput = document.getElementById('ajuste_nueva_cantidad');
+    nuevaCantidadInput.removeEventListener('input', window._calcularDiferenciaHandler);
+    window._calcularDiferenciaHandler = function() { calcularDiferencia(cantidadActual, this.value); };
+    nuevaCantidadInput.addEventListener('input', window._calcularDiferenciaHandler);
     $('#modalAjustarStock').modal('show');
 }
 
@@ -1548,29 +1696,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const proveedorSelect = document.getElementById('edit_proveedor');
     const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
 
-    // Categoría - NO deshabilitar el select
     if (categoriaSelect && categoriaNueva) {
         categoriaSelect.addEventListener('change', function() {
             if (this.value === '__NUEVA__') {
                 categoriaNueva.style.display = 'block';
                 categoriaNueva.focus();
-                // IMPORTANTE: NO deshabilitar el select
-                // this.disabled = true;  <--- ELIMINAR ESTA LÍNEA
             } else {
                 categoriaNueva.style.display = 'none';
                 categoriaNueva.value = '';
-                // this.disabled = false; <--- ELIMINAR ESTA LÍNEA
             }
         });
     }
 
-    // Proveedor
     if (proveedorSelect && proveedorNuevo) {
         proveedorSelect.addEventListener('change', function() {
             if (this.value === '__NUEVO__') {
                 proveedorNuevo.style.display = 'block';
                 proveedorNuevo.focus();
-                this.value = ''; // Limpiar para no enviar '__NUEVO__'
+                this.value = '';
             } else {
                 proveedorNuevo.style.display = 'none';
                 proveedorNuevo.value = '';
@@ -1578,7 +1721,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Submit del formulario
     const formEditar = document.getElementById('formEditarProducto');
     if (formEditar) {
         formEditar.addEventListener('submit', function() {
@@ -1586,17 +1728,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const categoriaNueva = document.getElementById('edit_categoria_nueva');
             const categoriaHidden = document.getElementById('edit_categoria_nueva_input');
             
-            // Si hay nueva categoría, guardarla en el hidden input
             if (categoriaSelect.value === '__NUEVA__') {
                 if (categoriaNueva.value.trim() !== '') {
                     categoriaHidden.value = categoriaNueva.value.trim();
-                    console.log('Nueva categoría guardada:', categoriaHidden.value);
                 }
             } else {
                 categoriaHidden.value = '';
             }
             
-            // Proveedor
             const proveedorSelect = document.getElementById('edit_proveedor');
             const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
             const proveedorHidden = document.getElementById('edit_proveedor_nuevo_input');
@@ -1627,38 +1766,32 @@ function editarProducto(id) {
                 const preview = document.getElementById('imagen_preview');
                 const inputImagen = document.getElementById('edit_imagen');
                 
-                // Resetear campos
-                categoriaSelect.disabled = false;
                 categoriaNueva.style.display = 'none';
                 categoriaNueva.value = '';
-                proveedorSelect.disabled = false;
                 proveedorNuevo.style.display = 'none';
                 proveedorNuevo.value = '';
                 
-                // Limpiar input de imagen
                 if (inputImagen) inputImagen.value = '';
                 
-                // Datos básicos
                 document.getElementById('edit_id').value = p.id;
                 document.getElementById('edit_nombre').value = p.nombre;
                 document.getElementById('edit_precio_compra').value = p.precio_compra;
                 document.getElementById('edit_precio_venta').value = p.precio_venta;
+                
                 const tipoCodigoSelect = document.getElementById('edit_tipo_codigo');
                 if (tipoCodigoSelect) {
-                    // Asegurar que el valor sea 'unico' o 'multiple'
                     let valorTipoCodigo = p.tipo_codigo;
                     if (!valorTipoCodigo || valorTipoCodigo === '') {
                         valorTipoCodigo = 'multiple';
                     }
                     tipoCodigoSelect.value = valorTipoCodigo;
-                    console.log('Tipo código asignado:', valorTipoCodigo);
                 }
+                
                 document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;
                 
                 const stockText = p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz';
                 document.getElementById('edit_cantidad_actual').textContent = stockText;
                 
-                // ===== CARGAR IMAGEN ACTUAL =====
                 if (p.imagen && p.imagen_exists) {
                     preview.src = p.imagen;
                     preview.style.display = 'block';
@@ -1667,7 +1800,7 @@ function editarProducto(id) {
                     preview.src = '';
                 }
                 
-                // ===== CARGAR CATEGORÍA =====
+                // Cargar categoría
                 if (p.categoria && p.categoria.trim() !== '') {
                     let existe = false;
                     for (let i = 0; i < categoriaSelect.options.length; i++) {
@@ -1676,7 +1809,6 @@ function editarProducto(id) {
                             break;
                         }
                     }
-                    
                     if (existe) {
                         categoriaSelect.value = p.categoria;
                     } else {
@@ -1688,7 +1820,7 @@ function editarProducto(id) {
                     categoriaSelect.value = '';
                 }
                 
-                // ===== CARGAR PROVEEDOR =====
+                // Cargar proveedor
                 if (p.proveedor_id && p.proveedor_id > 0) {
                     let existe = false;
                     for (let i = 0; i < proveedorSelect.options.length; i++) {
@@ -1708,7 +1840,7 @@ function editarProducto(id) {
                     proveedorNuevo.style.display = 'block';
                 }
                 
-                // ===== ATRIBUTOS =====
+                // Atributos
                 if (p.atributos_array) {
                     document.getElementById('edit_marca').value = p.atributos_array.marca || '';
                     document.getElementById('edit_color').value = p.atributos_array.color || '';
@@ -1728,7 +1860,6 @@ function editarProducto(id) {
                     document.querySelector('input[name="tipo_adquisicion"][value="concesion"]').checked = true;
                 }
                 
-                // Mostrar/ocultar según tipo
                 const isProducto = p.tipo_inventario === 'producto';
                 const ventaGroup = document.getElementById('edit_precio_venta_group');
                 const codigoGroup = document.getElementById('edit_tipo_codigo_group');
@@ -1740,7 +1871,6 @@ function editarProducto(id) {
                 if (atributosSection) atributosSection.style.display = isProducto ? 'block' : 'none';
                 if (adquisicionGroup) adquisicionGroup.style.display = isProducto ? 'block' : 'none';
                 
-                // Abrir modal
                 $('#modalEditar').modal('show');
             }
         })
@@ -1771,13 +1901,54 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Previsualización de imagen
+function initImagePreview() {
+    const inputImagen = document.getElementById('edit_imagen');
+    const preview = document.getElementById('imagen_preview');
+    
+    if (inputImagen) {
+        inputImagen.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.src = event.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const productoId = document.getElementById('edit_id').value;
+                if (productoId) {
+                    fetch(`get_producto.php?id=${productoId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success && data.producto.imagen && data.producto.imagen_exists) {
+                                preview.src = data.producto.imagen;
+                                preview.style.display = 'block';
+                            } else {
+                                preview.style.display = 'none';
+                            }
+                        })
+                        .catch(() => preview.style.display = 'none');
+                } else {
+                    preview.style.display = 'none';
+                }
+            }
+        });
+    }
+}
+
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     $('[data-toggle="tooltip"]').tooltip();
     
+    // Inicializar arrays
     filasVisibles = Array.from(document.querySelectorAll('#tablaBody .producto-fila'));
+    tarjetasVisibles = Array.from(document.querySelectorAll('.producto-card-mobile'));
+    
     actualizarPaginacion();
     
+    // Filtros por tipo
     const filtrosBtns = document.querySelectorAll('.btn-filtro-tabla');
     filtrosBtns.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -1788,22 +1959,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Buscador
     const buscadorInput = document.getElementById('buscadorInput');
     const limpiarBusqueda = document.getElementById('limpiarBusqueda');
     
-    buscadorInput.addEventListener('keyup', function() {
-        busquedaActual = this.value;
-        limpiarBusqueda.style.display = busquedaActual ? 'block' : 'none';
-        aplicarFiltros();
+    if (buscadorInput) {
+        buscadorInput.addEventListener('keyup', function() {
+            busquedaActual = this.value;
+            if (limpiarBusqueda) limpiarBusqueda.style.display = busquedaActual ? 'block' : 'none';
+            aplicarFiltros();
+        });
+    }
+    
+    if (limpiarBusqueda) {
+        limpiarBusqueda.addEventListener('click', function() {
+            if (buscadorInput) buscadorInput.value = '';
+            busquedaActual = '';
+            this.style.display = 'none';
+            aplicarFiltros();
+            if (buscadorInput) buscadorInput.focus();
+        });
+    }
+    
+    // Detectar cambio de tamaño (responsive)
+    window.addEventListener('resize', function() {
+        actualizarPaginacion();
     });
     
-    limpiarBusqueda.addEventListener('click', function() {
-        buscadorInput.value = '';
-        busquedaActual = '';
-        this.style.display = 'none';
-        aplicarFiltros();
-        buscadorInput.focus();
-    });
     initImagePreview();
 });
 

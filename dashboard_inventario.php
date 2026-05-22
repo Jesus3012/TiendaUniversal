@@ -324,16 +324,27 @@ while ($row = $query->fetch_assoc()) {
     border-color: #cbd5e1;
 }
 
-/* Responsive */
+/* FUERZA separación entre cards en móvil */
 @media (max-width: 768px) {
-    .method-card { padding: 2rem 1rem; }
-    .method-icon { width: 80px; height: 80px; }
-    .method-icon i { font-size: 2.2rem; }
-    .method-card h3 { font-size: 1.2rem; }
-    .modal-reporte .modal-body { padding: 1.2rem; }
-    .filtros-row {
+    .row.g-4 {
+        display: flex;
         flex-direction: column;
-        gap: 0.8rem;
+        gap: 1.25rem !important;
+    }
+    
+    .row.g-4 .col-md-6 {
+        width: 100%;
+        margin-bottom: 0;
+    }
+    
+    .method-card {
+        margin: 0 !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        transition: transform 0.2s;
+    }
+    
+    .method-card:active {
+        transform: scale(0.98);
     }
 }
 </style>

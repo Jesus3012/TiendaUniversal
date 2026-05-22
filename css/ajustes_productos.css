@@ -1,5 +1,6 @@
 /* =====================================================
-   ESTILOS NARANJA - INVENTARIO
+   ESTILOS NARANJA - AJUSTES DE PRODUCTOS
+   VERSIÓN HÍBRIDA: TABLA EN PC, TARJETAS COMPACTAS EN MÓVIL
 ===================================================== */
 :root {
     --primary: #f97316;
@@ -8,6 +9,7 @@
     --success: #22c55e;
     --danger: #ef4444;
     --warning: #f59e0b;
+    --info: #3b82f6;
     --gray-100: #f8fafc;
     --gray-200: #eef2f6;
     --gray-300: #e2e8f0;
@@ -16,6 +18,11 @@
     --gray-600: #64748b;
     --gray-700: #475569;
     --gray-800: #1e293b;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
 }
 
 * {
@@ -38,7 +45,7 @@
     padding-top: 70px !important;
 }
 
-/* Breadcrumb */
+/* ========== BREADCRUMB ========== */
 .custom-breadcrumb {
     background: #ffffff !important;
     border-radius: 16px;
@@ -90,7 +97,7 @@
     background: #ffffff !important;
 }
 
-/* Header de sección */
+/* ========== HEADER SECCIÓN ========== */
 .section-header {
     margin-bottom: 1.5rem;
 }
@@ -114,7 +121,7 @@
     margin-top: 0.5rem;
 }
 
-/* Card principal */
+/* ========== CARD PRINCIPAL ========== */
 .card {
     border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -139,7 +146,7 @@
     padding: 1.5rem;
 }
 
-/* Toolbar de filtros */
+/* ========== TOOLBAR FILTROS ========== */
 .toolbar-filtros {
     display: flex;
     flex-wrap: wrap;
@@ -189,6 +196,11 @@
     border-radius: 40px;
     font-size: 0.85rem;
 }
+.buscador input:focus {
+    border-color: #f97316;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+}
 .buscador .limpiar-busqueda {
     position: absolute;
     right: 12px;
@@ -202,30 +214,286 @@
     color: #ef4444;
 }
 
-/* Sin resultados */
-.sin-resultados {
-    text-align: center;
-    padding: 40px 20px;
-    background: #f8fafc;
-    border-radius: 12px;
-    margin: 20px;
-}
-.sin-resultados i {
-    font-size: 3rem;
-    color: #cbd5e1;
-    margin-bottom: 15px;
-}
-.sin-resultados h5 {
-    font-size: 1.1rem;
-    color: #64748b;
-    margin-bottom: 8px;
-}
-.sin-resultados p {
-    font-size: 0.85rem;
-    color: #94a3b8;
+/* ========== TABLA EN DESKTOP ========== */
+@media (min-width: 769px) {
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .table {
+        margin-bottom: 0;
+        width: 100%;
+        font-size: 0.85rem;
+        border-collapse: collapse;
+        min-width: auto;
+    }
+    .table thead th {
+        background: #f97316;
+        color: white;
+        font-weight: 600;
+        padding: 12px 10px;
+        border-bottom: none;
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+    .table tbody td {
+        padding: 10px;
+        vertical-align: middle;
+        border-bottom: 1px solid #eef2f6;
+        font-size: 0.8rem;
+    }
+    .table tbody tr:hover {
+        background-color: #fff7ed;
+    }
+    
+    /* Ocultar vista móvil en desktop */
+    .productos-grid-mobile {
+        display: none;
+    }
 }
 
-/* Badges */
+/* ========== VISTA MÓVIL - TARJETAS COMPACTAS (3 LÍNEAS) ========== */
+@media (max-width: 768px) {
+    /* Ocultar tabla en móvil */
+    .table-responsive {
+        display: none;
+    }
+    
+    /* Grid de tarjetas compactas */
+    .productos-grid-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0;
+    }
+    
+    /* Tarjeta compacta */
+    .producto-card-mobile {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #eef2f6;
+        overflow: hidden;
+        transition: all 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    
+    .producto-card-mobile:active {
+        transform: scale(0.99);
+    }
+    
+    /* Fila superior: Tipo + Nombre + Stock */
+    .card-row-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        background: linear-gradient(135deg, #fff7ed, #ffffff);
+        border-bottom: 1px solid #fef3c7;
+    }
+    
+    .tipo-badge {
+        font-size: 0.65rem;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .tipo-producto {
+        background-color: #dbeafe;
+        color: #1e40af;
+    }
+    
+    .tipo-insumo {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    
+    .nombre-producto-mobile {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #1e293b;
+        flex: 1;
+        margin: 0 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .stock-badge-mobile {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 20px;
+        white-space: nowrap;
+    }
+    
+    .stock-alto { background: #dcfce7; color: #16a34a; }
+    .stock-medio { background: #fef3c7; color: #d97706; }
+    .stock-bajo { background: #fee2e2; color: #dc2626; }
+    
+    /* Fila media: Categoría + Proveedor + Imagen */
+    .card-row-middle {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: #f8fafc;
+        border-bottom: 1px solid #eef2f6;
+    }
+    
+    .info-group {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    
+    .info-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+    
+    .info-item i {
+        font-size: 0.65rem;
+        color: #f97316;
+        width: 16px;
+    }
+    
+    .info-item .badge {
+        font-size: 0.65rem;
+        padding: 2px 8px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+    }
+    
+    .imagen-miniatura {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .imagen-miniatura i {
+        font-size: 1rem;
+        color: #94a3b8;
+    }
+    
+    .imagen-miniatura img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+    
+    /* Fila inferior: Precios + Adquisición + Acciones */
+    .card-row-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        background: white;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .precios-group {
+        display: flex;
+        gap: 12px;
+    }
+    
+    .precio-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        font-size: 0.65rem;
+    }
+    
+    .precio-item span:first-child {
+        color: #94a3b8;
+        font-size: 0.6rem;
+    }
+    
+    .precio-item span:last-child {
+        font-weight: 700;
+        font-size: 0.75rem;
+    }
+    
+    .precio-compra { color: #dc2626; }
+    .precio-venta { color: #16a34a; }
+    
+    .adquisicion-badge {
+        font-size: 0.65rem;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .adq-pagado {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+    
+    .adq-concesion {
+        background: #fef3c7;
+        color: #d97706;
+    }
+    
+    .acciones-group {
+        display: flex;
+        gap: 6px;
+    }
+    
+    .accion-btn {
+        background: transparent;
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .accion-btn i {
+        font-size: 0.8rem;
+    }
+    
+    .accion-btn.agregar { background: #dcfce7; color: #16a34a; }
+    .accion-btn.agregar:hover { background: #bbf7d0; }
+    
+    .accion-btn.ajustar { background: #fef3c7; color: #d97706; }
+    .accion-btn.ajustar:hover { background: #fde68a; }
+    
+    .accion-btn.editar { background: #e0f2fe; color: #0284c7; }
+    .accion-btn.editar:hover { background: #bae6fd; }
+    
+    .accion-btn.eliminar { background: #fee2e2; color: #dc2626; }
+    .accion-btn.eliminar:hover { background: #fecaca; }
+    
+    .pdf-link {
+        background: #f1f5f9;
+        color: #f97316;
+    }
+    .pdf-link:hover { background: #e2e8f0; }
+}
+
+/* ========== BADGES GENERALES ========== */
 .badge-tipo {
     padding: 4px 10px;
     border-radius: 20px;
@@ -276,40 +544,31 @@
 .badge-secondary {
     background: #94a3b8;
     color: white;
-    padding: 4px 5px;
+    padding: 4px 10px;
     border-radius: 20px;
     font-size: 0.7rem;
 }
 
-/* Tabla con scroll horizontal */
-.table-responsive {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+/* Badges de adquisición */
+.badge-adquisicion {
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
-.table {
-    margin-bottom: 0;
-    width: 100%;
-    font-size: 0.85rem;
-    border-collapse: collapse;
-}
-.table thead th {
-    background: #f97316;
+.badge-pagado {
+    background: #22c55e;
     color: white;
-    font-weight: 600;
-    padding: 12px 10px;
-    border-bottom: none;
-    white-space: nowrap;
 }
-.table tbody td {
-    padding: 10px;
-    vertical-align: middle;
-    border-bottom: 1px solid #eef2f6;
-}
-.table tbody tr:hover {
-    background-color: #fff7ed;
+.badge-concesion {
+    background: #f59e0b;
+    color: #1e293b;
 }
 
-/* Imagen */
+/* ========== IMAGEN ========== */
 .img-thumbnail {
     width: 45px;
     height: 45px;
@@ -317,7 +576,7 @@
     border-radius: 8px;
 }
 
-/* Botones */
+/* ========== BOTONES ========== */
 .btn {
     border-radius: 8px;
     padding: 0.4rem 0.8rem;
@@ -374,8 +633,16 @@
 .btn-danger:hover {
     background: #dc2626;
 }
+.btn-secondary {
+    background: #64748b;
+    border-color: #64748b;
+    color: white;
+}
+.btn-secondary:hover {
+    background: #475569;
+}
 
-/* Paginación */
+/* ========== PAGINACIÓN ========== */
 .pagination-wrapper {
     padding: 1rem 1.5rem;
     background: white;
@@ -425,7 +692,30 @@
     background: #f8fafc;
 }
 
-/* Empty state */
+/* ========== SIN RESULTADOS ========== */
+.sin-resultados {
+    text-align: center;
+    padding: 40px 20px;
+    background: #f8fafc;
+    border-radius: 12px;
+    margin: 20px;
+}
+.sin-resultados i {
+    font-size: 3rem;
+    color: #cbd5e1;
+    margin-bottom: 15px;
+}
+.sin-resultados h5 {
+    font-size: 1.1rem;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+.sin-resultados p {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+/* ========== EMPTY STATE ========== */
 .empty-state {
     text-align: center;
     padding: 3rem;
@@ -443,7 +733,7 @@
     color: #94a3b8;
 }
 
-/* Modal */
+/* ========== MODALES ========== */
 .modal-content {
     border-radius: 20px;
 }
@@ -459,6 +749,17 @@
 .modal-header .close:hover {
     opacity: 1;
 }
+.modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.modal-body {
+    padding: 1.5rem;
+    background: #f8fafc;
+}
+.modal-footer {
+    padding: 1rem 1.5rem;
+}
 .unidad-label {
     background-color: #fef3e8;
     font-weight: 600;
@@ -468,7 +769,58 @@
     border-color: #f97316;
 }
 
-/* Responsive */
+/* ========== FORMULARIOS ========== */
+.form-group {
+    margin-bottom: 1rem;
+}
+.form-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    color: #475569;
+}
+.form-control {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.8rem;
+    padding: 8px 12px;
+}
+.form-control-sm {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+}
+.form-control:focus {
+    border-color: #f97316;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+}
+
+/* ========== BOTONES DE ADQUISICIÓN EN MODAL ========== */
+.btn-adquisicion-edit {
+    transition: all 0.3s ease;
+    border-radius: 8px;
+}
+.btn-adquisicion-edit.active {
+    background: linear-gradient(135deg, #f97316, #ea580c) !important;
+    border-color: #f97316 !important;
+    color: white;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+}
+.btn-adquisicion-edit.active i {
+    color: white !important;
+}
+.btn-adquisicion-edit.active .fw-bold {
+    color: white !important;
+}
+.btn-adquisicion-edit.active .text-muted {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+.btn-adquisicion-edit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ========== RESPONSIVE GENERAL ========== */
 @media (max-width: 1200px) {
     .table { font-size: 0.8rem; }
     .table thead th, .table tbody td { padding: 8px 6px; }
@@ -477,57 +829,48 @@
 @media (max-width: 992px) {
     .content-wrapper { padding: 16px; }
     .toolbar-filtros { flex-direction: column; align-items: stretch; }
-    .buscador { width: 100%; }
+    .buscador { width: 100%; min-width: auto; }
+    .btn-filtro-tabla { padding: 6px 16px; font-size: 0.75rem; }
 }
 
 @media (max-width: 768px) {
+    .content-wrapper { padding: 12px; }
+    .custom-breadcrumb { padding: 0.6rem 1rem; margin-bottom: 1rem; }
+    .custom-breadcrumb .breadcrumb-item { font-size: 0.7rem; }
+    .section-title { font-size: 1.1rem; }
+    .section-divider { width: 40px; }
     .card-header { padding: 0.8rem 1rem; }
-    .card-header .card-title { font-size: 1rem; }
+    .card-header .card-title { font-size: 0.95rem; }
     .card-body { padding: 1rem; }
-    .table { font-size: 0.7rem; }
-    .table thead th, .table tbody td { padding: 6px 4px; }
-    .btn-group-sm .btn { padding: 0.2rem 0.4rem; font-size: 0.65rem; }
-    .img-thumbnail { width: 35px; height: 35px; }
-    .badge-tipo { padding: 2px 6px; font-size: 0.6rem; }
     .pagination-wrapper { flex-direction: column; text-align: center; }
     .pagination { justify-content: center; }
+    .page-link { padding: 0.3rem 0.6rem; font-size: 0.7rem; }
 }
 
-@media (max-width: 576px) {
-    .table thead th:nth-child(5),
-    .table tbody td:nth-child(5),
-    .table thead th:nth-child(9),
-    .table tbody td:nth-child(9) {
-        display: none;
+@media (max-width: 480px) {
+    .card-row-middle {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    .info-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .card-row-bottom {
+        flex-wrap: wrap;
+    }
+    .precios-group {
+        flex: 1;
+    }
+    .acciones-group {
+        justify-content: flex-end;
     }
 }
 
-/* Estilos para botones de adquisición - Manteniendo funcionalidad */
-.btn-adquisicion-edit {
-    transition: all 0.3s ease;
+/* ========== SCROLL INDICATOR PARA MÓVIL ========== */
+@media (max-width: 768px) {
+    .productos-grid-mobile {
+        padding: 0;
+    }
 }
-
-.btn-adquisicion-edit.active {
-    background: linear-gradient(135deg, #f97316, #ea580c) !important;
-    border-color: #f97316 !important;
-    color: white;
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
-}
-
-.btn-adquisicion-edit.active i {
-    color: white !important;
-}
-
-.btn-adquisicion-edit.active .fw-bold {
-    color: white !important;
-}
-
-.btn-adquisicion-edit.active .text-muted {
-    color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.btn-adquisicion-edit:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-

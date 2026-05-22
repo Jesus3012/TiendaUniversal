@@ -105,7 +105,7 @@ $categorias = obtenerCategorias($conn);
 $proveedores = obtenerProveedores($conn);
 ?>
 
-<link rel="stylesheet" href="css/inventario.css">
+<link rel="stylesheet" href="css/inventario.css?v=<?= time() ?>">
 
 <div class="content-wrapper">
     <div class="container-fluid">
@@ -155,7 +155,6 @@ $proveedores = obtenerProveedores($conn);
                     <div class="icon">
                         <i class="fas fa-box"></i>
                     </div>
-                    <a href="#" class="small-box-footer" data-filter-type="productos">Ver productos <i class="fas fa-arrow-circle-right"></i></a>
                 </div>
             </div>
             <div class="col-lg-3 col-6">
@@ -167,7 +166,6 @@ $proveedores = obtenerProveedores($conn);
                     <div class="icon">
                         <i class="fas fa-cubes"></i>
                     </div>
-                    <a href="#" class="small-box-footer" data-filter-type="insumos">Ver insumos <i class="fas fa-arrow-circle-right"></i></a>
                 </div>
             </div>
             <div class="col-lg-3 col-6">
@@ -179,7 +177,6 @@ $proveedores = obtenerProveedores($conn);
                     <div class="icon">
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
-                    <a href="#" class="small-box-footer" data-filter-type="stockBajo">Ver stock bajo <i class="fas fa-arrow-circle-right"></i></a>
                 </div>
             </div>
             <div class="col-lg-3 col-6">
@@ -616,11 +613,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const activeFiltersList = document.getElementById('activeFiltersList');
     const clearAllFilters = document.getElementById('clearAllFilters');
     const filtersCount = document.getElementById('filtersCount');
-    const smallBoxLinks = document.querySelectorAll('.small-box-footer');
     
+    // Obtener todos los items
     const productos = document.querySelectorAll('.producto-item');
     const insumos = document.querySelectorAll('.insumo-item');
     
+    // Estado de filtros
     let filtros = {
         busqueda: '',
         tipo: 'todos',
@@ -630,18 +628,31 @@ document.addEventListener('DOMContentLoaded', function() {
     
     let searchTimeout;
     
+    // Función para actualizar contador de filtros
     function actualizarContadorFiltros() {
-        const count = Object.entries(filtros).filter(([k, v]) => v && k !== 'busqueda').length;
-        filtersCount.textContent = count;
-        filtersCount.style.display = count === 0 ? 'none' : 'inline-block';
+        let count = 0;
+        if (filtros.tipo !== 'todos') count++;
+        if (filtros.categoria) count++;
+        if (filtros.proveedor) count++;
+        
+        if (filtersCount) {
+            filtersCount.textContent = count;
+            filtersCount.style.display = count === 0 ? 'none' : 'inline-block';
+        }
     }
     
+    // Función para actualizar badges activos
     function actualizarBadgesActivos() {
-        const activos = Object.entries(filtros).filter(([k, v]) => v && k !== 'busqueda');
+        if (!activeFiltersList) return;
+        
+        const activos = [];
+        if (filtros.tipo !== 'todos') activos.push({ categoria: 'tipo', valor: filtros.tipo });
+        if (filtros.categoria) activos.push({ categoria: 'categoria', valor: filtros.categoria });
+        if (filtros.proveedor) activos.push({ categoria: 'proveedor', valor: filtros.proveedor });
         
         if (activos.length > 0) {
             activeFiltersList.innerHTML = '';
-            activos.forEach(([categoria, valor]) => {
+            activos.forEach(({ categoria, valor }) => {
                 const nombres = { tipo: 'Tipo', categoria: 'Categoría', proveedor: 'Proveedor' };
                 let valorMostrar = valor;
                 if (categoria === 'tipo') {
@@ -652,9 +663,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const tag = document.createElement('span');
                 tag.className = 'active-filter';
-                tag.innerHTML = `${nombres[categoria] || categoria}: ${valorMostrar} <i class="fas fa-times" data-categoria="${categoria}"></i>`;
-                tag.querySelector('i').addEventListener('click', () => {
-                    filtros[categoria] = categoria === 'tipo' ? 'todos' : '';
+                tag.innerHTML = `${nombres[categoria]}: ${valorMostrar} <i class="fas fa-times" data-categoria="${categoria}"></i>`;
+                tag.querySelector('i').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (categoria === 'tipo') filtros.tipo = 'todos';
+                    else filtros[categoria] = '';
                     actualizarUIFiltros();
                     aplicarFiltros();
                 });
@@ -666,57 +679,173 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Actualizar UI según filtros
     function actualizarUIFiltros() {
+        // Actualizar botones de tipo
         filterBtns.forEach(btn => {
-            if (btn.dataset.filter === filtros.tipo) btn.classList.add('active');
-            else btn.classList.remove('active');
+            if (btn.dataset.filter === filtros.tipo) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
         });
         
-        filterTags.forEach(tag => tag.classList.remove('active'));
+        // Actualizar tags de categoría
+        const categoriaTags = document.querySelectorAll('.filter-tags[data-filter-type="categoria"] .filter-tag');
+        categoriaTags.forEach(tag => {
+            if (tag.dataset.value === filtros.categoria || (filtros.categoria === '' && tag.dataset.value === '')) {
+                tag.classList.add('active');
+            } else {
+                tag.classList.remove('active');
+            }
+        });
         
-        if (filtros.categoria) {
-            const tag = document.querySelector(`.filter-tag[data-value="${filtros.categoria}"]`);
-            if (tag) tag.classList.add('active');
-        } else {
-            const todosTag = document.querySelector('.filter-tags[data-filter-type="categoria"] .filter-tag[data-value=""]');
-            if (todosTag) todosTag.classList.add('active');
-        }
-        
-        if (filtros.proveedor) {
-            const tag = document.querySelector(`.filter-tag[data-value="${filtros.proveedor}"]`);
-            if (tag) tag.classList.add('active');
-        } else {
-            const todosTag = document.querySelector('.filter-tags[data-filter-type="proveedor"] .filter-tag[data-value=""]');
-            if (todosTag) todosTag.classList.add('active');
-        }
+        // Actualizar tags de proveedor
+        const proveedorTags = document.querySelectorAll('.filter-tags[data-filter-type="proveedor"] .filter-tag');
+        proveedorTags.forEach(tag => {
+            if (tag.dataset.value === filtros.proveedor || (filtros.proveedor === '' && tag.dataset.value === '')) {
+                tag.classList.add('active');
+            } else {
+                tag.classList.remove('active');
+            }
+        });
     }
     
+    // Limpiar todos los filtros
     function limpiarTodosFiltros() {
         filtros = { busqueda: '', tipo: 'todos', categoria: '', proveedor: '' };
-        searchInput.value = '';
-        clearSearch.style.display = 'none';
+        if (searchInput) searchInput.value = '';
+        if (clearSearch) clearSearch.style.display = 'none';
         actualizarUIFiltros();
         aplicarFiltros();
     }
     
-    // Eventos
-    searchInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        clearSearch.style.display = this.value ? 'block' : 'none';
-        searchTimeout = setTimeout(() => {
-            filtros.busqueda = this.value;
+    // Evaluar si un item debe ser visible
+    function evaluarItem(item) {
+        let visible = true;
+        
+        // Obtener datos del item
+        const nombre = (item.dataset.nombre || '').toLowerCase();
+        const categoria = (item.dataset.categoria || '').toLowerCase();
+        const proveedor = (item.dataset.proveedor || '').toLowerCase();
+        const tipo = item.dataset.tipo || '';
+        const stock = parseFloat(item.dataset.stock) || 0;
+        
+        // Filtro de búsqueda
+        if (filtros.busqueda) {
+            const termino = filtros.busqueda.toLowerCase();
+            const textoBusqueda = `${nombre} ${categoria} ${proveedor}`;
+            visible = textoBusqueda.includes(termino);
+            if (!visible) return false;
+        }
+        
+        // Filtro de tipo
+        if (filtros.tipo !== 'todos') {
+            switch(filtros.tipo) {
+                case 'productos':
+                    visible = tipo === 'producto';
+                    break;
+                case 'insumos':
+                    visible = tipo === 'insumo';
+                    break;
+                case 'stockBajo':
+                    visible = stock > 0 && stock <= 5;
+                    break;
+                case 'sinStock':
+                    visible = stock === 0;
+                    break;
+            }
+            if (!visible) return false;
+        }
+        
+        // Filtro de categoría
+        if (filtros.categoria) {
+            visible = categoria === filtros.categoria.toLowerCase();
+            if (!visible) return false;
+        }
+        
+        // Filtro de proveedor
+        if (filtros.proveedor) {
+            visible = proveedor === filtros.proveedor.toLowerCase();
+            if (!visible) return false;
+        }
+        
+        return visible;
+    }
+    
+    // Aplicar todos los filtros
+    function aplicarFiltros() {
+        let prodVisibles = 0;
+        let insVisibles = 0;
+        
+        // Filtrar productos
+        productos.forEach(producto => {
+            const visible = evaluarItem(producto);
+            producto.style.display = visible ? '' : 'none';
+            if (visible) prodVisibles++;
+        });
+        
+        // Filtrar insumos
+        insumos.forEach(insumo => {
+            const visible = evaluarItem(insumo);
+            insumo.style.display = visible ? '' : 'none';
+            if (visible) insVisibles++;
+        });
+        
+        // Actualizar contadores
+        if (productosCount) productosCount.textContent = prodVisibles;
+        if (insumosCount) insumosCount.textContent = insVisibles;
+        
+        // Mostrar/ocultar secciones según filtro de tipo
+        if (filtros.tipo === 'productos') {
+            if (productosCard) productosCard.style.display = 'block';
+            if (insumosCard) insumosCard.style.display = 'none';
+        } else if (filtros.tipo === 'insumos') {
+            if (productosCard) productosCard.style.display = 'none';
+            if (insumosCard) insumosCard.style.display = 'block';
+        } else {
+            if (productosCard) productosCard.style.display = 'block';
+            if (insumosCard) insumosCard.style.display = 'block';
+        }
+        
+        // Mostrar mensajes de vacío
+        if (productosEmpty) {
+            productosEmpty.style.display = (prodVisibles === 0 && filtros.tipo !== 'insumos') ? 'block' : 'none';
+        }
+        if (insumosEmpty) {
+            insumosEmpty.style.display = (insVisibles === 0 && filtros.tipo !== 'productos') ? 'block' : 'none';
+        }
+        
+        actualizarContadorFiltros();
+        actualizarBadgesActivos();
+    }
+    
+    // ========== EVENTOS ==========
+    
+    // Búsqueda con debounce
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            if (clearSearch) clearSearch.style.display = this.value ? 'block' : 'none';
+            searchTimeout = setTimeout(() => {
+                filtros.busqueda = this.value;
+                aplicarFiltros();
+            }, 300);
+        });
+    }
+    
+    // Limpiar búsqueda
+    if (clearSearch) {
+        clearSearch.addEventListener('click', function() {
+            if (searchInput) searchInput.value = '';
+            filtros.busqueda = '';
+            this.style.display = 'none';
             aplicarFiltros();
-        }, 300);
-    });
+            if (searchInput) searchInput.focus();
+        });
+    }
     
-    clearSearch.addEventListener('click', function() {
-        searchInput.value = '';
-        filtros.busqueda = '';
-        this.style.display = 'none';
-        aplicarFiltros();
-        searchInput.focus();
-    });
-    
+    // Botones de filtro por tipo
     filterBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             filtros.tipo = this.dataset.filter;
@@ -725,118 +854,53 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Tags de filtro (categoría y proveedor)
     filterTags.forEach(tag => {
         tag.addEventListener('click', function() {
             const group = this.closest('[data-filter-type]');
             if (!group) return;
-            const categoria = group.dataset.filterType;
-            const valor = this.dataset.value;
-            filtros[categoria] = valor;
+            const tipoFiltro = group.dataset.filterType;
+            const valor = this.dataset.value || '';
+            
+            if (tipoFiltro === 'categoria') {
+                filtros.categoria = valor;
+            } else if (tipoFiltro === 'proveedor') {
+                filtros.proveedor = valor;
+            }
+            
             actualizarUIFiltros();
             aplicarFiltros();
         });
     });
     
-    toggleFiltersBtn?.addEventListener('click', () => filtersPanel.classList.toggle('show'));
+    // Toggle panel de filtros
+    if (toggleFiltersBtn && filtersPanel) {
+        toggleFiltersBtn.addEventListener('click', () => {
+            filtersPanel.classList.toggle('show');
+        });
+    }
     
+    // Cambiar vista (grid / lista)
     viewBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             viewBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             if (this.dataset.view === 'grid') {
-                productosGrid.classList.remove('list-view');
-                insumosGrid.classList.remove('list-view');
+                if (productosGrid) productosGrid.classList.remove('list-view');
+                if (insumosGrid) insumosGrid.classList.remove('list-view');
             } else {
-                productosGrid.classList.add('list-view');
-                insumosGrid.classList.add('list-view');
+                if (productosGrid) productosGrid.classList.add('list-view');
+                if (insumosGrid) insumosGrid.classList.add('list-view');
             }
         });
     });
     
-    clearAllFilters?.addEventListener('click', limpiarTodosFiltros);
-    
-    smallBoxLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const filterType = this.dataset.filterType;
-            if (filterType) {
-                filtros.tipo = filterType;
-                actualizarUIFiltros();
-                aplicarFiltros();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        });
-    });
-    
-    function evaluarItem(item) {
-        let visible = true;
-        const stock = parseFloat(item.dataset.stock) || 0;
-        
-        if (filtros.busqueda) {
-            const terminos = filtros.busqueda.toLowerCase().split(' ');
-            const texto = [item.dataset.nombre, item.dataset.categoria, item.dataset.proveedor].filter(Boolean).join(' ').toLowerCase();
-            visible = terminos.every(t => texto.includes(t));
-        }
-        
-        if (visible && filtros.tipo !== 'todos') {
-            const tipo = item.dataset.tipo;
-            switch(filtros.tipo) {
-                case 'productos': visible = tipo === 'producto'; break;
-                case 'insumos': visible = tipo === 'insumo'; break;
-                case 'stockBajo': visible = stock > 0 && stock <= 5; break;
-                case 'sinStock': visible = stock === 0; break;
-            }
-        }
-        
-        if (visible && filtros.categoria) {
-            visible = (item.dataset.categoria || '').toLowerCase() === filtros.categoria.toLowerCase();
-        }
-        
-        if (visible && filtros.proveedor) {
-            visible = (item.dataset.proveedor || '').toLowerCase() === filtros.proveedor.toLowerCase();
-        }
-        
-        return visible;
+    // Limpiar todos los filtros
+    if (clearAllFilters) {
+        clearAllFilters.addEventListener('click', limpiarTodosFiltros);
     }
     
-    function aplicarFiltros() {
-        let prodVisibles = 0, insVisibles = 0;
-        
-        productos.forEach(p => {
-            const visible = evaluarItem(p);
-            p.style.display = visible ? '' : 'none';
-            if (visible) prodVisibles++;
-        });
-        
-        insumos.forEach(i => {
-            const visible = evaluarItem(i);
-            i.style.display = visible ? '' : 'none';
-            if (visible) insVisibles++;
-        });
-        
-        productosCount.textContent = prodVisibles;
-        insumosCount.textContent = insVisibles;
-        
-        // Mostrar/ocultar secciones y mensajes de vacío
-        if (filtros.tipo === 'productos') {
-            productosCard.style.display = 'block';
-            insumosCard.style.display = 'none';
-            productosEmpty.style.display = prodVisibles === 0 ? 'block' : 'none';
-        } else if (filtros.tipo === 'insumos') {
-            productosCard.style.display = 'none';
-            insumosCard.style.display = 'block';
-            insumosEmpty.style.display = insVisibles === 0 ? 'block' : 'none';
-        } else {
-            productosCard.style.display = 'block';
-            insumosCard.style.display = 'block';
-            productosEmpty.style.display = prodVisibles === 0 ? 'block' : 'none';
-            insumosEmpty.style.display = insVisibles === 0 ? 'block' : 'none';
-        }
-        
-        actualizarContadorFiltros();
-        actualizarBadgesActivos();
-    }
-    
+    // Inicializar
     actualizarUIFiltros();
     aplicarFiltros();
 });

@@ -34,8 +34,7 @@ while($row = $productosResult->fetch_assoc()) {
     $productosData[] = $row;
 }
 ?>
-
-<link rel="stylesheet" href="css/pedidos.css">
+<link rel="stylesheet" href="css/pedidos.css?v=<?= time() ?>">
 
 <div class="content-wrapper">
     <section class="content pt-4">
@@ -51,7 +50,7 @@ while($row = $productosResult->fetch_assoc()) {
                             </a>
                         </li>
                         <li class="breadcrumb-item">
-                            <a href="ventas_modulo.php">
+                            <a href="dashboard_ventas.php">
                                 <i class="fas fa-cash-register"></i> Registrar Venta
                             </a>
                         </li>

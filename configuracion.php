@@ -768,43 +768,61 @@ if ($fecha_obtenida) {
                                     </form>
                                 </div>
 
-                                <!-- Acerca del Sistema -->
-                                <div class="acerca-card">
-                                    <div class="text-center">
-                                        <div id="acercaLogoContainer">
-                                            <?php if ($logo_path && file_exists($logo_path)): ?>
-                                                <img src="<?= $logo_path ?>?v=<?= time() ?>" class="acerca-logo" id="acercaLogo">
-                                            <?php else: ?>
-                                                <div class="acerca-logo d-flex align-items-center justify-content-center mx-auto bg-light" id="acercaLogo">
-                                                    <i class="fas fa-fish fa-4x" style="color: #f97316;"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                        <h2 class="acerca-titulo"><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h2>
-                                        <p class="acerca-subtitulo">Sistema de Gestión de Inventario y Ventas</p>
-                                    </div>
-                                    <div class="acerca-info">
-                                        <h5 class="mb-3" style="color: #f97316;"><i class="fas fa-info-circle mr-2"></i>Información del Sistema</h5>
-                                        <div class="acerca-info-item">
-                                            <span class="acerca-info-label"><i class="fas fa-calendar-alt mr-2"></i>Última actualización:</span>
-                                            <span class="acerca-info-value"><?= $ultima_actualizacion ?></span>
-                                        </div>
-                                        <div class="acerca-info-item">
-                                            <span class="acerca-info-label"><i class="fas fa-user-cog mr-2"></i>Desarrollado por:</span>
-                                            <span class="acerca-info-value">Jesus Martinez Vidal</span>
-                                        </div>
-                                        <div class="acerca-info-item">
-                                            <span class="acerca-info-label"><i class="fas fa-envelope mr-2"></i>Contacto:</span>
-                                            <span class="acerca-info-value">soportepescadores@gmail.com</span>
-                                        </div>
-                                        <div class="acerca-info-item">
-                                            <span class="acerca-info-label"><i class="fas fa-phone-alt mr-2"></i>Teléfono:</span>
-                                            <span class="acerca-info-value">+52 222 980 4687</span>
-                                        </div>
-                                    </div>
-                                <div class="alert alert-info mt-3 text-center">
-                                    <i class="fas fa-copyright mr-2"></i> 2026 Pescadores de la Prehistoria - Todos los derechos reservados.
-                                </div>
+<!-- Acerca del Sistema - Versión Compacta -->
+<div class="acerca-card">
+    <div class="acerca-header">
+        <div class="acerca-logo">
+            <?php if ($logo_path && file_exists($logo_path)): ?>
+                <img src="<?= $logo_path ?>?v=<?= time() ?>" alt="Logo">
+            <?php else: ?>
+                <i class="fas fa-fish"></i>
+            <?php endif; ?>
+        </div>
+        <div class="acerca-info-header">
+            <h3><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h3>
+            <p>Sistema de Gestión de Inventario y Ventas</p>
+        </div>
+    </div>
+    
+    <div class="acerca-body">
+        <div class="acerca-row">
+            <div class="acerca-col">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="label">Última actualización:</span>
+                <span class="value"><?= $ultima_actualizacion ?></span>
+            </div>
+            <div class="acerca-col">
+                <i class="fas fa-code-branch"></i>
+                <span class="label">Versión:</span>
+                <span class="value">2.0.0</span>
+            </div>
+        </div>
+        <div class="acerca-row">
+            <div class="acerca-col">
+                <i class="fas fa-user"></i>
+                <span class="label">Desarrollado por:</span>
+                <span class="value">Jesus Martinez Vidal</span>
+            </div>
+            <div class="acerca-col">
+                <i class="fas fa-envelope"></i>
+                <span class="label">Contacto:</span>
+                <span class="value">soportepescadores@gmail.com</span>
+            </div>
+        </div>
+        <div class="acerca-row">
+            <div class="acerca-col">
+                <i class="fas fa-phone-alt"></i>
+                <span class="label">Teléfono:</span>
+                <span class="value">+52 222 980 4687</span>
+            </div>
+            <div class="acerca-col">
+                <i class="fas fa-copyright"></i>
+                <span class="label">Derechos:</span>
+                <span class="value">2026</span>
+            </div>
+        </div>
+    </div>
+</div>
                             </div>
                         </div>
 
@@ -863,13 +881,13 @@ if ($fecha_obtenida) {
                                 <tbody>
                                     <?php while ($u = $usuarios->fetch_assoc()): ?>
                                     <tr>
-                                        <td><?= htmlspecialchars($u['nombre']) ?></td>
-                                        <td><?= htmlspecialchars($u['email']) ?></td>
-                                        <td><span class="badge <?= $u['rol'] == 'administrador' ? 'badge-danger' : 'badge-info' ?>"><?= $u['rol'] ?></span></td>
-                                        <td><span class="badge <?= $u['activo'] ? 'badge-success' : 'badge-danger' ?>"><?= $u['activo'] ? 'Activo' : 'Inactivo' ?></span></td>
-                                        <td><?= $u['debe_cambiar_password'] ? '<span class="badge badge-warning"><i class="fas fa-exclamation-triangle mr-1"></i> Pendiente</span>' : '<span class="badge badge-success"><i class="fas fa-check mr-1"></i> Actualizada</span>' ?></td>
-                                        <td><?= date('d/m/Y', strtotime($u['fecha_registro'])) ?></td>
-                                        <td>
+                                        <td data-label="Nombre"><?= htmlspecialchars($u['nombre']) ?></td>
+                                        <td data-label="Email"><?= htmlspecialchars($u['email']) ?></td>
+                                        <td data-label="Rol"><span class="badge <?= $u['rol'] == 'administrador' ? 'badge-danger' : 'badge-info' ?>"><?= $u['rol'] ?></span></td>
+                                        <td data-label="Estado"><span class="badge <?= $u['activo'] ? 'badge-success' : 'badge-danger' ?>"><?= $u['activo'] ? 'Activo' : 'Inactivo' ?></span></td>
+                                        <td data-label="Cambio Pwd"><?= $u['debe_cambiar_password'] ? '<span class="badge badge-warning"><i class="fas fa-exclamation-triangle mr-1"></i> Pendiente</span>' : '<span class="badge badge-success"><i class="fas fa-check mr-1"></i> Actualizada</span>' ?></td>
+                                        <td data-label="Fecha Reg."><?= date('d/m/Y', strtotime($u['fecha_registro'])) ?></td>
+                                        <td data-label="Acciones">
                                             <div class="acciones-btns">
                                                 <button class="btn btn-sm btn-primary" onclick='editarUsuario(<?= json_encode($u) ?>)' title="Editar"><i class="fas fa-edit"></i></button>
                                                 <button class="btn btn-sm btn-warning" onclick='resetearPassword(<?= $u['id'] ?>, "<?= addslashes($u['nombre']) ?>")' title="Restablecer"><i class="fas fa-key"></i></button>
@@ -911,12 +929,12 @@ if ($fecha_obtenida) {
                                 <tbody>
                                     <?php while ($p = $proveedores->fetch_assoc()): ?>
                                     <tr>
-                                        <td><?= htmlspecialchars($p['nombre']) ?></td>
-                                        <td><?= htmlspecialchars($p['correo'] ?? '-') ?></td>
-                                        <td><?= htmlspecialchars($p['telefono'] ?? '-') ?></td>
-                                        <td><?= htmlspecialchars($p['calle'] ?? '') ?> <?= htmlspecialchars($p['numero'] ?? '') ?>, <?= htmlspecialchars($p['colonia'] ?? '') ?></td>
-                                        <td><span class="badge <?= $p['activo'] ? 'badge-success' : 'badge-danger' ?>"><?= $p['activo'] ? 'Activo' : 'Inactivo' ?></span></td>
-                                        <td>
+                                        <td data-label="Nombre"><?= htmlspecialchars($p['nombre']) ?></td>
+                                        <td data-label="Correo"><?= htmlspecialchars($p['correo'] ?? '-') ?></td>
+                                        <td data-label="Teléfono"><?= htmlspecialchars($p['telefono'] ?? '-') ?></td>
+                                        <td data-label="Dirección"><?= htmlspecialchars($p['calle'] ?? '') ?> <?= htmlspecialchars($p['numero'] ?? '') ?>, <?= htmlspecialchars($p['colonia'] ?? '') ?></td>
+                                        <td data-label="Estado"><span class="badge <?= $p['activo'] ? 'badge-success' : 'badge-danger' ?>"><?= $p['activo'] ? 'Activo' : 'Inactivo' ?></span></td>
+                                        <td data-label="Acciones">
                                             <div class="acciones-btns">
                                                 <button class="btn btn-sm btn-primary" onclick='editarProveedor(<?= json_encode($p) ?>)' title="Editar"><i class="fas fa-edit"></i></button>
                                                 <button class="btn btn-sm btn-danger" onclick="eliminarProveedor(<?= $p['id'] ?>, '<?= addslashes($p['nombre']) ?>')" title="Eliminar"><i class="fas fa-trash"></i></button>
@@ -948,13 +966,15 @@ if ($fecha_obtenida) {
                                     </thead>
                                     <tbody>
                                         <?php if (empty($backups)): ?>
-                                        <td><td colspan="4" class="text-center py-4"><i class="fas fa-folder-open fa-2x text-muted mb-2 d-block"></i>No hay respaldos disponibles</td></tr>
+                                        <tr>
+                                            <td colspan="4" class="text-center py-4"><i class="fas fa-folder-open fa-2x text-muted mb-2 d-block"></i>No hay respaldos disponibles</td>
+                                        </tr>
                                         <?php else: foreach ($backups as $b): ?>
                                         <tr>
-                                            <td><i class="fas fa-file-archive mr-2 text-warning"></i> <?= $b['nombre'] ?></td>
-                                            <td><?= $b['fecha'] ?></td>
-                                            <td><?= $b['tamaño'] ?></td>
-                                            <td><a href="backups/<?= $b['nombre'] ?>" class="btn btn-sm btn-primary" download><i class="fas fa-download"></i> Descargar</a></td>
+                                            <td data-label="Archivo"><i class="fas fa-file-archive mr-2 text-warning"></i> <?= $b['nombre'] ?></td>
+                                            <td data-label="Fecha"><?= $b['fecha'] ?></td>
+                                            <td data-label="Tamaño"><?= $b['tamaño'] ?></td>
+                                            <td data-label="Acciones"><a href="backups/<?= $b['nombre'] ?>" class="btn btn-sm btn-primary" download><i class="fas fa-download"></i> Descargar</a></td>
                                         </tr>
                                         <?php endforeach; endif; ?>
                                     </tbody>
@@ -990,10 +1010,10 @@ if ($fecha_obtenida) {
                                     <tbody>
                                         <?php while ($a = $auditoria->fetch_assoc()): ?>
                                         <tr>
-                                            <td><?= date('d/m/Y H:i:s', strtotime($a['fecha'])) ?></td>
-                                            <td><?= htmlspecialchars($a['usuario_nombre'] ?? 'Sistema') ?></td>
-                                            <td><span class="badge badge-info"><?= htmlspecialchars($a['accion']) ?></span></td>
-                                            <td><?= htmlspecialchars($a['detalle'] ?? '-') ?></td>
+                                            <td data-label="Fecha"><?= date('d/m/Y H:i:s', strtotime($a['fecha'])) ?></td>
+                                            <td data-label="Usuario"><?= htmlspecialchars($a['usuario_nombre'] ?? 'Sistema') ?></td>
+                                            <td data-label="Acción"><span class="badge badge-info"><?= htmlspecialchars($a['accion']) ?></span></td>
+                                            <td data-label="Detalle"><?= htmlspecialchars($a['detalle'] ?? '-') ?></td>
                                         </tr>
                                         <?php endwhile; ?>
                                     </tbody>

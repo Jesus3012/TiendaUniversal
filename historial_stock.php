@@ -45,7 +45,7 @@ $proveedores_list = $conn->query($proveedores_query);
 $fecha_actual = date('Y-m-d');
 ?>
 
-<link rel="stylesheet" href="css/historial_stock.css">
+<link rel="stylesheet" href="css/historial_stock.css?v=<?= time() ?>">
 
 <div class="content-wrapper">
     <section class="content-header">
@@ -109,7 +109,7 @@ $fecha_actual = date('Y-m-d');
                 </button>
             </div>
 
-            <!-- FILTROS - Selects normales (sin buscador adicional) -->
+            <!-- FILTROS -->
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">
@@ -187,7 +187,7 @@ $fecha_actual = date('Y-m-d');
                 </div>
             </div>
 
-            <!-- FILTROS ACTIVOS CON BOTÓN LIMPIAR DENTRO -->
+            <!-- FILTROS ACTIVOS -->
             <div class="filtros-activos-container" id="filtrosActivosContainer" style="<?= ($producto_id > 0 || !empty($proveedor_filtro) || !empty($fecha_desde) || !empty($fecha_hasta)) ? '' : 'display: none;' ?>">
                 <div class="d-flex flex-wrap align-items-center justify-content-between">
                     <div class="d-flex flex-wrap align-items-center">
@@ -202,7 +202,7 @@ $fecha_actual = date('Y-m-d');
                 </div>
             </div>
 
-            <!-- TABLA DE HISTORIAL -->
+            <!-- CONTENEDOR DE TABLA (DESKTOP) Y TARJETAS (MÓVIL) -->
             <div class="card">
                 <div class="card-header">
                     <div class="row align-items-center">
@@ -235,14 +235,15 @@ $fecha_actual = date('Y-m-d');
                                         </select>
                                     </div>
                                 </div>
-                                <span class="badge-total" id="totalRegistros" style="color: white !important;">Total: 0 registros</span>
+                                <span class="badge-total" id="totalRegistros">Total: 0 registros</span>
                             </div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <!-- TABLA (visible en desktop) -->
+                    <div class="table-responsive" id="tablaDesktop">
                         <table class="table table-hover table-sm">
                             <thead>
                                 <tr>
@@ -267,6 +268,9 @@ $fecha_actual = date('Y-m-d');
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- CONTENEDOR DE TARJETAS (visible en móvil) -->
+                    <div id="tarjetasContainer" class="tarjetas-container"></div>
                 </div>
                 
                 <div class="card-footer" id="paginacionContainer"></div>
@@ -284,6 +288,7 @@ $fecha_actual = date('Y-m-d');
 const STORAGE_KEY = 'historial_alerta_oculta';
 let paginaActual = 1;
 let timeoutFiltro = null;
+let datosGlobales = null; // Guardar datos para usar en tarjetas
 
 function ocultarAlertaPermanente() {
     document.getElementById('infoAlertStock').style.display = 'none';
@@ -297,8 +302,145 @@ function mostrarAlerta() {
     localStorage.removeItem(STORAGE_KEY);
 }
 
+// Función para extraer datos de la tabla HTML y convertirlos en array
+function convertirTablaADatos() {
+    var datos = [];
+    $('#tablaBodyContent tr').each(function() {
+        var cells = $(this).find('td');
+        if (cells.length >= 9) {
+            var tipoTexto = cells.eq(3).text().trim().toLowerCase();
+            var cantidadText = cells.eq(5).text().trim();
+            var cantidadMatch = cantidadText.match(/[+-]?\d+(?:\.\d+)?/);
+            var cantidad = cantidadMatch ? parseFloat(cantidadMatch[0]) : 0;
+            
+            datos.push({
+                fecha: cells.eq(0).text().trim(),
+                fecha_formateada: cells.eq(0).text().trim(),
+                producto: cells.eq(1).text().trim(),
+                proveedor: cells.eq(2).text().trim(),
+                tipo: tipoTexto.includes('entrada') ? 'entrada' : 'ajuste',
+                stock_anterior: cells.eq(4).text().trim(),
+                cantidad: cantidad,
+                stock_nuevo: cells.eq(6).text().trim(),
+                nota: cells.eq(7).text().trim(),
+                usuario: cells.eq(8).text().trim()
+            });
+        }
+    });
+    return datos;
+}
+
+// Función para generar tarjetas elegantes desde la tabla
+function generarTarjetasDesdeTabla() {
+    var datos = convertirTablaADatos();
+    var container = $('#tarjetasContainer');
+    container.empty();
+    
+    if (datos.length === 0) {
+        container.html('<div class="empty-state text-center py-5"><i class="fas fa-history fa-3x text-muted mb-3"></i><p class="text-muted">No hay registros de historial</p></div>');
+        return;
+    }
+    
+    for (var i = 0; i < datos.length; i++) {
+        var row = datos[i];
+        var esEntrada = row.tipo === 'entrada';
+        var tipoClass = esEntrada ? 'tipo-entrada' : 'tipo-ajuste';
+        var tipoIcono = esEntrada ? 'fa-arrow-down' : 'fa-sliders-h';
+        var tipoTexto = esEntrada ? 'Entrada de stock' : 'Ajuste de stock';
+        
+        var cantidadClass = '';
+        var cantidadValor = row.cantidad;
+        
+        // Determinar si es negativo
+        var esNegativo = false;
+        if (row.cantidad < 0) {
+            esNegativo = true;
+        } else if (!esEntrada && row.cantidad > 0) {
+            esNegativo = true;
+        }
+        
+        if (esNegativo) {
+            cantidadClass = 'negativo';
+            cantidadValor = '-' + Math.abs(row.cantidad);
+        } else {
+            cantidadClass = 'positivo';
+            cantidadValor = '+' + row.cantidad;
+        }
+        
+        var fechaFormateada = row.fecha;
+        var nota = row.nota || 'Sin nota';
+        var proveedor = row.proveedor || '';
+        var usuario = row.usuario || 'Sistema';
+        
+        // Limitar longitud
+        var productoNombre = row.producto.length > 35 ? row.producto.substring(0, 35) + '' : row.producto;
+        var notaTexto = nota.length > 40 ? nota.substring(0, 40) + '...' : nota;
+        
+        var tarjeta = `
+            <div class="movimiento-card">
+                <div class="card-header-movimiento">
+                    <div class="fecha-movimiento">
+                        <i class="far fa-calendar-alt"></i>
+                        <span>${escapeHtml(fechaFormateada)}</span>
+                    </div>
+                    <div class="tipo-movimiento ${tipoClass}">
+                        <i class="fas ${tipoIcono}"></i>
+                        ${tipoTexto}
+                    </div>
+                </div>
+                <div class="card-body-movimiento">
+                    <div class="producto-destacado">
+                        <div class="producto-icono">
+                            <i class="fas fa-box"></i>
+                        </div>
+                        <div class="producto-info">
+                            <div class="producto-nombre">${escapeHtml(productoNombre)}</div>
+                            ${proveedor ? `<div class="producto-proveedor"><i class="fas fa-truck"></i> ${escapeHtml(proveedor)}</div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="stock-grid">
+                        <div class="stock-card">
+                            <div class="stock-label">Stock anterior</div>
+                            <div class="stock-valor">${escapeHtml(row.stock_anterior)}</div>
+                        </div>
+                        <div class="stock-card">
+                            <div class="stock-label">Movimiento</div>
+                            <div class="stock-valor ${cantidadClass}">${cantidadValor}</div>
+                        </div>
+                        <div class="stock-card">
+                            <div class="stock-label">Stock nuevo</div>
+                            <div class="stock-valor">${escapeHtml(row.stock_nuevo)}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="nota-usuario">
+                        <div class="nota-movimiento">
+                            <i class="fas fa-pencil-alt"></i>
+                            <span class="nota-texto" title="${escapeHtml(nota)}">${escapeHtml(notaTexto)}</span>
+                        </div>
+                        <div class="usuario-movimiento">
+                            <i class="fas fa-user-circle"></i>
+                            ${escapeHtml(usuario)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.append(tarjeta);
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function cargarDatos() {
     $('#tablaBodyContent').html('<tr><td colspan="9" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-3x" style="color: #f97316;"></i><h5 class="text-muted mt-2">Cargando datos...</h5></td></tr>');
+    $('#tarjetasContainer').html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-3x" style="color: #f97316;"></i><h5 class="text-muted mt-2">Cargando datos...</h5></div>');
     
     const producto_id = $('#producto_id').val() || '';
     const proveedor = $('#proveedor').val() || '';
@@ -321,10 +463,20 @@ function cargarDatos() {
     fetch('historial_stock_ajax.php?' + params.toString())
         .then(response => response.json())
         .then(data => {
+            // Actualizar tabla (desktop)
             $('#tablaBodyContent').html(data.tabla);
+            
+            // Generar tarjetas desde la tabla recién cargada
+            generarTarjetasDesdeTabla();
+            
+            // Actualizar paginación
             $('#paginacionContainer').html(data.paginacion);
             $('#totalRegistros').text('Total: ' + data.total_registros + ' registros');
             
+            // Mostrar/ocultar según tamaño de pantalla
+            toggleVistaMovil();
+            
+            // Actualizar título
             let titulo = '';
             if (data.producto_nombre) {
                 titulo = 'Historial de: <strong>' + data.producto_nombre + '</strong>';
@@ -339,8 +491,20 @@ function cargarDatos() {
         })
         .catch(error => {
             console.error('Error:', error);
-            $('#tablaBodyContent').html('<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar los datos</td></tr>');
+            $('#tablaBodyContent').html('<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar los datos</td</tr>');
+            $('#tarjetasContainer').html('<div class="text-center py-4 text-danger">Error al cargar los datos</div>');
         });
+}
+
+function toggleVistaMovil() {
+    var esMovil = window.innerWidth <= 768;
+    if (esMovil) {
+        $('#tablaDesktop').hide();
+        $('#tarjetasContainer').show();
+    } else {
+        $('#tablaDesktop').show();
+        $('#tarjetasContainer').hide();
+    }
 }
 
 function actualizarEnlaceReporte() {
@@ -452,6 +616,11 @@ $(document).ready(function() {
             const match = onclickAttr.match(/irPagina\((\d+)\)/);
             if (match) irPagina(parseInt(match[1]));
         }
+    });
+    
+    // Detectar cambio de tamaño
+    $(window).on('resize', function() {
+        toggleVistaMovil();
     });
     
     cargarDatos();
