@@ -111,7 +111,6 @@ while ($p = $provResult->fetch_assoc()) {
 
         <?php if ($proveedorSeleccionado):
 
-            // ========== CONSULTA CON TIPO_ADQUISICION ==========
             $productos = [];
             
             $sql = "SELECT id, nombre, cantidad, precio_compra, precio_venta, fecha_registro, proveedor, tipo_adquisicion
@@ -143,7 +142,6 @@ while ($p = $provResult->fetch_assoc()) {
                 </div>
             <?php else: ?>
 
-                <!-- TABLA PRINCIPAL (Desktop) -->
                 <div class="card shadow-sm mt-4 desktop-view" style="border-radius: 20px; border: none; overflow: hidden;">
                     <div class="card-header" style="background: white; border-bottom: 2px solid #f97316; padding: 15px 20px;">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -286,7 +284,7 @@ while ($p = $provResult->fetch_assoc()) {
                                 </table>
                             </div>
 
-                            <!-- VISTA MÓVIL - TARJETAS ELEGANTES -->
+                            <!-- VISTA MÓVIL -->
                             <div class="mobile-view">
                                 <div class="products-grid" id="productsGrid">
                                     <?php foreach ($productos as $p):
@@ -442,7 +440,6 @@ while ($p = $provResult->fetch_assoc()) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-// Función para toggle de detalles en móvil
 function toggleProductDetails(btn) {
     const details = btn.nextElementSibling;
     const icon = btn.querySelector('i');
@@ -496,7 +493,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputsConteo = document.querySelectorAll('.stock-conteo');
     let hayModificaciones = false;
 
-    // Función para actualizar vista móvil
     function actualizarVistaMovil() {
         const cards = document.querySelectorAll('.product-card');
         cards.forEach(card => {
@@ -509,6 +505,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const deudaMonto = tablaRow.querySelector('.deudaMonto').innerHTML;
                 const gananciaMonto = tablaRow.querySelector('.gananciaMonto').innerHTML;
                 const stockConteo = tablaRow.querySelector('.stock-conteo').value;
+                const ventasValue = tablaRow.querySelector('.ventas-input').value;
+                const stockFinalValue = tablaRow.querySelector('.stock-final-input').value;
                 
                 card.querySelector('.ventas-mobile').innerHTML = ventas;
                 card.querySelector('.stock-final-mobile').innerHTML = stockFinal;
@@ -519,14 +517,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 card.querySelector('.ganancia-monto-mobile').innerHTML = gananciaMonto;
                 
                 const inputMovil = card.querySelector('.stock-conteo-mobile');
-                if (inputMovil && inputMovil.value !== stockConteo) {
+                if (inputMovil && parseInt(inputMovil.value) !== parseInt(stockConteo)) {
                     inputMovil.value = stockConteo;
+                }
+                
+                const ventasInputMovil = card.querySelector('.ventas-input-mobile');
+                if (ventasInputMovil && ventasInputMovil.value !== ventasValue) {
+                    ventasInputMovil.value = ventasValue;
+                }
+                
+                const stockFinalInputMovil = card.querySelector('.stock-final-input-mobile');
+                if (stockFinalInputMovil && stockFinalInputMovil.value !== stockFinalValue) {
+                    stockFinalInputMovil.value = stockFinalValue;
                 }
             }
         });
     }
 
-    // Vincular inputs móviles
     function vincularInputsMoviles() {
         document.querySelectorAll('.stock-conteo-mobile').forEach(input => {
             input.removeEventListener('input', handleMobileInput);
@@ -538,11 +545,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const card = this.closest('.product-card');
         const id = card.dataset.id;
         const tablaRow = document.querySelector(`#tablaProductos tbody tr[data-id="${id}"]`);
+        const stockInicial = parseInt(card.dataset.stockInicial);
+        
+        let valor = parseInt(this.value) || 0;
+        if (valor > stockInicial) valor = stockInicial;
+        this.value = valor;
         
         if (tablaRow) {
             const inputTabla = tablaRow.querySelector('.stock-conteo');
-            if (inputTabla && inputTabla.value !== this.value) {
-                inputTabla.value = this.value;
+            if (inputTabla && parseInt(inputTabla.value) !== valor) {
+                inputTabla.value = valor;
                 inputTabla.dispatchEvent(new Event('input'));
             }
         }
@@ -576,7 +588,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Buscador
     const buscarInput = document.getElementById('buscarProducto');
     const searchStats = document.getElementById('searchStats');
     const resultadosVisibles = document.getElementById('resultadosVisibles');
@@ -594,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function() {
         noResultsRow.innerHTML = `<td colspan="8" class="text-center py-5">
             <div><i class="fas fa-search fa-3x" style="color: #cbd5e1;"></i>
             <p class="text-muted mb-0">No se encontraron productos con "<strong style="color: #f97316;">${escapeHtml(termino)}</strong>"</p></div>
-        </td>`;
+         </td>`;
         return noResultsRow;
     }
 
@@ -641,7 +652,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return div.innerHTML;
     }
 
-    // Gráficas
     let chartVentas = new Chart(document.getElementById('graficaVentas'), {
         type: 'bar',
         data: { labels: ['Ventas', 'Deuda', 'Ganancia'], datasets: [{ data: [0, 0, 0], backgroundColor: ['#3b82f6', '#ef4444', '#22c55e'], borderRadius: 8 }] },
@@ -678,14 +688,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let input = tr.querySelector('.stock-conteo');
             let sc = parseInt(input.value) || 0;
-            sc = Math.min(Math.max(sc, 0), si);
-            input.value = sc;
-
+            
+            // Validar que no exceda el stock inicial
+            if (sc > si) {
+                sc = si;
+                input.value = si;
+            }
+            if (sc < 0) sc = 0;
+            
             let ventas = si - sc;
             let vm = ventas * pv;
             let dm = esPagado ? 0 : ventas * pc;
             let gm = vm - dm;
 
+            // Actualizar celdas visuales
             tr.querySelector('.ventasCalculadas').innerHTML = ventas;
             tr.querySelector('.stockFinal').innerHTML = sc;
             tr.querySelector('.ventaMonto').innerHTML = '$' + vm.toFixed(2);
@@ -698,8 +714,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             tr.querySelector('.gananciaMonto').innerHTML = '$' + gm.toFixed(2);
-            tr.querySelector('.ventas-input').value = ventas;
-            tr.querySelector('.stock-final-input').value = sc;
+            
+            // ✅ ACTUALIZAR INPUTS OCULTOS
+            let ventasInput = tr.querySelector('.ventas-input');
+            let stockFinalInput = tr.querySelector('.stock-final-input');
+            
+            if (ventasInput) {
+                ventasInput.value = ventas;
+                console.log(`Producto ID ${tr.dataset.id}: ventas=${ventas}`);
+            }
+            if (stockFinalInput) {
+                stockFinalInput.value = sc;
+                console.log(`Producto ID ${tr.dataset.id}: stockFinal=${sc}`);
+            }
 
             if (!tr.classList.contains('hidden-row')) {
                 stockFinalArr[index] = sc;
@@ -718,9 +745,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('infoDeuda').innerHTML = '$' + td.toFixed(2);
         document.getElementById('infoGanancia').innerHTML = '$' + tg.toFixed(2);
 
-        chartVentas.data.datasets[0].data = [tv, td, tg];
-        chartVentas.update();
-        chartStock.update();
+        if (chartVentas) {
+            chartVentas.data.datasets[0].data = [tv, td, tg];
+            chartVentas.update();
+        }
+        if (chartStock) chartStock.update();
         
         actualizarVistaMovil();
     }
@@ -729,18 +758,30 @@ document.addEventListener('DOMContentLoaded', function() {
     vincularInputsMoviles();
     recalcular();
 
-    // Guardar
+    // GUARDAR - VERSIÓN CORREGIDA
     document.getElementById('formStockFinal').addEventListener('submit', function(e) {
         e.preventDefault();
 
-        if (!hayModificaciones) {
-            Swal.fire({ icon: 'warning', title: 'Sin modificaciones', text: 'Debes modificar al menos un artículo para guardar.', confirmButtonColor: '#f97316' });
+        recalcular();
+        
+        let hayVentas = false;
+        document.querySelectorAll('.ventas-input').forEach(input => {
+            if (parseInt(input.value) > 0) hayVentas = true;
+        });
+
+        if (!hayVentas) {
+            Swal.fire({ 
+                icon: 'warning', 
+                title: 'Sin ventas', 
+                text: 'No hay productos con ventas para guardar. Debes modificar el stock contado.', 
+                confirmButtonColor: '#f97316' 
+            });
             return;
         }
 
         Swal.fire({
             title: '¿Guardar conteo?',
-            text: 'Se actualizará el stock de los productos modificados',
+            text: 'Se actualizará el stock de los productos vendidos',
             icon: 'question',
             showCancelButton: true,
             confirmButtonColor: '#22c55e',
@@ -753,16 +794,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const formData = new FormData(e.target);
                 fetch('actualizar_stock.php', { method: 'POST', body: formData })
-                    .then(r => r.json())
-                    .then(res => {
-                        if (res.status === 'ok') {
-                            Swal.fire({ icon: 'success', title: '¡Éxito!', text: res.message, timer: 1500, showConfirmButton: false })
-                                .then(() => location.reload());
-                        } else {
-                            Swal.fire('Error', res.msg || 'Ocurrió un error', 'error');
-                        }
-                    })
-                    .catch(() => Swal.fire('Error', 'Error de conexión', 'error'));
+    .then(r => r.json())
+    .then(res => {
+        Swal.close();
+        if (res.status === 'ok') {
+            Swal.fire({
+                icon: 'success',
+                title: 'Venta registrada',
+                html: res.htmlMessage,
+                confirmButtonColor: '#22c55e',
+                confirmButtonText: 'Aceptar',
+                width: '650px',
+                padding: '20px'
+            }).then(() => location.reload());
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: res.msg || res.message || 'Ocurrió un error',
+                confirmButtonColor: '#f97316'
+            });
+        }
+    })
+    .catch(error => {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error de conexión',
+            text: error.message,
+            confirmButtonColor: '#f97316'
+        });
+    });
             }
         });
     });

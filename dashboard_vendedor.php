@@ -451,7 +451,7 @@ if ($resSemanas) {
         <div class="hero-content text-center">
             <div class="hero-badge">
                 <i class="fas fa-fish"></i>
-                <span>PESCADORES DE LA PREHISTORIA</span>
+                <span>DIARIO FINANCIERO (POS)</span>
             </div>
             <div class="hero-text">
                 <span class="hero-hello"><?= $saludo ?></span>

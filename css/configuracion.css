@@ -534,6 +534,45 @@ body {
     }
 }
 
+/* ========== ALINEAR VERSIÓN, CONTACTO Y DERECHOS A LA IZQUIERDA ========== */
+
+/* Fila específica para versión y contacto */
+.acerca-row .acerca-col:first-child {
+    text-align: left;
+    justify-content: flex-start;
+}
+
+/* Asegurar que todos los textos estén alineados a la izquierda */
+.acerca-col {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.acerca-col .label,
+.acerca-col .value {
+    text-align: left;
+}
+
+/* Valores específicos para que no se desalineen */
+.acerca-col .label {
+    min-width: 130px;
+    flex-shrink: 0;
+}
+
+.acerca-col .value {
+    flex: 1;
+    text-align: left;
+}
+
+/* Móvil */
+@media (max-width: 768px) {
+    .acerca-col .label {
+        min-width: 100px;
+    }
+}
+
 /* Tablet */
 @media (min-width: 769px) and (max-width: 1024px) {
     .acerca-header {

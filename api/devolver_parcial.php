@@ -1,9 +1,32 @@
 <?php
-ob_clean();
+// Limpiar cualquier output previo
+if (ob_get_level()) ob_clean();
+header('Content-Type: application/json');
+header('Cache-Control: no-cache, must-revalidate');
+
 include '../includes/db.php';
 require_once('../includes/fpdf.php');
 
-header('Content-Type: application/json');
+// Función para buscar logo con diferentes extensiones
+function buscarLogo($basePath = 'img/panel_principal') {
+    $extensiones = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+    $ubicaciones = [
+        $basePath,
+        '../' . $basePath,
+        __DIR__ . '/../' . $basePath,
+        $_SERVER['DOCUMENT_ROOT'] . '/' . $basePath
+    ];
+    
+    foreach ($extensiones as $ext) {
+        foreach ($ubicaciones as $ubicacion) {
+            $ruta = $ubicacion . '.' . $ext;
+            if (file_exists($ruta)) {
+                return $ruta;
+            }
+        }
+    }
+    return null;
+}
 
 $input = json_decode(file_get_contents('php://input'), true);
 
@@ -15,6 +38,20 @@ $motivo = $conn->real_escape_string($input['motivo'] ?? '');
 if (!$folio || $id_producto <= 0 || $cantidad_devuelta <= 0) {
     echo json_encode(['success' => false, 'message' => 'Datos inválidos. Parámetros requeridos: folio, id_producto, cantidad.']);
     exit;
+}
+
+// Obtener configuración de la tienda
+$sql_config = "SELECT nombre, telefono, email, direccion FROM configuracion_galeria WHERE id = 1";
+$result_config = $conn->query($sql_config);
+$config = $result_config->fetch_assoc();
+
+if (!$config) {
+    $config = [
+        'nombre' => 'TIENDA PESCADORES',
+        'telefono' => '',
+        'email' => '',
+        'direccion' => ''
+    ];
 }
 
 // === 1. Obtener venta específica ===
@@ -78,8 +115,7 @@ $stmt4 = $conn->prepare("UPDATE productos SET cantidad = cantidad + ? WHERE id =
 $stmt4->bind_param("ii", $cantidad_devuelta, $id_producto);
 $stmt4->execute();
 
-// === 5.1 ACTUALIZAR PEDIDOS (LA PARTE QUE FALTABA) ===
-// Buscar el pedido más reciente de este producto
+// === 5.1 ACTUALIZAR PEDIDOS ===
 $pedido = $conn->query("
     SELECT id, cantidad_pedida, faltante
     FROM pedidos
@@ -103,7 +139,6 @@ if($pedido){
     ");
 }
 
-
 // === 6. Revisar si quedan artículos ===
 $q2 = $conn->prepare("
     SELECT v.*, p.nombre, p.precio_venta
@@ -120,7 +155,7 @@ if ($rest->num_rows == 0) {
     exit;
 }
 
-// === 7. Regenerar PDF (DISEÑO PREMIUM) ===
+// === 7. Regenerar PDF ===
 $carrito = [];
 $total = 0;
 
@@ -136,38 +171,42 @@ if (!is_dir('../tickets')) mkdir('../tickets', 0777, true);
 $ruta = "../tickets/ticket_$folio.pdf";
 
 // Tamaño dinámico
-$alto = 160 + (count($carrito) * 8);
+$alto = 120 + (count($carrito) * 10);
+if ($alto < 130) $alto = 130;
+
 $pdf = new FPDF('P','mm',array(80,$alto));
 $pdf->AddPage();
 $pdf->SetMargins(5,3,5);
 
-// ====== ENCABEZADO ======
-// tamaño del logo
-$anchoLogo = 20;
+// ====== LOGO (buscando img/panel_principal con cualquier extensión) ======
+$logoPath = buscarLogo('img/panel_principal');
+if ($logoPath && file_exists($logoPath)) {
+    $anchoLogo = 20;
+    $anchoPagina = $pdf->GetPageWidth();
+    $x = ($anchoPagina - $anchoLogo) / 2;
+    $pdf->Image($logoPath, $x, 4, $anchoLogo);
+    $pdf->Ln(18);
+} else {
+    $pdf->Ln(8);
+}
 
-// Cargar ancho de la página (80mm si usas ticket chico)
-$anchoPagina = $pdf->GetPageWidth();
-
-// Calcular posición centrada
-$x = ($anchoPagina - $anchoLogo) / 2;
-
-// Colocar logo centrado
-$pdf->Image('../includes/logo.png', $x, 4, $anchoLogo);
-
-// Mover hacia abajo después del logo
-$pdf->Ln(18);
-
+// ====== ENCABEZADO DE TIENDA ======
+$nombreTienda = !empty($config['nombre']) ? $config['nombre'] : 'TIENDA PESCADORES';
 $pdf->SetFont('Arial','B',12);
-$pdf->Cell(0,6,utf8_decode('TIENDA PESCADORES'),0,1,'C');
+$pdf->Cell(0,6,utf8_decode($nombreTienda),0,1,'C');
 
 $pdf->SetFont('Arial','',8);
-$pdf->Cell(0,5,'RFC: PESC123456789',0,1,'C');
-$pdf->Cell(0,5,'Direccion: Calle Falsa 123, Puebla',0,1,'C');
-$pdf->Cell(0,5,'Tel: 222-555-0000',0,1,'C');
 
-$pdf->Ln(3);
+if (!empty($config['direccion'])) {
+    $pdf->Cell(0,4,utf8_decode($config['direccion']),0,1,'C');
+}
+if (!empty($config['telefono'])) {
+    $pdf->Cell(0,4,'Tel: ' . $config['telefono'],0,1,'C');
+}
+if (!empty($config['email'])) {
+    $pdf->Cell(0,4,$config['email'],0,1,'C');
+}
 
-// Línea divisora
 $pdf->Ln(2);
 $pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
 
@@ -179,54 +218,60 @@ $pdf->SetFont('Arial','',9);
 $pdf->Cell(0,5,'Fecha: '.date('d/m/Y H:i:s'),0,1,'L');
 $pdf->Cell(0,5,'Cliente: '.$correo,0,1,'L');
 
-$pdf->Ln(3);
-
-// Línea divisora
 $pdf->Ln(2);
 $pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
 
 // ====== TABLA DE PRODUCTOS ======
-$pdf->SetFont('Arial','B',9);
-$pdf->Cell(40,5,'Producto',0,0);
-$pdf->Cell(8,5,'Cant',0,0,'C');
-$pdf->Cell(12,5,'P.U.',0,0,'R');
-$pdf->Cell(15,5,'Importe',0,1,'R');
+$pdf->SetFont('Arial','B',8);
+$pdf->Cell(38,5,'Producto',0,0);
+$pdf->Cell(10,5,'Cant',0,0,'C');
+$pdf->Cell(14,5,'P.U.',0,0,'R');
+$pdf->Cell(13,5,'Total',0,1,'R');
 
-$pdf->SetFont('Arial','',9);
+$pdf->SetFont('Arial','',8);
 
 foreach ($carrito as $p) {
-    $pdf->Cell(40,6,utf8_decode(substr($p['nombre'],0,20)),0,0);
-    $pdf->Cell(8,6,$p['cantidad_vendida'],0,0,'C');
-    $pdf->Cell(12,6,'$'.number_format($p['precio_venta'],2),0,0,'R');
-    $pdf->Cell(15,6,'$'.number_format($p['precio_venta'] * $p['cantidad_vendida'],2),0,1,'R');
+    $nombre = utf8_decode($p['nombre']);
+    if (strlen($nombre) > 20) {
+        $nombre = substr($nombre, 0, 18) . '...';
+    }
+    
+    $pdf->Cell(38,5,$nombre,0,0);
+    $pdf->Cell(10,5,$p['cantidad_vendida'],0,0,'C');
+    $pdf->Cell(14,5,'$'.number_format($p['precio_venta'],2),0,0,'R');
+    $pdf->Cell(13,5,'$'.number_format($p['precio_venta'] * $p['cantidad_vendida'],2),0,1,'R');
 }
 
-// Línea divisora
 $pdf->Ln(2);
 $pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
 
 // ====== TOTALES ======
 $pdf->SetFont('Arial','',9);
 $pdf->Cell(45,6,'Subtotal:',0,0,'R');
+$pdf->SetFont('Arial','B',9);
 $pdf->Cell(20,6,'$'.number_format($subtotal,2),0,1,'R');
 
+$pdf->SetFont('Arial','',9);
 $pdf->Cell(45,6,'IVA 16%:',0,0,'R');
+$pdf->SetFont('Arial','B',9);
 $pdf->Cell(20,6,'$'.number_format($iva,2),0,1,'R');
 
+$pdf->Ln(2);
 $pdf->SetFont('Arial','B',11);
 $pdf->Cell(45,7,'TOTAL:',0,0,'R');
+$pdf->SetFont('Arial','B',11);
 $pdf->Cell(20,7,'$'.number_format($total,2),0,1,'R');
 
-$pdf->Ln(4);
-
-// Línea divisora
-$pdf->Ln(2);
+$pdf->Ln(3);
 $pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
 
 // ====== MENSAJE FINAL ======
 $pdf->SetFont('Arial','I',8);
-$pdf->Cell(0,5,'Gracias por su compra',0,1,'C');
-$pdf->Cell(0,5,'Ticket actualizado tras devolucion parcial',0,1,'C');
+$pdf->Cell(0,5,utf8_decode('¡Gracias por tu compra!'),0,1,'C');
+if ($cantidad_devuelta > 0) {
+    $pdf->SetFont('Arial','I',7);
+    $pdf->Cell(0,4,'* Se realizó una devolución parcial *',0,1,'C');
+}
 $pdf->Cell(0,5,utf8_decode('¡Vuelva pronto!'),0,1,'C');
 
 // Guardar PDF
@@ -235,4 +280,10 @@ $pdf->Output('F',$ruta);
 // Guardar referencia en DB
 $conn->query("UPDATE ventas SET ticket_pdf = 'ticket_$folio.pdf' WHERE folio_ticket = '$folio'");
 
+// Limpiar buffer antes de enviar respuesta
+if (ob_get_level()) ob_clean();
+
+// Enviar respuesta JSON exitosa
 echo json_encode(['success'=>true, 'message'=>'Devolución parcial realizada y ticket actualizado.']);
+exit;
+?>

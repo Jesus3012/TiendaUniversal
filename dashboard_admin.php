@@ -543,7 +543,7 @@ $imagen_dashboard = isset($config_data['imagen_dashboard']) && file_exists($conf
                 <?php endif; ?>
             </div>
         <?php endif; ?>
-        <div class="hero-badge"><i class="fas fa-fish"></i><span>PESCADORES DE LA PREHISTORIA</span></div>
+        <div class="hero-badge"><i class="fas fa-fish"></i><span>DIARIO FINANCIERO (POS)</span></div>
         <div class="hero-text"><span class="hero-hello"><?= $saludo ?></span><span class="hero-user"><?= htmlspecialchars($nombre_completo) ?></span></div>   
         <div class="hero-cta"><i class="fas fa-hand-peace"></i><span>¿Qué haremos hoy?</span></div>
     </div>
