@@ -882,6 +882,66 @@ if (!empty($errors)) {
 
 <link rel="stylesheet" href="css/ajustes_productos.css?v=<?= time() ?>">
 
+<style>
+.filtro-proveedor-wrap {
+    min-width: 250px;
+}
+
+#filtroProveedor {
+    height: 42px;
+    border-radius: 12px;
+    border: 1px solid #fed7aa;
+    font-size: 0.9rem;
+    color: #334155;
+    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.10);
+}
+
+#filtroProveedor:focus {
+    border-color: #f97316;
+    box-shadow: 0 0 0 0.2rem rgba(249, 115, 22, 0.18);
+}
+
+.btn-limpiar-filtros {
+    border: 1px solid #f97316;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: #fff;
+    height: 42px;
+    padding: 0 18px;
+    border-radius: 12px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    box-shadow: 0 8px 18px rgba(249, 115, 22, 0.22);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+.btn-limpiar-filtros:hover {
+    background: linear-gradient(135deg, #fb923c, #f97316);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(249, 115, 22, 0.30);
+}
+
+.btn-limpiar-filtros:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    .toolbar-filtros {
+        gap: 10px;
+    }
+
+    .filtro-proveedor-wrap,
+    .buscador,
+    .btn-limpiar-filtros {
+        width: 100%;
+    }
+}
+</style>
+
 <div class="content-wrapper">
     <div class="container-fluid">
         
@@ -942,6 +1002,22 @@ if (!empty($errors)) {
                                 <input type="text" id="buscadorInput" placeholder="Buscar por nombre, categoría o proveedor..." autocomplete="off">
                                 <i class="fas fa-times limpiar-busqueda" id="limpiarBusqueda"></i>
                             </div>
+
+                            <div class="filtro-proveedor-wrap">
+                                <select id="filtroProveedor" class="form-control form-control-sm">
+                                    <option value="todos">Todos los proveedores</option>
+                                    <?php foreach ($proveedores as $prov): ?>
+                                        <option value="<?= strtolower(htmlspecialchars($prov['nombre'], ENT_QUOTES)) ?>">
+                                            <?= htmlspecialchars($prov['nombre']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <option value="sin proveedor">Sin proveedor</option>
+                                </select>
+                            </div>
+
+                            <button type="button" class="btn-limpiar-filtros" id="btnLimpiarFiltros">
+                                <i class="fas fa-eraser"></i> Borrar filtros
+                            </button>
                         </div>
 
                         <div class="table-responsive">
@@ -1071,7 +1147,7 @@ if (!empty($errors)) {
                                 $stockClass = $p['cantidad'] <= 0 ? 'stock-bajo' : ($p['cantidad'] <= 5 ? 'stock-bajo' : 'stock-alto');
                                 $stockText = $p['tipo_inventario'] == 'insumo' ? number_format($p['cantidad'], 2) . ' m' : number_format($p['cantidad'], 0) . ' pz';
                             ?>
-                            <div class="producto-card-mobile" data-tipo="<?= $p['tipo_inventario'] ?>" data-nombre="<?= strtolower($p['nombre']) ?>">
+                            <div class="producto-card-mobile" data-tipo="<?= $p['tipo_inventario'] ?>" data-nombre="<?= strtolower(htmlspecialchars($p['nombre'], ENT_QUOTES)) ?>" data-categoria="<?= strtolower(htmlspecialchars($p['categoria'] ?? '', ENT_QUOTES)) ?>" data-proveedor="<?= strtolower(htmlspecialchars($p['proveedor'] ?? 'sin proveedor', ENT_QUOTES)) ?>">
                                 
                                 <!-- Fila 1: Tipo + Nombre + Stock -->
                                 <div class="card-row-top">
@@ -1465,6 +1541,8 @@ if (!empty($errors)) {
 // ===== FILTROS Y BÚSQUEDA - VERSIÓN COMPLETA (TABLA + TARJETAS MÓVIL) =====
 let filtroActual = 'todos';
 let busquedaActual = '';
+let proveedorActual = 'todos';
+const FILTROS_STORAGE_KEY = 'ajustes_productos_filtros';
 let filasVisibles = [];
 let tarjetasVisibles = [];
 let paginaActual = 1;
@@ -1475,8 +1553,68 @@ function isMobile() {
     return window.innerWidth <= 768;
 }
 
-function aplicarFiltros() {
+function normalizarTexto(texto) {
+    return (texto || '')
+        .toString()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+}
+
+function guardarFiltrosEnStorage() {
+    // Solo se conserva el filtro de proveedor al recargar o actualizar producto.
+    // La búsqueda por artículo se limpia siempre al cargar la página.
+    localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify({
+        proveedor: proveedorActual
+    }));
+}
+
+function cargarFiltrosDesdeStorage() {
+    try {
+        const filtrosGuardados = JSON.parse(localStorage.getItem(FILTROS_STORAGE_KEY) || '{}');
+        filtroActual = 'todos';
+        busquedaActual = '';
+        proveedorActual = filtrosGuardados.proveedor || 'todos';
+    } catch (e) {
+        filtroActual = 'todos';
+        busquedaActual = '';
+        proveedorActual = 'todos';
+    }
+}
+
+function pintarFiltrosEnPantalla() {
+    document.querySelectorAll('.btn-filtro-tabla').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-filtro') === filtroActual);
+    });
+
+    const buscadorInput = document.getElementById('buscadorInput');
+    const limpiarBusqueda = document.getElementById('limpiarBusqueda');
+    if (buscadorInput) buscadorInput.value = busquedaActual;
+    if (limpiarBusqueda) limpiarBusqueda.style.display = busquedaActual ? 'block' : 'none';
+
+    const filtroProveedor = document.getElementById('filtroProveedor');
+    if (filtroProveedor) {
+        const existeOpcion = Array.from(filtroProveedor.options).some(opt => opt.value === proveedorActual);
+        filtroProveedor.value = existeOpcion ? proveedorActual : 'todos';
+        proveedorActual = filtroProveedor.value;
+    }
+}
+
+function borrarFiltros() {
+    filtroActual = 'todos';
+    busquedaActual = '';
+    proveedorActual = 'todos';
+    paginaActual = 1;
+    localStorage.removeItem(FILTROS_STORAGE_KEY);
+    pintarFiltrosEnPantalla();
+    aplicarFiltros(false);
+}
+
+function aplicarFiltros(debeGuardar = true) {
     const esMovil = isMobile();
+    const busquedaNormalizada = normalizarTexto(busquedaActual);
+    const proveedorNormalizado = normalizarTexto(proveedorActual);
     
     // ===== FILTRAR TABLA (DESKTOP) =====
     const filasTabla = document.querySelectorAll('#tablaBody .producto-fila');
@@ -1484,9 +1622,9 @@ function aplicarFiltros() {
     
     filasTabla.forEach(fila => {
         const tipo = fila.getAttribute('data-tipo');
-        const nombre = fila.getAttribute('data-nombre') || '';
-        const categoria = fila.getAttribute('data-categoria') || '';
-        const proveedor = fila.getAttribute('data-proveedor') || '';
+        const nombre = normalizarTexto(fila.getAttribute('data-nombre') || '');
+        const categoria = normalizarTexto(fila.getAttribute('data-categoria') || '');
+        const proveedor = normalizarTexto(fila.getAttribute('data-proveedor') || 'sin proveedor');
         
         let mostrar = true;
         
@@ -1496,9 +1634,15 @@ function aplicarFiltros() {
             }
         }
         
-        if (mostrar && busquedaActual !== '') {
-            const texto = (nombre + ' ' + categoria + ' ' + proveedor).toLowerCase();
-            if (!texto.includes(busquedaActual.toLowerCase())) {
+        if (mostrar && proveedorNormalizado !== 'todos') {
+            if (proveedor !== proveedorNormalizado) {
+                mostrar = false;
+            }
+        }
+
+        if (mostrar && busquedaNormalizada !== '') {
+            const texto = nombre + ' ' + categoria + ' ' + proveedor;
+            if (!texto.includes(busquedaNormalizada)) {
                 mostrar = false;
             }
         }
@@ -1517,7 +1661,9 @@ function aplicarFiltros() {
     
     tarjetas.forEach(tarjeta => {
         const tipo = tarjeta.getAttribute('data-tipo');
-        const nombre = tarjeta.getAttribute('data-nombre') || '';
+        const nombre = normalizarTexto(tarjeta.getAttribute('data-nombre') || '');
+        const categoria = normalizarTexto(tarjeta.getAttribute('data-categoria') || '');
+        const proveedor = normalizarTexto(tarjeta.getAttribute('data-proveedor') || 'sin proveedor');
         
         let mostrar = true;
         
@@ -1527,8 +1673,15 @@ function aplicarFiltros() {
             }
         }
         
-        if (mostrar && busquedaActual !== '') {
-            if (!nombre.includes(busquedaActual.toLowerCase())) {
+        if (mostrar && proveedorNormalizado !== 'todos') {
+            if (proveedor !== proveedorNormalizado) {
+                mostrar = false;
+            }
+        }
+
+        if (mostrar && busquedaNormalizada !== '') {
+            const texto = nombre + ' ' + categoria + ' ' + proveedor;
+            if (!texto.includes(busquedaNormalizada)) {
                 mostrar = false;
             }
         }
@@ -1562,6 +1715,10 @@ function aplicarFiltros() {
         }
         paginaActual = 1;
         actualizarPaginacion();
+    }
+
+    if (debeGuardar) {
+        guardarFiltrosEnStorage();
     }
 }
 
@@ -1942,11 +2099,13 @@ function initImagePreview() {
 document.addEventListener('DOMContentLoaded', function() {
     $('[data-toggle="tooltip"]').tooltip();
     
-    // Inicializar arrays
+    // Inicializar arrays y recuperar filtros guardados
     filasVisibles = Array.from(document.querySelectorAll('#tablaBody .producto-fila'));
     tarjetasVisibles = Array.from(document.querySelectorAll('.producto-card-mobile'));
-    
-    actualizarPaginacion();
+
+    cargarFiltrosDesdeStorage();
+    pintarFiltrosEnPantalla();
+    aplicarFiltros(false);
     
     // Filtros por tipo
     const filtrosBtns = document.querySelectorAll('.btn-filtro-tabla');
@@ -1979,6 +2138,19 @@ document.addEventListener('DOMContentLoaded', function() {
             aplicarFiltros();
             if (buscadorInput) buscadorInput.focus();
         });
+    }
+
+    const filtroProveedor = document.getElementById('filtroProveedor');
+    if (filtroProveedor) {
+        filtroProveedor.addEventListener('change', function() {
+            proveedorActual = this.value || 'todos';
+            aplicarFiltros();
+        });
+    }
+
+    const btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
+    if (btnLimpiarFiltros) {
+        btnLimpiarFiltros.addEventListener('click', borrarFiltros);
     }
     
     // Detectar cambio de tamaño (responsive)

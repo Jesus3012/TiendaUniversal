@@ -490,25 +490,25 @@ if ($productos_result) {
                 </div>
 
                 <div class="row g-2 mb-3 pos-totales">
-    <div class="col-md-4 col-6">
-        <div class="form-group">
-            <label class="small-label"><i class="fas fa-calculator me-1"></i> Total</label>
-            <input type="text" class="form-control form-control-sm total-numero" id="total" value="0.00" readonly>
-        </div>
-    </div>
-    <div class="col-md-4 col-6">
-        <div class="form-group">
-            <label class="small-label"><i class="fas fa-money-bill me-1"></i> Pagado</label>
-            <input type="number" class="form-control form-control-sm pago-numero" name="monto_pagado" id="monto_pagado" step="0.01" min="0" placeholder="0.00" oninput="calcularCambio()">
-        </div>
-    </div>
-    <div class="col-md-4 col-12">
-        <div class="form-group">
-            <label class="small-label"><i class="fas fa-exchange-alt me-1"></i> Cambio</label>
-            <input type="text" class="form-control form-control-sm cambio-numero" id="cambio" value="0.00" readonly>
-        </div>
-    </div>
-</div>
+                    <div class="col-md-4 col-6">
+                        <div class="form-group">
+                            <label class="small-label"><i class="fas fa-calculator me-1"></i> Total</label>
+                            <input type="text" class="form-control form-control-sm total-numero" id="total" value="0.00" readonly>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-6">
+                        <div class="form-group">
+                            <label class="small-label"><i class="fas fa-money-bill me-1"></i> Pagado</label>
+                            <input type="number" class="form-control form-control-sm pago-numero" name="monto_pagado" id="monto_pagado" step="0.01" min="0" placeholder="0.00" oninput="calcularCambio()">
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <div class="form-group">
+                            <label class="small-label"><i class="fas fa-exchange-alt me-1"></i> Cambio</label>
+                            <input type="text" class="form-control form-control-sm cambio-numero" id="cambio" value="0.00" readonly>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="form-group mb-3 pos-correo">
                     <label class="small-label"><i class="fas fa-envelope me-2"></i> Correo del cliente</label>
@@ -516,47 +516,47 @@ if ($productos_result) {
                     <small class="text-muted mt-1 d-block small">Opcional - envío de ticket</small>
                 </div>
                 
-<!-- MÉTODOS DE PAGO - SIN NINGÚN CUADRO DE COLOR DETRÁS -->
-<div class="metodos-pago-wrapper">
-    <h6 class="small-title"><i class="fas fa-credit-card me-2"></i> Método de pago</h6>
-    <div class="metodos-container">
-        <label class="metodo-radio">
-            <input type="radio" name="metodo_pago" value="efectivo" checked>
-            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-            <div class="metodo-content">
-                <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f4b5.svg" class="icono-metodo-color" alt="efectivo">
-                <span>Efectivo</span>
-            </div>
-        </label>
+                <!-- MÉTODOS DE PAGO - SIN NINGÚN CUADRO DE COLOR DETRÁS -->
+                <div class="metodos-pago-wrapper">
+                    <h6 class="small-title"><i class="fas fa-credit-card me-2"></i> Método de pago</h6>
+                    <div class="metodos-container">
+                        <label class="metodo-radio">
+                            <input type="radio" name="metodo_pago" value="efectivo" checked>
+                            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+                            <div class="metodo-content">
+                                <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f4b5.svg" class="icono-metodo-color" alt="efectivo">
+                                <span>Efectivo</span>
+                            </div>
+                        </label>
 
-        <label class="metodo-radio">
-            <input type="radio" name="metodo_pago" value="transferencia">
-            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-            <div class="metodo-content">
-                <img src="https://cdn-icons-png.flaticon.com/512/2331/2331947.png" class="icono-metodo-color" alt="transferencia">
-                <span>Transf.</span>
-            </div>
-        </label>
+                        <label class="metodo-radio">
+                            <input type="radio" name="metodo_pago" value="transferencia">
+                            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+                            <div class="metodo-content">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2331/2331947.png" class="icono-metodo-color" alt="transferencia">
+                                <span>Transf.</span>
+                            </div>
+                        </label>
 
-        <label class="metodo-radio">
-            <input type="radio" name="metodo_pago" value="tarjeta_debito">
-            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-            <div class="metodo-content">
-                <img src="https://brandeps.com/logo-download/V/Visa-logo-vector-01.svg" class="icono-metodo-color" onerror="this.src='https://cdn-icons-png.flaticon.com/512/349/349221.png'" alt="visa">
-                <span>Débito</span>
-            </div>
-        </label>
+                        <label class="metodo-radio">
+                            <input type="radio" name="metodo_pago" value="tarjeta_debito">
+                            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+                            <div class="metodo-content">
+                                <img src="https://brandeps.com/logo-download/V/Visa-logo-vector-01.svg" class="icono-metodo-color" onerror="this.src='https://cdn-icons-png.flaticon.com/512/349/349221.png'" alt="visa">
+                                <span>Débito</span>
+                            </div>
+                        </label>
 
-        <label class="metodo-radio">
-            <input type="radio" name="metodo_pago" value="tarjeta_credito">
-            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
-            <div class="metodo-content">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Mastercard-logo.png" class="icono-metodo-color" alt="mastercard">
-                <span>Crédito</span>
-            </div>
-        </label>
-    </div>
-</div>
+                        <label class="metodo-radio">
+                            <input type="radio" name="metodo_pago" value="tarjeta_credito">
+                            <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
+                            <div class="metodo-content">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Mastercard-logo.png" class="icono-metodo-color" alt="mastercard">
+                                <span>Crédito</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
                 
                 <div id="extraCampos"></div>
 
@@ -592,6 +592,9 @@ if ($productos_result) {
 
 <script>
 let carrito = <?php echo $carrito_json; ?>;
+const VENTA_EXITOSA = <?= $venta_exitosa ? 'true' : 'false' ?>;
+const POS_STORAGE_ACTIVA = 'pos_venta_activa';
+const POS_STORAGE_PENDIENTES = 'pos_ventas_pendientes';
 let ventaEnProceso = false;
 let buscandoProducto = false;
 let timerCodigo = null;
@@ -619,6 +622,379 @@ function resetBotonVenta() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check-circle me-2"></i> Confirmar venta';
     }
+}
+
+
+// ============ LOCAL STORAGE: VENTAS ACTIVAS Y PENDIENTES ============
+function obtenerPendientesLocal() {
+    try {
+        return JSON.parse(localStorage.getItem(POS_STORAGE_PENDIENTES) || '[]');
+    } catch (e) {
+        console.error('Error leyendo pendientes:', e);
+        return [];
+    }
+}
+
+function guardarPendientesLocal(pendientes) {
+    localStorage.setItem(POS_STORAGE_PENDIENTES, JSON.stringify(pendientes || []));
+}
+
+function obtenerDatosFormularioVenta() {
+    const metodo = document.querySelector('input[name="metodo_pago"]:checked')?.value || 'efectivo';
+
+    return {
+        id: Date.now(),
+        fecha: new Date().toISOString(),
+        carrito: carrito,
+        monto_pagado: document.getElementById('monto_pagado')?.value || '',
+        correo_cliente: document.getElementById('correo_cliente')?.value || '',
+        metodo_pago: metodo,
+        referencia_pago: document.getElementById('folio_transferencia')?.value || '',
+        ultimos4: document.getElementById('ultimos4')?.value || '',
+        tipo_tarjeta_detectada: document.getElementById('tipo_tarjeta_detectada')?.value || '',
+        folio_autorizacion: document.getElementById('folio_autorizacion')?.value || ''
+    };
+}
+
+function guardarVentaActivaLocal() {
+    if (ventaEnProceso || VENTA_EXITOSA) return;
+
+    if (!Array.isArray(carrito) || carrito.length === 0) {
+        localStorage.removeItem(POS_STORAGE_ACTIVA);
+        return;
+    }
+
+    localStorage.setItem(POS_STORAGE_ACTIVA, JSON.stringify(obtenerDatosFormularioVenta()));
+}
+
+function limpiarVentaActivaLocal() {
+    localStorage.removeItem(POS_STORAGE_ACTIVA);
+}
+
+function calcularTotalCarrito(items) {
+    return (items || []).reduce((sum, item) => sum + ((parseFloat(item.precio) || 0) * (parseInt(item.cantidad) || 0)), 0);
+}
+
+function resumenVenta(data) {
+    const total = calcularTotalCarrito(data.carrito || []);
+    const productos = (data.carrito || []).length;
+    const fecha = data.fecha ? new Date(data.fecha).toLocaleString() : 'Sin fecha';
+    const nombre = data.nombre || `Venta ${fecha}`;
+
+    return { total, productos, fecha, nombre };
+}
+
+function aplicarVentaGuardada(data) {
+    carrito = Array.isArray(data.carrito) ? data.carrito : [];
+
+    const monto = document.getElementById('monto_pagado');
+    const correo = document.getElementById('correo_cliente');
+
+    if (monto) monto.value = data.monto_pagado || '';
+    if (correo) correo.value = data.correo_cliente || '';
+
+    const metodo = data.metodo_pago || 'efectivo';
+    const radio = document.querySelector(`input[name="metodo_pago"][value="${metodo}"]`);
+
+    if (radio) {
+        radio.checked = true;
+        document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('selected'));
+        radio.closest('.metodo-radio')?.classList.add('selected');
+    }
+
+    mostrarCamposPago();
+
+    setTimeout(() => {
+        const folioTransfer = document.getElementById('folio_transferencia');
+        const ultimos4 = document.getElementById('ultimos4');
+        const tipoDetectado = document.getElementById('tipo_tarjeta_detectada');
+        const tipoVisible = document.getElementById('tipo_tarjeta');
+        const auth = document.getElementById('folio_autorizacion');
+
+        if (folioTransfer) folioTransfer.value = data.referencia_pago || '';
+        if (ultimos4) ultimos4.value = data.ultimos4 || '';
+        if (tipoDetectado) tipoDetectado.value = data.tipo_tarjeta_detectada || '';
+        if (tipoVisible) tipoVisible.value = data.tipo_tarjeta_detectada || '';
+        if (auth) auth.value = data.folio_autorizacion || '';
+
+        renderCarrito();
+        guardarCarrito();
+        guardarVentaActivaLocal();
+        enfocarCodigo();
+    }, 50);
+}
+
+function limpiarFormularioVenta() {
+    carrito = [];
+
+    const monto = document.getElementById('monto_pagado');
+    const correo = document.getElementById('correo_cliente');
+    const codigo = document.getElementById('codigo');
+
+    if (monto) monto.value = '';
+    if (correo) correo.value = '';
+    if (codigo) codigo.value = '';
+
+    const efectivo = document.querySelector('input[name="metodo_pago"][value="efectivo"]');
+    if (efectivo) efectivo.checked = true;
+
+    document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('selected'));
+    efectivo?.closest('.metodo-radio')?.classList.add('selected');
+
+    mostrarCamposPago();
+    renderCarrito();
+    guardarCarrito();
+    limpiarVentaActivaLocal();
+    enfocarCodigo();
+}
+
+function guardarVentaPendiente(nombreManual = null) {
+    if (!Array.isArray(carrito) || carrito.length === 0) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Carrito vacío',
+            text: 'No hay productos para pausar.',
+            confirmButtonColor: '#f97316'
+        });
+        return;
+    }
+
+    Swal.fire({
+        title: 'Pausar venta',
+        input: 'text',
+        inputLabel: 'Nombre o referencia de la venta pendiente',
+        inputValue: nombreManual || `Venta pendiente ${new Date().toLocaleTimeString()}`,
+        inputPlaceholder: 'Ej: Cliente Juan / Mesa 2',
+        showCancelButton: true,
+        confirmButtonText: 'Guardar pendiente',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f97316',
+        inputValidator: value => !value.trim() ? 'Escribe una referencia para identificarla.' : null
+    }).then(result => {
+        if (!result.isConfirmed) return;
+
+        const pendientes = obtenerPendientesLocal();
+        const venta = obtenerDatosFormularioVenta();
+        venta.id = Date.now();
+        venta.nombre = result.value.trim();
+        venta.fecha = new Date().toISOString();
+
+        pendientes.unshift(venta);
+        guardarPendientesLocal(pendientes);
+        limpiarFormularioVenta();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Venta pausada',
+            text: 'Ya puedes iniciar otra venta sin perder la anterior.',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1800
+        });
+    });
+}
+
+function nuevaVentaLimpia() {
+    if (!Array.isArray(carrito) || carrito.length === 0) {
+        limpiarFormularioVenta();
+        return;
+    }
+
+    Swal.fire({
+        title: 'Iniciar nueva venta',
+        text: 'Tienes una venta en proceso. ¿Qué deseas hacer?',
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Pausar y nueva',
+        denyButtonText: 'Nueva sin guardar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f97316',
+        denyButtonColor: '#dc2626',
+        cancelButtonColor: '#6c757d'
+    }).then(result => {
+        if (result.isConfirmed) {
+            guardarVentaPendiente();
+        } else if (result.isDenied) {
+            limpiarFormularioVenta();
+            Swal.fire({
+                icon: 'success',
+                title: 'Nueva venta lista',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1300
+            });
+        }
+    });
+}
+
+function verVentasPendientes() {
+    const pendientes = obtenerPendientesLocal();
+
+    if (pendientes.length === 0) {
+        Swal.fire({
+            icon: 'info',
+            title: 'Sin ventas pendientes',
+            text: 'No tienes ventas pausadas por el momento.',
+            confirmButtonColor: '#f97316'
+        });
+        return;
+    }
+
+    const html = pendientes.map(v => {
+        const r = resumenVenta(v);
+        return `
+            <div style="border:1px solid #e5e7eb; border-radius:14px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;">
+                <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+                    <div>
+                        <strong style="color:#1e293b; font-size:14px;">${escapeHtml(r.nombre)}</strong><br>
+                        <small style="color:#64748b;">${r.fecha} · ${r.productos} producto(s)</small><br>
+                        <strong style="color:#16a34a;">Total: $${r.total.toFixed(2)}</strong>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                        <button type="button" onclick="recuperarVentaPendiente(${v.id})" style="border:0; border-radius:10px; padding:7px 10px; background:#f97316; color:white; cursor:pointer; font-size:12px;">
+                            Recuperar
+                        </button>
+                        <button type="button" onclick="eliminarVentaPendiente(${v.id})" style="border:0; border-radius:10px; padding:7px 10px; background:#ef4444; color:white; cursor:pointer; font-size:12px;">
+                            Eliminar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    Swal.fire({
+        title: 'Ventas pendientes',
+        html: `<div style="max-height:420px; overflow-y:auto; padding-right:4px;">${html}</div>`,
+        width: '650px',
+        showConfirmButton: true,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#f97316'
+    });
+}
+
+function recuperarVentaPendiente(id) {
+    const pendientes = obtenerPendientesLocal();
+    const venta = pendientes.find(v => Number(v.id) === Number(id));
+
+    if (!venta) return;
+
+    const cargar = () => {
+        const nuevosPendientes = pendientes.filter(v => Number(v.id) !== Number(id));
+        guardarPendientesLocal(nuevosPendientes);
+        aplicarVentaGuardada(venta);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Venta recuperada',
+            text: 'La venta pendiente volvió al carrito.',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1600
+        });
+    };
+
+    if (Array.isArray(carrito) && carrito.length > 0) {
+        Swal.fire({
+            title: 'Ya hay una venta activa',
+            text: 'Para recuperar esta pendiente, primero debes pausar o descartar la venta actual.',
+            icon: 'warning',
+            showDenyButton: true,
+            showCancelButton: true,
+            confirmButtonText: 'Pausar actual',
+            denyButtonText: 'Descartar actual',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#f97316',
+            denyButtonColor: '#dc2626'
+        }).then(result => {
+            if (result.isConfirmed) {
+                const actuales = obtenerPendientesLocal();
+                const actual = obtenerDatosFormularioVenta();
+                actual.id = Date.now();
+                actual.nombre = `Venta pausada ${new Date().toLocaleTimeString()}`;
+                actual.fecha = new Date().toISOString();
+                actuales.unshift(actual);
+                guardarPendientesLocal(actuales);
+                cargar();
+            } else if (result.isDenied) {
+                cargar();
+            }
+        });
+    } else {
+        cargar();
+    }
+}
+
+function eliminarVentaPendiente(id) {
+    Swal.fire({
+        title: 'Eliminar pendiente',
+        text: 'Esta venta pausada se eliminará definitivamente.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6c757d'
+    }).then(result => {
+        if (!result.isConfirmed) return;
+
+        const pendientes = obtenerPendientesLocal().filter(v => Number(v.id) !== Number(id));
+        guardarPendientesLocal(pendientes);
+        verVentasPendientes();
+    });
+}
+
+function restaurarVentaActivaLocal() {
+    if (VENTA_EXITOSA) {
+        limpiarVentaActivaLocal();
+        return;
+    }
+
+    if (Array.isArray(carrito) && carrito.length > 0) {
+        guardarVentaActivaLocal();
+        return;
+    }
+
+    const guardadaRaw = localStorage.getItem(POS_STORAGE_ACTIVA);
+    if (!guardadaRaw) return;
+
+    let guardada = null;
+    try {
+        guardada = JSON.parse(guardadaRaw);
+    } catch (e) {
+        limpiarVentaActivaLocal();
+        return;
+    }
+
+    if (!guardada || !Array.isArray(guardada.carrito) || guardada.carrito.length === 0) {
+        limpiarVentaActivaLocal();
+        return;
+    }
+
+    const r = resumenVenta(guardada);
+
+    Swal.fire({
+        title: 'Venta sin terminar',
+        html: `Encontré una venta anterior sin finalizar:<br><br><strong>${escapeHtml(r.nombre)}</strong><br>${r.productos} producto(s) · Total: <strong>$${r.total.toFixed(2)}</strong><br><small>${r.fecha}</small>`,
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Recuperar',
+        denyButtonText: 'Descartar',
+        cancelButtonText: 'Después',
+        confirmButtonColor: '#f97316',
+        denyButtonColor: '#dc2626'
+    }).then(result => {
+        if (result.isConfirmed) {
+            aplicarVentaGuardada(guardada);
+        } else if (result.isDenied) {
+            limpiarVentaActivaLocal();
+        }
+    });
 }
 
 // ============ FUNCIONES DEL MODAL FLOTANTE ============
@@ -982,6 +1358,8 @@ function guardarCarrito() {
         },
         async: false
     });
+
+    guardarVentaActivaLocal();
 }
 
 function actualizarCantidad(index, valor) {
@@ -1595,6 +1973,7 @@ function actualizarDespuesDeFiltrar() {
 document.addEventListener('DOMContentLoaded', function() {
     renderCarrito();
     mostrarCamposPago();
+    restaurarVentaActivaLocal();
     enfocarCodigo();
 
     const modalFlotante = document.getElementById('modalFlotante');
@@ -1639,7 +2018,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const montoPagado = document.getElementById('monto_pagado');
-    if (montoPagado) montoPagado.addEventListener('input', calcularCambio);
+    if (montoPagado) {
+        montoPagado.addEventListener('input', calcularCambio);
+        montoPagado.addEventListener('input', guardarVentaActivaLocal);
+    }
+
+    const correoCliente = document.getElementById('correo_cliente');
+    if (correoCliente) correoCliente.addEventListener('input', guardarVentaActivaLocal);
+
+    const extraCampos = document.getElementById('extraCampos');
+    if (extraCampos) extraCampos.addEventListener('input', guardarVentaActivaLocal);
 
     const ventaForm = document.getElementById('ventaForm');
 
@@ -1663,6 +2051,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (radio) radio.checked = true;
 
             mostrarCamposPago();
+            guardarVentaActivaLocal();
             enfocarCodigo();
         });
 
