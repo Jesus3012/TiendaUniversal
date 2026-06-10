@@ -42,11 +42,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
 
     $referencia_pago = null;
 
+    $mp_order_id = trim($_POST['mp_order_id'] ?? '');
+    $mp_payment_id = trim($_POST['mp_payment_id'] ?? '');
+    $mp_payment_status = trim($_POST['mp_payment_status'] ?? '');
+    $mp_payment_status_detail = trim($_POST['mp_payment_status_detail'] ?? '');
+    $mp_payment_method_id = trim($_POST['mp_payment_method_id'] ?? '');
+
     if ($metodo_pago === "tarjeta_debito" || $metodo_pago === "tarjeta_credito") {
-        $ultimos4 = $_POST['ultimos4'] ?? '';
-        $tipo = $_POST['tipo_tarjeta_detectada'] ?? 'OTRA';
-        $auth = $_POST['folio_autorizacion'] ?? '';
-        $referencia_pago = "$tipo ****$ultimos4 | AUTH: $auth";
+        // Para tarjeta, la venta solo se registra si Mercado Pago ya devolvió pago aprobado/procesado.
+        if ($mp_order_id === '' || !in_array($mp_payment_status, ['processed', 'approved'], true)) {
+            $_SESSION['alerta'] = [
+                'tipo' => 'error',
+                'titulo' => 'Pago no confirmado',
+                'mensaje' => 'No se registró la venta porque el pago con terminal Mercado Pago no fue aprobado.'
+            ];
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
+        }
+
+        $referencia_pago = "Mercado Pago | Orden: {$mp_order_id}";
+        if ($mp_payment_id !== '') {
+            $referencia_pago .= " | Pago: {$mp_payment_id}";
+        }
+        if ($mp_payment_method_id !== '') {
+            $referencia_pago .= " | Método: {$mp_payment_method_id}";
+        }
+        if ($mp_payment_status_detail !== '') {
+            $referencia_pago .= " | Detalle: {$mp_payment_status_detail}";
+        }
     } else if ($metodo_pago === "transferencia") {
         $referencia_pago = trim($_POST['referencia_pago'] ?? '');
     } else if ($metodo_pago === "efectivo") {
@@ -450,6 +473,11 @@ if ($productos_result) {
                 <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
                 <input type="hidden" name="registrar_venta" value="1">
                 <input type="hidden" name="carrito_json" id="carrito_json">
+                <input type="hidden" name="mp_order_id" id="mp_order_id">
+                <input type="hidden" name="mp_payment_id" id="mp_payment_id">
+                <input type="hidden" name="mp_payment_status" id="mp_payment_status">
+                <input type="hidden" name="mp_payment_status_detail" id="mp_payment_status_detail">
+                <input type="hidden" name="mp_payment_method_id" id="mp_payment_method_id">
 
                 <div class="pos-buscador mb-3">
                     <div class="input-group">
@@ -606,13 +634,230 @@ function escapeHtml(text) {
     return div.innerHTML; 
 }
 
+function obtenerScrollActual() {
+    return {
+        x: window.pageXOffset || document.documentElement.scrollLeft || 0,
+        y: window.pageYOffset || document.documentElement.scrollTop || 0
+    };
+}
+
+function restaurarScroll(scroll) {
+    if (!scroll) return;
+
+    requestAnimationFrame(() => {
+        window.scrollTo(scroll.x, scroll.y);
+
+        setTimeout(() => {
+            window.scrollTo(scroll.x, scroll.y);
+        }, 0);
+    });
+}
+
 function enfocarCodigo() {
     const input = document.getElementById('codigo');
-    if (input) {
-        setTimeout(() => {
+
+    if (!input) return;
+
+    const scrollActual = obtenerScrollActual();
+
+    setTimeout(() => {
+        try {
+            input.focus({ preventScroll: true });
+        } catch (e) {
             input.focus();
+        }
+
+        try {
             input.select();
-        }, 80);
+        } catch (e) {}
+
+        restaurarScroll(scrollActual);
+    }, 80);
+}
+
+
+// ============ MODO ESCÁNER INTELIGENTE ============
+// Objetivo:
+// 1) Después de usar buscadores, categorías o métodos de pago, regresar el foco al input #codigo.
+// 2) Si el lector dispara teclas mientras el foco quedó en otro campo, detectar la lectura rápida
+//    y moverla automáticamente al buscador de código de barras.
+let scannerFocusTimer = null;
+let scannerBuffer = '';
+let scannerLastKeyTime = 0;
+let scannerStartTime = 0;
+let scannerFlushTimer = null;
+let scannerTargetElement = null;
+let scannerTargetInitialValue = '';
+const SCANNER_MIN_LENGTH = 4;
+const SCANNER_MAX_INTERVAL_MS = 80;
+const SCANNER_FLUSH_MS = 120;
+
+function esElementoEditable(el) {
+    if (!el) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+}
+
+function estaDentroDeSweetAlert(el) {
+    return !!(el && el.closest && el.closest('.swal2-container'));
+}
+
+function esCampoManualProtegido(el) {
+    if (!el) return false;
+
+    const id = el.id || '';
+    const name = el.name || '';
+
+    // En estos campos el usuario puede escribir con calma sin que el sistema le robe el foco.
+    return [
+        'buscadorProductos',
+        'buscadorModal',
+        'folio_transferencia',
+        'correo_cliente',
+        'monto_pagado'
+    ].includes(id) || name === 'referencia_pago';
+}
+
+function programarEnfoqueEscaner(delay = 250, forzar = false) {
+    clearTimeout(scannerFocusTimer);
+    scannerFocusTimer = setTimeout(() => {
+        if (ventaEnProceso) return;
+        if (document.body.classList.contains('swal2-shown')) return;
+        if (document.getElementById('modalFlotante')?.classList.contains('active')) return;
+
+        // Si el usuario sigue escribiendo en buscador o folio, no le quitamos el foco.
+        if (!forzar && esCampoManualProtegido(document.activeElement)) return;
+
+        enfocarCodigo();
+    }, delay);
+}
+
+function limpiarBufferScanner() {
+    scannerBuffer = '';
+    scannerLastKeyTime = 0;
+    scannerStartTime = 0;
+    scannerTargetElement = null;
+    scannerTargetInitialValue = '';
+    clearTimeout(scannerFlushTimer);
+}
+
+function limpiarLecturaDeCampoOrigen(codigo) {
+    const el = scannerTargetElement;
+
+    if (!el || el === document.getElementById('codigo')) return;
+    if (!('value' in el)) return;
+
+    // Durante las primeras teclas el navegador pudo haber escrito parte del código
+    // en el buscador o folio. Quitamos solo el prefijo del código que quedó al final.
+    setTimeout(() => {
+        const valorActual = String(el.value || '');
+        let mejorCoincidencia = '';
+
+        for (let i = Math.min(codigo.length, valorActual.length); i >= 1; i--) {
+            const prefijo = codigo.substring(0, i);
+            if (valorActual.endsWith(prefijo)) {
+                mejorCoincidencia = prefijo;
+                break;
+            }
+        }
+
+        if (mejorCoincidencia) {
+            el.value = valorActual.substring(0, valorActual.length - mejorCoincidencia.length);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }, 0);
+}
+
+function enviarBufferAlCodigo() {
+    const codigo = scannerBuffer.trim();
+
+    if (codigo.length < SCANNER_MIN_LENGTH) {
+        limpiarBufferScanner();
+        return;
+    }
+
+    limpiarLecturaDeCampoOrigen(codigo);
+
+    const inputCodigo = document.getElementById('codigo');
+    if (!inputCodigo) {
+        limpiarBufferScanner();
+        return;
+    }
+
+    const scrollActual = obtenerScrollActual();
+    inputCodigo.value = codigo;
+    limpiarBufferScanner();
+
+    try {
+        inputCodigo.focus({ preventScroll: true });
+    } catch (e) {
+        inputCodigo.focus();
+    }
+
+    restaurarScroll(scrollActual);
+
+    if (!buscandoProducto) {
+        agregarProducto();
+    }
+}
+
+function manejarTeclaGlobalScanner(e) {
+    if (ventaEnProceso || buscandoProducto) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (estaDentroDeSweetAlert(e.target)) return;
+
+    const inputCodigo = document.getElementById('codigo');
+    if (!inputCodigo) return;
+
+    // Si ya estamos en el input de código, el flujo normal se encarga.
+    if (document.activeElement === inputCodigo) return;
+
+    const key = e.key;
+    const ahora = Date.now();
+
+    if (key === 'Enter') {
+        if (scannerBuffer.length >= SCANNER_MIN_LENGTH) {
+            e.preventDefault();
+            enviarBufferAlCodigo();
+        } else {
+            limpiarBufferScanner();
+        }
+        return;
+    }
+
+    if (!key || key.length !== 1) return;
+
+    const intervalo = scannerLastKeyTime ? (ahora - scannerLastKeyTime) : 0;
+
+    // Si la escritura fue lenta, asumimos que es una persona escribiendo en buscador/folio.
+    if (!scannerLastKeyTime || intervalo > SCANNER_MAX_INTERVAL_MS) {
+        scannerBuffer = key;
+        scannerStartTime = ahora;
+        scannerTargetElement = e.target;
+        scannerTargetInitialValue = (e.target && 'value' in e.target) ? String(e.target.value || '') : '';
+    } else {
+        scannerBuffer += key;
+    }
+
+    scannerLastKeyTime = ahora;
+
+    clearTimeout(scannerFlushTimer);
+    scannerFlushTimer = setTimeout(() => {
+        const duracion = Date.now() - scannerStartTime;
+        const promedio = scannerBuffer.length > 1 ? duracion / (scannerBuffer.length - 1) : duracion;
+
+        // Un lector normalmente manda muchos caracteres muy rápido. Si cumple, movemos al input de código.
+        if (scannerBuffer.length >= SCANNER_MIN_LENGTH && promedio <= SCANNER_MAX_INTERVAL_MS) {
+            e.preventDefault?.();
+            enviarBufferAlCodigo();
+        } else {
+            limpiarBufferScanner();
+        }
+    }, SCANNER_FLUSH_MS);
+
+    // Si ya parece lectura de escáner, evitamos que siga llenando el buscador/filtro actual.
+    if (esElementoEditable(e.target) && scannerBuffer.length >= SCANNER_MIN_LENGTH && intervalo > 0 && intervalo <= SCANNER_MAX_INTERVAL_MS) {
+        e.preventDefault();
     }
 }
 
@@ -1055,6 +1300,7 @@ function cargarProductosEnModal() {
             const match = nombre.includes(busqueda) && (!categoria || cat === categoria);
             p.style.display = match ? '' : 'none';
         });
+
     };
 
     if (buscadorModal) buscadorModal.oninput = filtrarModal;
@@ -1435,7 +1681,8 @@ function calcularCambio() {
 }
 
 // ============ MÉTODOS DE PAGO ============
-function mostrarCamposPago() {
+function mostrarCamposPago(mantenerScroll = false) {
+    const scrollActual = mantenerScroll ? obtenerScrollActual() : null;
     const metodo = document.querySelector('input[name="metodo_pago"]:checked')?.value;
     const extra = document.getElementById('extraCampos');
 
@@ -1462,7 +1709,7 @@ function mostrarCamposPago() {
             html = `
                 <div class="form-group mb-3">
                     <label><i class="fas fa-hashtag me-1"></i> Folio de transferencia *</label>
-                    <input type="text" class="form-control pos-input" name="referencia_pago" id="folio_transferencia" required placeholder="Ej: TRX87439210" maxlength="20" oninput="formatearFolioTransferencia(this)">
+                    <input type="text" class="form-control pos-input" name="referencia_pago" id="folio_transferencia" required placeholder="Ej: TRX87439210" maxlength="20" oninput="formatearFolioTransferencia(this); guardarVentaActivaLocal();">
                     <small class="text-muted">Máx. 20 caracteres</small>
                 </div>
                 <div class="text-center mb-2">
@@ -1476,19 +1723,15 @@ function mostrarCamposPago() {
         case 'tarjeta_debito':
         case 'tarjeta_credito':
             html = `
-                <div class="campos-tarjeta">
-                    <div class="form-group">
-                        <label><i class="fas fa-credit-card me-1"></i> Últimos 4 dígitos *</label>
-                        <input type="text" class="form-control pos-input" id="ultimos4" name="ultimos4" maxlength="4" required placeholder="Ej: 4921" oninput="this.value = this.value.replace(/\\D/g,''); detectarTipoTarjeta();">
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-tag me-1"></i> Tipo</label>
-                        <input type="text" class="form-control pos-input" id="tipo_tarjeta" name="tipo_tarjeta" readonly placeholder="Detectado..." style="background-color: #f8fafc;">
-                        <input type="hidden" name="tipo_tarjeta_detectada" id="tipo_tarjeta_detectada">
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-check-circle me-1"></i> Folio autorización *</label>
-                        <input type="text" class="form-control pos-input" name="folio_autorizacion" id="folio_autorizacion" required maxlength="16" placeholder="Ej: AUTH938492" oninput="validarFolio(this)">
+                <div class="alert mb-3" style="background:#eef6ff; border:1px solid #93c5fd; border-radius:16px; color:#1e3a8a;">
+                    <div style="display:flex; gap:12px; align-items:flex-start;">
+                        <i class="fas fa-credit-card" style="font-size:22px; margin-top:3px;"></i>
+                        <div>
+                            <strong style="font-size:14px;">Cobro con terminal Mercado Pago</strong>
+                            <p style="font-size:12px; margin:2px 0 0;">
+                                Al confirmar, el total se enviará a la terminal. La venta se registrará solo cuando el pago sea aprobado.
+                            </p>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1496,6 +1739,10 @@ function mostrarCamposPago() {
     }
 
     extra.innerHTML = html;
+
+    if (mantenerScroll) {
+        restaurarScroll(scrollActual);
+    }
 }
 
 function formatearFolioTransferencia(input) {
@@ -1538,6 +1785,112 @@ function detectarTipoTarjeta() {
     tipoInput.value = textoMostrar;
     oculto.value = tipo;
 }
+
+
+// ============ MERCADO PAGO POINT ============
+function limpiarDatosMercadoPago() {
+    ['mp_order_id', 'mp_payment_id', 'mp_payment_status', 'mp_payment_status_detail', 'mp_payment_method_id'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+}
+
+function setDatosMercadoPago(order) {
+    const pago = order?.transactions?.payments?.[0] || {};
+
+    const orderId = document.getElementById('mp_order_id');
+    const paymentId = document.getElementById('mp_payment_id');
+    const status = document.getElementById('mp_payment_status');
+    const detail = document.getElementById('mp_payment_status_detail');
+    const method = document.getElementById('mp_payment_method_id');
+
+    if (orderId) orderId.value = order?.id || '';
+    if (paymentId) paymentId.value = pago?.reference_id || pago?.id || '';
+    if (status) status.value = pago?.status || order?.status || '';
+    if (detail) detail.value = pago?.status_detail || order?.status_detail || '';
+    if (method) method.value = pago?.payment_method?.id || pago?.payment_method?.type || '';
+}
+
+async function mpPost(url, payload) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Error al conectar con Mercado Pago.');
+    }
+
+    return data;
+}
+
+async function esperarPagoMercadoPago(orderId) {
+    const inicio = Date.now();
+    const tiempoMaximoMs = 180000; // 3 minutos
+    const pausa = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    while ((Date.now() - inicio) < tiempoMaximoMs) {
+        const data = await mpPost('ajax/mercadopago_consultar_orden.php', { order_id: orderId });
+        const order = data.order || {};
+        const pago = order?.transactions?.payments?.[0] || {};
+        const estadoOrden = order.status || '';
+        const estadoPago = pago.status || '';
+
+        Swal.update({
+            title: 'Esperando pago en terminal',
+            html: `
+                <div style="text-align:center;">
+                    <p>Orden enviada a Mercado Pago.</p>
+                    <p><strong>${escapeHtml(orderId)}</strong></p>
+                    <p>Estado: <strong>${escapeHtml(estadoPago || estadoOrden || 'pendiente')}</strong></p>
+                    <small>Realiza el cobro en la terminal. No cierres esta ventana.</small>
+                </div>
+            `
+        });
+
+        if (['processed', 'approved'].includes(estadoPago) || ['processed', 'paid'].includes(estadoOrden)) {
+            setDatosMercadoPago(order);
+            return order;
+        }
+
+        if (['canceled', 'cancelled', 'expired', 'failed', 'rejected'].includes(estadoPago) || ['canceled', 'cancelled', 'expired', 'failed', 'rejected'].includes(estadoOrden)) {
+            throw new Error('El pago fue cancelado, rechazado o expiró en Mercado Pago.');
+        }
+
+        await pausa(3000);
+    }
+
+    throw new Error('No se confirmó el pago en la terminal dentro del tiempo permitido.');
+}
+
+async function procesarPagoMercadoPago(total, metodo) {
+    limpiarDatosMercadoPago();
+
+    Swal.fire({
+        title: 'Enviando cobro a terminal',
+        html: 'Preparando orden en Mercado Pago...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    const data = await mpPost('ajax/mercadopago_crear_orden.php', {
+        total: total.toFixed(2),
+        metodo_pago: metodo,
+        carrito: carrito
+    });
+
+    const orderId = data.order_id;
+    if (!orderId) {
+        throw new Error('Mercado Pago no devolvió el ID de la orden.');
+    }
+
+    return await esperarPagoMercadoPago(orderId);
+}
+
 
 // ============ CONFIRMAR VENTA ============
 function confirmarVenta() {
@@ -1612,30 +1965,8 @@ function confirmarVenta() {
     }
 
     if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
-        const ultimos4 = document.getElementById('ultimos4')?.value;
-        const auth = document.getElementById('folio_autorizacion')?.value;
-
-        if (!ultimos4 || ultimos4.length !== 4) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Datos incompletos',
-                text: 'Ingresa los últimos 4 dígitos de la tarjeta',
-                confirmButtonColor: '#f97316',
-                confirmButtonText: 'Completar'
-            });
-            return;
-        }
-
-        if (!auth || auth.length < 4) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Folio requerido',
-                text: 'Ingresa el folio de autorización',
-                confirmButtonColor: '#f97316',
-                confirmButtonText: 'Completar'
-            });
-            return;
-        }
+        // No se piden últimos 4 ni autorización manual.
+        // Esos datos los confirma Mercado Pago al aprobar la orden.
     }
 
     let ticketItems = '';
@@ -1716,7 +2047,7 @@ function confirmarVenta() {
 
             return true;
         }
-    }).then(result => {
+    }).then(async result => {
         if (result.isConfirmed) {
             Swal.fire({
                 title: 'Procesando venta',
@@ -1730,6 +2061,12 @@ function confirmarVenta() {
 
             try {
                 guardarCarrito();
+
+                if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
+                    await procesarPagoMercadoPago(total, metodo);
+                } else {
+                    limpiarDatosMercadoPago();
+                }
 
                 document.getElementById('carrito_json').value = JSON.stringify(carrito);
 
@@ -1760,93 +2097,134 @@ function confirmarVenta() {
 
 // ============ DATOS BANCARIOS ============
 function mostrarDatosBancarios() {
-const datosQR = `4152314179374577`;
+    const datosQR = `4152314179374577`;
 
     Swal.fire({
         title: '',
         html: `
-            <div class="contenedor-bancario-final">
-                <div class="tarjeta-real-bbva">
-                    <div class="fondo-bbva-real"></div>
+            <section class="bank-neo-stage bank-neo-stage-clean" id="bankPrintableArea">
+                <div class="bank-soft-blob bank-soft-blob-one"></div>
+                <div class="bank-soft-blob bank-soft-blob-two"></div>
+                <div class="bank-soft-grid"></div>
 
-                    <div class="logo-bbva-real">
-                        <img src="img/bbva-logo.png" alt="BBVA">
-                    </div>
+                <div class="bank-neo-layout">
+                    <article class="bank-card-3d bank-card-real-ratio" id="bankCard3D">
+                        <div class="bank-card-ambient ambient-one"></div>
+                        <div class="bank-card-ambient ambient-two"></div>
+                        <div class="bank-card-sheen"></div>
+                        <div class="bank-card-noise"></div>
 
-                    <div class="logo-visa-real">
-                        <img src="https://cdn.simpleicons.org/visa" alt="VISA">
-                    </div>
-
-                    <div class="chip-real">
-                        <div class="chip-interno">
-                            <div class="chip-linea"></div>
-                            <div class="chip-linea"></div>
-                            <div class="chip-linea"></div>
-                            <div class="chip-linea"></div>
-                        </div>
-                    </div>
-
-                    <div class="contactless-real">
-                        <i class="fas fa-wifi"></i>
-                    </div>
-
-                    <div class="numero-real">
-                        <div class="bloque-numero">
-                            <span>****</span>
-                            <span>****</span>
-                            <span>****</span>
-                            <span class="ultimo-numero">4477</span>
-                        </div>
-                    </div>
-
-                    <div class="fecha-real">
-                        <span class="label-fecha">VÁLIDA HASTA</span>
-                        <span class="valor-fecha">04/32</span>
-                    </div>
-
-                    <div class="titular-real">
-                        <span class="label-titular">TITULAR</span>
-                        <span class="valor-titular">KARMINA ARANGUTHY GARCIA</span>
-                    </div>
-                </div>
-
-                <div class="qr-datos-final">
-                    <div class="qr-header">
-                        <i class="fas fa-qrcode"></i>
-                        <span>ESCANEA EL QR</span>
-                    </div>
-
-                    <div id="qrContainerFinal" class="qr-big-container" style="background:#fff; padding:16px; border-radius:16px;"></div>
-
-                    <div class="qr-info">
-                        <i class="fas fa-mobile-alt"></i>
-                        <span>Usa tu app bancaria</span>
-                    </div>
-
-                    <div class="datos-bancarios-final">
-                        <div class="item-banco" onclick="copyToClipboard('4152 3141 7937 4577')">
-                            <div class="item-icon">
-                                <i class="fas fa-credit-card"></i>
+                        <div class="bank-card-top">
+                            <div class="bank-brand-block">
+                                <span class="bank-brand-kicker">Tarjeta de depósito</span>
+                                <img src="img/bbva-logo.png" alt="BBVA" class="bank-logo-img" onerror="this.outerHTML='<strong class=&quot;bank-logo-text&quot;>BBVA</strong>'">
                             </div>
-                            <div class="item-texto">
-                                <label>Numero de tarjeta</label>
-                                <div class="valor-copy">
-                                    <span>4152 3141 7937 4577</span>
-                                    <i class="fas fa-copy"></i>
-                                </div>
+
+                            <div class="bank-card-badge">
+                                <span></span>
+                                <strong>TRANSFERENCIA</strong>
                             </div>
                         </div>
-                    </div>
+
+                        <div class="bank-card-mid">
+                            <div class="chip-neo" aria-hidden="true">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+
+                            <div class="contactless-neo" aria-hidden="true">
+                                <i class="fas fa-wifi"></i>
+                            </div>
+                        </div>
+
+                        <div class="bank-card-number" aria-label="Número de tarjeta">
+                            <span>4152</span>
+                            <span>3141</span>
+                            <span>7937</span>
+                            <span>4577</span>
+                        </div>
+
+                        <div class="bank-card-bottom">
+                            <div>
+                                <small>TITULAR</small>
+                                <strong>KARMINA ARANGUTHY GARCIA</strong>
+                            </div>
+                            <div>
+                                <small>VÁLIDA HASTA</small>
+                                <strong>04/32</strong>
+                            </div>
+                            <div class="visa-neo">
+                                <img src="https://cdn.simpleicons.org/visa/ffffff" alt="VISA" onerror="this.outerHTML='<b>VISA</b>'">
+                            </div>
+                        </div>
+                    </article>
+
+                    <aside class="bank-pay-panel bank-glass-panel">
+                        <div class="panel-glow"></div>
+
+                        <header class="bank-panel-header">
+                            <div class="panel-icon-ring">
+                                <i class="fas fa-qrcode"></i>
+                            </div>
+                            <div>
+                                <h3>Escanea para transferir</h3>
+                                <p>Datos bancarios listos para compartir o imprimir.</p>
+                            </div>
+                        </header>
+
+                        <div class="qr-premium-shell qr-premium-clean">
+                            <div class="qr-corner corner-a"></div>
+                            <div class="qr-corner corner-b"></div>
+                            <div class="qr-corner corner-c"></div>
+                            <div class="qr-corner corner-d"></div>
+                            <div id="qrContainerFinal" class="qr-big-container"></div>
+                        </div>
+
+                        <div class="bank-data-list">
+                            <button type="button" class="bank-data-item" onclick="copyToClipboard('4152 3141 7937 4577')">
+                                <span class="data-icon"><i class="fas fa-credit-card"></i></span>
+                                <span class="data-text">
+                                    <small>Número de tarjeta</small>
+                                    <strong>4152 3141 7937 4577</strong>
+                                </span>
+                                <i class="fas fa-copy copy-icon"></i>
+                            </button>
+
+                            <button type="button" class="bank-data-item" onclick="copyToClipboard('KARMINA ARANGUTHY GARCIA')">
+                                <span class="data-icon"><i class="fas fa-user"></i></span>
+                                <span class="data-text">
+                                    <small>Titular</small>
+                                    <strong>KARMINA ARANGUTHY GARCIA</strong>
+                                </span>
+                                <i class="fas fa-copy copy-icon"></i>
+                            </button>
+                        </div>
+
+                        <div class="bank-actions-row bank-actions-single">
+                            <button type="button" class="bank-print-btn bank-print-btn-clean" onclick="imprimirTarjetaQR()">
+                                <i class="fas fa-print"></i>
+                                Imprimir datos
+                            </button>
+                        </div>
+                    </aside>
                 </div>
-            </div>
+
+                <footer class="bank-print-footer">
+                    <strong>Datos para transferencia</strong>
+                    <span>Presente esta hoja al cliente o escanee el código QR.</span>
+                </footer>
+            </section>
         `,
         showConfirmButton: true,
-        confirmButtonText: 'Aceptar',
-        confirmButtonColor: '#004481',
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#f97316',
         background: 'transparent',
-        width: '800px',
+        width: '1120px',
+        padding: '0',
         customClass: {
-            popup: 'swal-final-popup'
+            popup: 'swal-final-popup bank-swal-popup bank-swal-clean'
         },
         didOpen: () => {
             setTimeout(() => {
@@ -1857,18 +2235,42 @@ const datosQR = `4152314179374577`;
 
                     new QRCode(qrContainer, {
                         text: datosQR,
-                        width: 220,
-                        height: 220,
-                        colorDark: "#000000",
+                        width: 210,
+                        height: 210,
+                        colorDark: "#0f172a",
                         colorLight: "#ffffff",
                         correctLevel: QRCode.CorrectLevel.H
+                    });
+                }
+
+                const card = document.getElementById('bankCard3D');
+                const stage = document.querySelector('.bank-neo-stage');
+
+                if (card && stage && window.matchMedia('(hover: hover)').matches) {
+                    stage.addEventListener('mousemove', (e) => {
+                        const rect = card.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        const rotateY = ((x / rect.width) - 0.5) * 10;
+                        const rotateX = ((0.5 - (y / rect.height)) * 8);
+
+                        card.style.setProperty('--rx', `${rotateX}deg`);
+                        card.style.setProperty('--ry', `${rotateY}deg`);
+                        card.style.setProperty('--mx', `${x}px`);
+                        card.style.setProperty('--my', `${y}px`);
+                    });
+
+                    stage.addEventListener('mouseleave', () => {
+                        card.style.setProperty('--rx', '0deg');
+                        card.style.setProperty('--ry', '0deg');
+                        card.style.setProperty('--mx', '50%');
+                        card.style.setProperty('--my', '50%');
                     });
                 }
             }, 100);
         }
     });
 }
-
 function copyToClipboard(texto) {
     navigator.clipboard.writeText(texto).then(() => {
         Swal.fire({
@@ -1888,58 +2290,20 @@ function copiarTexto(texto) {
 }
 
 function imprimirTarjetaQR() {
-    const contenedor = document.querySelector('.contenedor-bancario');
+    const contenedor = document.querySelector('#bankPrintableArea');
 
     if (!contenedor) {
         Swal.fire({
             icon: 'warning',
             title: 'No disponible',
-            text: 'No se encontró el contenedor bancario para imprimir.',
+            text: 'Abre primero los datos bancarios para poder imprimirlos.',
             confirmButtonColor: '#f97316'
         });
         return;
     }
 
-    const ventana = window.open('', '_blank');
-
-    ventana.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>BBVA - Datos Bancarios</title>
-            <meta charset="UTF-8">
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    background: white;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    min-height: 100vh;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                }
-                ${document.querySelector('style')?.innerHTML || ''}
-            </style>
-            <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
-        </head>
-        <body>
-            ${contenedor.outerHTML}
-            <script>
-                window.onload = () => {
-                    setTimeout(() => {
-                        window.print();
-                        window.close();
-                    }, 500);
-                };
-            <\/script>
-        </body>
-        </html>
-    `);
-
-    ventana.document.close();
+    window.print();
 }
-
 // ============ AJUSTE DE PRODUCTOS ============
 function ajustarUnaFilaMas() {
     const cardBody = document.querySelector('.productos-desktop .card-body');
@@ -1975,6 +2339,7 @@ document.addEventListener('DOMContentLoaded', function() {
     mostrarCamposPago();
     restaurarVentaActivaLocal();
     enfocarCodigo();
+    document.addEventListener('keydown', manejarTeclaGlobalScanner, true);
 
     const modalFlotante = document.getElementById('modalFlotante');
 
@@ -1987,8 +2352,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const buscador = document.getElementById('buscadorProductos');
     const filtro = document.getElementById('filtroCategoriaProductos');
 
-    if (buscador) buscador.addEventListener('input', filtrarProductos);
-    if (filtro) filtro.addEventListener('change', filtrarProductos);
+    if (buscador) {
+        buscador.addEventListener('input', filtrarProductos);
+        buscador.addEventListener('blur', () => programarEnfoqueEscaner(150));
+    }
+
+    if (filtro) {
+        filtro.addEventListener('change', function() {
+            filtrarProductos();
+            programarEnfoqueEscaner(250, true);
+        });
+        filtro.addEventListener('blur', () => programarEnfoqueEscaner(150));
+    }
 
     const inputCodigo = document.getElementById('codigo');
 
@@ -2021,13 +2396,20 @@ document.addEventListener('DOMContentLoaded', function() {
     if (montoPagado) {
         montoPagado.addEventListener('input', calcularCambio);
         montoPagado.addEventListener('input', guardarVentaActivaLocal);
+        montoPagado.addEventListener('blur', () => programarEnfoqueEscaner(150));
     }
 
     const correoCliente = document.getElementById('correo_cliente');
-    if (correoCliente) correoCliente.addEventListener('input', guardarVentaActivaLocal);
+    if (correoCliente) {
+        correoCliente.addEventListener('input', guardarVentaActivaLocal);
+        correoCliente.addEventListener('blur', () => programarEnfoqueEscaner(150));
+    }
 
     const extraCampos = document.getElementById('extraCampos');
-    if (extraCampos) extraCampos.addEventListener('input', guardarVentaActivaLocal);
+    if (extraCampos) {
+        extraCampos.addEventListener('input', guardarVentaActivaLocal);
+        extraCampos.addEventListener('focusout', () => programarEnfoqueEscaner(150));
+    }
 
     const ventaForm = document.getElementById('ventaForm');
 
@@ -2043,16 +2425,23 @@ document.addEventListener('DOMContentLoaded', function() {
         metodo.addEventListener('click', function(e) {
             e.preventDefault();
 
+            const scrollActual = obtenerScrollActual();
+
             metodos.forEach(el => el.classList.remove('selected'));
             this.classList.add('selected');
 
             const radio = this.querySelector('input[type="radio"]');
 
-            if (radio) radio.checked = true;
+            if (radio) {
+                radio.checked = true;
+            }
 
-            mostrarCamposPago();
+            mostrarCamposPago(true);
             guardarVentaActivaLocal();
-            enfocarCodigo();
+
+            // Regresamos al modo escáner sin mover la pantalla.
+            restaurarScroll(scrollActual);
+            programarEnfoqueEscaner(350, true);
         });
 
         const radio = metodo.querySelector('input[type="radio"]');

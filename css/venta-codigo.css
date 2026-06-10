@@ -2308,3 +2308,1717 @@
         margin-bottom: 4px;
     }
 }
+
+
+/* =====================================================
+   TARJETA BANCARIA 3D PREMIUM + IMPRESIÓN
+   Diseño para modal de datos bancarios / transferencia
+===================================================== */
+.bank-swal-popup {
+    border-radius: 34px !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+}
+
+.bank-swal-popup .swal2-html-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+}
+
+.bank-swal-popup .swal2-actions {
+    margin-top: 12px !important;
+}
+
+.bank-neo-stage {
+    --bank-blue: #071a52;
+    --bank-cyan: #28d7ff;
+    --bank-gold: #f7c873;
+    --bank-ink: #0f172a;
+    position: relative;
+    width: 100%;
+    padding: 30px;
+    border-radius: 34px;
+    overflow: hidden;
+    color: #fff;
+    background:
+        radial-gradient(circle at 14% 12%, rgba(40, 215, 255, .34), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(247, 200, 115, .28), transparent 28%),
+        radial-gradient(circle at 50% 95%, rgba(59, 130, 246, .22), transparent 34%),
+        linear-gradient(135deg, #050816 0%, #0b1437 48%, #111827 100%);
+    box-shadow:
+        0 34px 80px rgba(2, 6, 23, .48),
+        inset 0 1px 0 rgba(255, 255, 255, .10);
+    isolation: isolate;
+}
+
+.bank-neo-stage::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    background:
+        linear-gradient(110deg, transparent 0 22%, rgba(255,255,255,.12) 28%, transparent 36% 100%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 44px);
+    opacity: .7;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.bank-neo-orbit {
+    position: absolute;
+    width: 440px;
+    height: 440px;
+    right: -180px;
+    top: -170px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow:
+        inset 0 0 60px rgba(40, 215, 255, .16),
+        0 0 90px rgba(40, 215, 255, .16);
+}
+
+.bank-neo-orbit::before,
+.bank-neo-orbit::after {
+    content: "";
+    position: absolute;
+    inset: 55px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: inherit;
+}
+
+.bank-neo-orbit::after {
+    inset: 115px;
+}
+
+.bank-neo-layout {
+    display: grid;
+    grid-template-columns: minmax(360px, 1.08fr) minmax(310px, .92fr);
+    gap: 24px;
+    align-items: stretch;
+    position: relative;
+    z-index: 2;
+    perspective: 1300px;
+}
+
+.bank-card-3d {
+    --rx: 0deg;
+    --ry: 0deg;
+    --mx: 50%;
+    --my: 50%;
+    min-height: 330px;
+    border-radius: 34px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transform: rotateX(var(--rx)) rotateY(var(--ry)) translateZ(0);
+    transform-style: preserve-3d;
+    transition: transform .18s ease, box-shadow .25s ease;
+    background:
+        radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .23), transparent 18%),
+        radial-gradient(circle at 20% 10%, rgba(45, 212, 191, .32), transparent 28%),
+        radial-gradient(circle at 90% 15%, rgba(96, 165, 250, .32), transparent 24%),
+        linear-gradient(135deg, #003a70 0%, #005ea8 42%, #061c4d 100%);
+    box-shadow:
+        0 30px 58px rgba(0, 0, 0, .36),
+        0 16px 36px rgba(0, 94, 168, .22),
+        inset 0 1px 0 rgba(255,255,255,.22),
+        inset 0 -1px 0 rgba(0,0,0,.22);
+}
+
+.bank-card-3d::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 33px;
+    border: 1px solid rgba(255,255,255,.18);
+    pointer-events: none;
+    z-index: 6;
+}
+
+.bank-card-3d::after {
+    content: "";
+    position: absolute;
+    inset: auto -12% -40% -12%;
+    height: 62%;
+    background:
+        linear-gradient(90deg, transparent, rgba(255,255,255,.10), transparent),
+        radial-gradient(ellipse at center, rgba(247, 200, 115, .22), transparent 58%);
+    transform: rotate(-7deg);
+    pointer-events: none;
+}
+
+.bank-card-ambient {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(4px);
+    opacity: .68;
+    pointer-events: none;
+}
+
+.ambient-one {
+    width: 230px;
+    height: 230px;
+    background: rgba(34, 211, 238, .20);
+    left: -80px;
+    bottom: -86px;
+}
+
+.ambient-two {
+    width: 210px;
+    height: 210px;
+    background: rgba(251, 191, 36, .18);
+    right: -75px;
+    top: -75px;
+}
+
+.bank-card-sheen {
+    position: absolute;
+    inset: -40% -70%;
+    background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.18) 47%, transparent 60%);
+    transform: rotate(12deg);
+    animation: bankSheen 5.4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.bank-card-noise {
+    position: absolute;
+    inset: 0;
+    opacity: .10;
+    background-image:
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,.6) 0 1px, transparent 1px),
+        radial-gradient(circle at 80% 70%, rgba(255,255,255,.4) 0 1px, transparent 1px);
+    background-size: 24px 24px, 31px 31px;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+}
+
+@keyframes bankSheen {
+    0%, 32% { transform: translateX(-40%) rotate(12deg); opacity: 0; }
+    45% { opacity: .9; }
+    67%, 100% { transform: translateX(40%) rotate(12deg); opacity: 0; }
+}
+
+.bank-card-top,
+.bank-card-mid,
+.bank-card-bottom,
+.bank-card-number {
+    position: relative;
+    z-index: 7;
+}
+
+.bank-card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.bank-brand-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bank-brand-kicker,
+.bank-card-bottom small {
+    color: rgba(255,255,255,.70);
+    font-size: 10px;
+    letter-spacing: 1.7px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.bank-logo-img {
+    width: 112px;
+    height: auto;
+    filter: brightness(0) invert(1) drop-shadow(0 6px 12px rgba(0,0,0,.25));
+}
+
+.bank-logo-text {
+    font-size: 34px;
+    letter-spacing: -1px;
+    color: #fff;
+}
+
+.bank-card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.16);
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+}
+
+.bank-card-badge span {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 0 5px rgba(34,197,94,.14);
+}
+
+.bank-card-badge strong {
+    font-size: 10px;
+    letter-spacing: .9px;
+}
+
+.bank-card-mid {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 18px;
+}
+
+.chip-neo {
+    width: 64px;
+    height: 48px;
+    border-radius: 13px;
+    position: relative;
+    overflow: hidden;
+    background:
+        linear-gradient(135deg, #fff2b8 0%, #d7a94c 48%, #fff4c8 100%);
+    box-shadow:
+        0 8px 18px rgba(0,0,0,.20),
+        inset 0 1px 0 rgba(255,255,255,.85);
+}
+
+.chip-neo::before,
+.chip-neo::after {
+    content: "";
+    position: absolute;
+    inset: 8px 0;
+    border-top: 1px solid rgba(103, 72, 20, .42);
+    border-bottom: 1px solid rgba(103, 72, 20, .42);
+}
+
+.chip-neo::after {
+    inset: 0 12px;
+    border: 0;
+    border-left: 1px solid rgba(103, 72, 20, .42);
+    border-right: 1px solid rgba(103, 72, 20, .42);
+}
+
+.chip-neo span {
+    position: absolute;
+    width: 16px;
+    height: 1px;
+    background: rgba(103, 72, 20, .40);
+}
+
+.chip-neo span:nth-child(1) { left: 0; top: 16px; }
+.chip-neo span:nth-child(2) { right: 0; top: 16px; }
+.chip-neo span:nth-child(3) { left: 0; bottom: 16px; }
+.chip-neo span:nth-child(4) { right: 0; bottom: 16px; }
+
+.contactless-neo {
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.18);
+    backdrop-filter: blur(12px);
+}
+
+.contactless-neo i {
+    transform: rotate(90deg);
+    font-size: 24px;
+    color: rgba(255,255,255,.88);
+}
+
+.bank-card-number {
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: repeat(4, max-content);
+    gap: 14px;
+    align-items: center;
+    margin: 22px 0;
+    width: fit-content;
+    padding: 10px 0;
+    font-family: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    font-size: clamp(22px, 3.1vw, 32px);
+    letter-spacing: 2px;
+    font-weight: 800;
+    text-shadow: 0 3px 12px rgba(0,0,0,.30);
+}
+
+.bank-card-number span:last-child {
+    color: #fde68a;
+}
+
+.bank-card-bottom {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: end;
+    gap: 18px;
+}
+
+.bank-card-bottom div {
+    text-align: left;
+}
+
+.bank-card-bottom strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 13px;
+    letter-spacing: .4px;
+    color: #fff;
+}
+
+.visa-neo {
+    min-width: 74px;
+    text-align: right !important;
+}
+
+.visa-neo img {
+    width: 78px;
+    max-height: 31px;
+    object-fit: contain;
+    filter: drop-shadow(0 5px 10px rgba(0,0,0,.25));
+}
+
+.visa-neo b {
+    font-size: 26px;
+    font-style: italic;
+    letter-spacing: -1px;
+}
+
+.bank-pay-panel {
+    position: relative;
+    overflow: hidden;
+    border-radius: 30px;
+    padding: 24px;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.88));
+    color: #0f172a;
+    border: 1px solid rgba(255,255,255,.65);
+    box-shadow:
+        0 24px 48px rgba(0,0,0,.22),
+        inset 0 1px 0 rgba(255,255,255,.90);
+}
+
+.panel-glow {
+    position: absolute;
+    width: 230px;
+    height: 230px;
+    right: -120px;
+    top: -115px;
+    background: radial-gradient(circle, rgba(249,115,22,.20), transparent 68%);
+    pointer-events: none;
+}
+
+.bank-panel-header {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 18px;
+    position: relative;
+    z-index: 2;
+}
+
+.panel-icon-ring {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    box-shadow: 0 10px 22px rgba(249, 115, 22, .28);
+}
+
+.bank-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: -.3px;
+    color: #0f172a;
+}
+
+.bank-panel-header p {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.qr-premium-shell {
+    position: relative;
+    width: 252px;
+    height: 252px;
+    margin: 12px auto 18px;
+    display: grid;
+    place-items: center;
+    border-radius: 30px;
+    background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(135deg, #f97316, #0284c7, #22c55e) border-box;
+    border: 2px solid transparent;
+    box-shadow:
+        0 18px 32px rgba(15, 23, 42, .14),
+        inset 0 0 0 8px #f8fafc;
+}
+
+.qr-big-container {
+    width: 210px;
+    height: 210px;
+    padding: 0 !important;
+    display: grid;
+    place-items: center;
+    background: #fff !important;
+    border-radius: 18px !important;
+    overflow: hidden;
+}
+
+.qr-big-container img,
+.qr-big-container canvas {
+    border-radius: 12px;
+}
+
+.qr-corner {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-color: #f97316;
+    border-style: solid;
+    z-index: 4;
+}
+
+.corner-a { left: 18px; top: 18px; border-width: 4px 0 0 4px; border-radius: 9px 0 0 0; }
+.corner-b { right: 18px; top: 18px; border-width: 4px 4px 0 0; border-radius: 0 9px 0 0; }
+.corner-c { left: 18px; bottom: 18px; border-width: 0 0 4px 4px; border-radius: 0 0 0 9px; }
+.corner-d { right: 18px; bottom: 18px; border-width: 0 4px 4px 0; border-radius: 0 0 9px 0; }
+
+.bank-data-list {
+    display: grid;
+    gap: 10px;
+}
+
+.bank-data-item {
+    appearance: none;
+    border: 1px solid #e2e8f0;
+    background: rgba(248,250,252,.96);
+    border-radius: 18px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 44px 1fr 24px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    transition: all .18s ease;
+}
+
+.bank-data-item:hover {
+    transform: translateY(-2px);
+    border-color: #fdba74;
+    background: #fff7ed;
+    box-shadow: 0 12px 24px rgba(249, 115, 22, .12);
+}
+
+.data-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    color: #f97316;
+    background: #ffedd5;
+}
+
+.data-text small {
+    display: block;
+    font-size: 10px;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 900;
+}
+
+.data-text strong {
+    display: block;
+    margin-top: 3px;
+    color: #0f172a;
+    font-size: 13px;
+    word-break: break-word;
+}
+
+.copy-icon {
+    color: #94a3b8;
+}
+
+.bank-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.bank-print-btn,
+.bank-copy-btn {
+    border: 0;
+    min-height: 46px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all .18s ease;
+}
+
+.bank-print-btn {
+    color: #fff;
+    background: linear-gradient(135deg, #0f172a, #334155);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, .18);
+}
+
+.bank-copy-btn {
+    color: #9a3412;
+    background: #ffedd5;
+}
+
+.bank-print-btn:hover,
+.bank-copy-btn:hover {
+    transform: translateY(-2px);
+}
+
+.bank-print-footer {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .bank-neo-stage {
+        padding: 18px;
+        border-radius: 26px;
+    }
+
+    .bank-neo-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bank-card-3d {
+        min-height: 280px;
+        border-radius: 26px;
+        padding: 22px;
+    }
+
+    .bank-card-number {
+        grid-template-columns: repeat(2, max-content);
+        gap: 10px 18px;
+        font-size: 24px;
+    }
+
+    .bank-card-bottom {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .visa-neo {
+        grid-column: 1 / -1;
+        text-align: left !important;
+    }
+
+    .qr-premium-shell {
+        width: 235px;
+        height: 235px;
+    }
+
+    .qr-big-container {
+        transform: scale(.92);
+    }
+}
+
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+
+    #bankPrintableArea,
+    #bankPrintableArea * {
+        visibility: visible !important;
+    }
+
+    #bankPrintableArea {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        min-height: 100vh !important;
+        padding: 16mm !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .bank-neo-orbit,
+    .bank-card-sheen,
+    .bank-card-noise,
+    .bank-card-ambient,
+    .panel-glow,
+    .swal2-actions,
+    .swal2-close,
+    .bank-actions-row {
+        display: none !important;
+    }
+
+    .bank-neo-layout {
+        grid-template-columns: 1fr !important;
+        gap: 10mm !important;
+        max-width: 180mm !important;
+        margin: 0 auto !important;
+    }
+
+    .bank-card-3d {
+        min-height: 88mm !important;
+        transform: none !important;
+        box-shadow: 0 10px 24px rgba(15,23,42,.16) !important;
+        background:
+            radial-gradient(circle at 20% 10%, rgba(45, 212, 191, .26), transparent 28%),
+            linear-gradient(135deg, #003a70 0%, #005ea8 42%, #061c4d 100%) !important;
+        color: #fff !important;
+        page-break-inside: avoid !important;
+    }
+
+    .bank-pay-panel {
+        box-shadow: none !important;
+        border: 1px solid #dbeafe !important;
+        background: #fff !important;
+        page-break-inside: avoid !important;
+    }
+
+    .bank-print-footer {
+        display: flex !important;
+        flex-direction: column;
+        text-align: center;
+        color: #0f172a;
+        margin-top: 8mm;
+        gap: 2mm;
+    }
+
+    .bank-panel-header p,
+    .data-text small {
+        color: #475569 !important;
+    }
+
+    @page {
+        size: letter portrait;
+        margin: 0;
+    }
+}
+
+/* =====================================================
+   AJUSTE PREMIUM FINAL: TARJETA CON PROPORCIÓN REAL + BOTONES CLAROS
+   Proporción bancaria estándar aproximada: 85.60 x 53.98 mm = 1.586:1
+===================================================== */
+.bank-swal-popup {
+    border-radius: 32px !important;
+}
+
+.bank-neo-stage {
+    padding: 30px !important;
+    border-radius: 32px !important;
+    background:
+        radial-gradient(circle at 12% 8%, rgba(14, 165, 233, .30), transparent 24%),
+        radial-gradient(circle at 92% 14%, rgba(249, 115, 22, .18), transparent 22%),
+        radial-gradient(circle at 52% 108%, rgba(37, 99, 235, .22), transparent 30%),
+        linear-gradient(135deg, #071126 0%, #0b1d3f 52%, #111827 100%) !important;
+}
+
+.bank-neo-layout {
+    grid-template-columns: minmax(520px, 1fr) minmax(360px, 430px) !important;
+    gap: 28px !important;
+    align-items: center !important;
+}
+
+.bank-card-3d {
+    width: min(100%, 560px) !important;
+    aspect-ratio: 1.586 / 1 !important;
+    min-height: auto !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    border-radius: 28px !important;
+    padding: 26px 30px !important;
+    background:
+        radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .20), transparent 17%),
+        radial-gradient(circle at 18% 6%, rgba(10, 196, 255, .34), transparent 24%),
+        radial-gradient(circle at 92% 10%, rgba(255, 255, 255, .18), transparent 18%),
+        linear-gradient(135deg, #004481 0%, #006ecb 48%, #04346f 100%) !important;
+    box-shadow:
+        0 28px 52px rgba(2, 6, 23, .34),
+        0 12px 24px rgba(0, 102, 179, .22),
+        inset 0 1px 0 rgba(255,255,255,.25),
+        inset 0 -1px 0 rgba(0,0,0,.20) !important;
+}
+
+.bank-card-3d::before {
+    border-radius: 27px !important;
+    border-color: rgba(255,255,255,.20) !important;
+}
+
+.bank-card-3d::after {
+    height: 48% !important;
+    bottom: -30% !important;
+    background:
+        linear-gradient(90deg, transparent, rgba(255,255,255,.09), transparent),
+        radial-gradient(ellipse at center, rgba(255,255,255,.12), transparent 58%) !important;
+}
+
+.bank-brand-kicker,
+.bank-card-bottom small {
+    font-size: 9.5px !important;
+    letter-spacing: 1.6px !important;
+}
+
+.bank-logo-img {
+    width: 118px !important;
+}
+
+.bank-logo-text {
+    font-size: 38px !important;
+}
+
+.bank-card-badge {
+    padding: 8px 11px !important;
+    border-radius: 999px !important;
+}
+
+.bank-card-mid {
+    margin-top: 14px !important;
+}
+
+.chip-neo {
+    width: 58px !important;
+    height: 44px !important;
+    border-radius: 11px !important;
+}
+
+.contactless-neo {
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 17px !important;
+}
+
+.bank-card-number {
+    margin: 14px 0 12px !important;
+    gap: 13px !important;
+    font-size: clamp(24px, 2.55vw, 32px) !important;
+    letter-spacing: 2.4px !important;
+}
+
+.bank-card-bottom {
+    grid-template-columns: 1fr 118px 78px !important;
+    gap: 16px !important;
+}
+
+.bank-card-bottom strong {
+    font-size: 12.5px !important;
+}
+
+.visa-neo img {
+    width: 62px !important;
+}
+
+.bank-pay-panel {
+    border-radius: 28px !important;
+    padding: 24px !important;
+    background:
+        radial-gradient(circle at 90% 0%, rgba(249, 115, 22, .10), transparent 30%),
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94)) !important;
+}
+
+.bank-panel-header h3 {
+    font-size: 19px !important;
+}
+
+.panel-icon-ring {
+    background: linear-gradient(135deg, #f97316, #fb923c) !important;
+    box-shadow: 0 12px 22px rgba(249, 115, 22, .22) !important;
+}
+
+.qr-premium-shell {
+    width: 236px !important;
+    height: 236px !important;
+    border-radius: 28px !important;
+    box-shadow: 0 14px 26px rgba(15, 23, 42, .11), inset 0 0 0 8px #f8fafc !important;
+}
+
+.qr-big-container {
+    width: 194px !important;
+    height: 194px !important;
+}
+
+.bank-data-item {
+    background: rgba(255,255,255,.92) !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .05) !important;
+}
+
+.data-icon {
+    background: linear-gradient(135deg, #fff7ed, #ffedd5) !important;
+    color: #f97316 !important;
+}
+
+.bank-actions-row {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+}
+
+.bank-print-btn,
+.bank-copy-btn {
+    min-height: 48px !important;
+    border-radius: 18px !important;
+    border: 1px solid transparent !important;
+    font-weight: 900 !important;
+    letter-spacing: -.2px !important;
+}
+
+.bank-print-btn {
+    color: #075985 !important;
+    background:
+        linear-gradient(#ffffff, #ffffff) padding-box,
+        linear-gradient(135deg, #0ea5e9, #22c55e) border-box !important;
+    box-shadow: 0 12px 22px rgba(14, 165, 233, .14) !important;
+}
+
+.bank-copy-btn {
+    color: #9a3412 !important;
+    background:
+        linear-gradient(135deg, #fff7ed, #fed7aa) !important;
+    border-color: #fdba74 !important;
+    box-shadow: 0 12px 22px rgba(249, 115, 22, .14) !important;
+}
+
+.bank-print-btn:hover,
+.bank-copy-btn:hover {
+    transform: translateY(-2px) !important;
+    filter: brightness(1.02) !important;
+}
+
+@media (max-width: 900px) {
+    .bank-neo-layout {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bank-card-3d {
+        width: min(100%, 520px) !important;
+        padding: 22px !important;
+        border-radius: 24px !important;
+    }
+
+    .bank-card-number {
+        grid-template-columns: repeat(4, max-content) !important;
+        gap: 9px !important;
+        font-size: clamp(18px, 5vw, 26px) !important;
+    }
+
+    .bank-card-bottom {
+        grid-template-columns: 1fr 90px 58px !important;
+        gap: 10px !important;
+    }
+
+    .visa-neo {
+        grid-column: auto !important;
+        text-align: right !important;
+    }
+}
+
+@media (max-width: 520px) {
+    .bank-card-3d {
+        padding: 18px !important;
+    }
+
+    .bank-logo-img {
+        width: 96px !important;
+    }
+
+    .chip-neo {
+        width: 48px !important;
+        height: 36px !important;
+    }
+
+    .contactless-neo {
+        width: 44px !important;
+        height: 44px !important;
+    }
+
+    .bank-card-number {
+        letter-spacing: 1.2px !important;
+        font-size: clamp(17px, 5.2vw, 22px) !important;
+    }
+
+    .bank-card-bottom strong {
+        font-size: 10.5px !important;
+    }
+
+    .bank-actions-row {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media print {
+    .bank-card-3d {
+        width: 150mm !important;
+        aspect-ratio: 1.586 / 1 !important;
+        min-height: auto !important;
+        height: auto !important;
+        margin: 0 auto !important;
+    }
+
+    .bank-print-btn,
+    .bank-copy-btn {
+        display: none !important;
+    }
+}
+
+
+/* =====================================================
+   AJUSTE FINAL TARJETA 3D LIMPIA
+   - Fondo premium claro
+   - Sin botón "Copiar tarjeta"
+   - Tarjeta sin acción de copiar
+   - Botón imprimir limpio
+===================================================== */
+
+.bank-swal-clean {
+    background: transparent !important;
+}
+
+.bank-neo-stage.bank-neo-stage-clean {
+    --bank-ink: #0f172a;
+    width: min(1120px, 96vw);
+    padding: 34px;
+    border-radius: 36px;
+    color: #0f172a;
+    background:
+        radial-gradient(circle at 7% 10%, rgba(14, 165, 233, .16), transparent 26%),
+        radial-gradient(circle at 94% 14%, rgba(249, 115, 22, .16), transparent 27%),
+        radial-gradient(circle at 72% 92%, rgba(34, 197, 94, .11), transparent 28%),
+        linear-gradient(145deg, #f8fafc 0%, #eef4ff 48%, #fff7ed 100%);
+    border: 1px solid rgba(255,255,255,.72);
+    box-shadow:
+        0 30px 80px rgba(15, 23, 42, .22),
+        inset 0 1px 0 rgba(255, 255, 255, .86);
+}
+
+.bank-neo-stage.bank-neo-stage-clean::before {
+    background:
+        linear-gradient(115deg, transparent 0 26%, rgba(255,255,255,.55) 34%, transparent 43% 100%),
+        radial-gradient(circle at 50% 0%, rgba(255,255,255,.65), transparent 45%);
+    opacity: .72;
+}
+
+.bank-neo-stage-clean .bank-neo-orbit {
+    display: none;
+}
+
+.bank-soft-blob {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(22px);
+    opacity: .52;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bank-soft-blob-one {
+    width: 280px;
+    height: 280px;
+    left: -95px;
+    top: -85px;
+    background: rgba(14, 165, 233, .28);
+}
+
+.bank-soft-blob-two {
+    width: 300px;
+    height: 300px;
+    right: -120px;
+    bottom: -120px;
+    background: rgba(249, 115, 22, .24);
+}
+
+.bank-soft-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(15, 23, 42, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(circle at center, #000 0 48%, transparent 76%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bank-neo-stage-clean .bank-neo-layout {
+    grid-template-columns: minmax(420px, 1.12fr) minmax(330px, .88fr);
+    gap: 28px;
+    align-items: center;
+}
+
+.bank-card-3d.bank-card-real-ratio {
+    aspect-ratio: 1.586 / 1;
+    min-height: auto !important;
+    width: 100%;
+    max-width: 675px;
+    margin: 0 auto;
+    border-radius: 30px;
+    padding: clamp(24px, 3vw, 34px);
+    background:
+        radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,.26), transparent 18%),
+        radial-gradient(circle at 18% 12%, rgba(56, 189, 248, .38), transparent 26%),
+        radial-gradient(circle at 86% 13%, rgba(255,255,255,.22), transparent 22%),
+        linear-gradient(135deg, #024f93 0%, #0074c8 46%, #04356f 100%);
+    box-shadow:
+        0 32px 64px rgba(2, 70, 128, .26),
+        0 18px 34px rgba(15, 23, 42, .20),
+        inset 0 1px 0 rgba(255,255,255,.28),
+        inset 0 -1px 0 rgba(0,0,0,.22);
+}
+
+.bank-card-real-ratio .bank-card-sheen {
+    opacity: .78;
+}
+
+.bank-card-real-ratio .bank-card-number {
+    cursor: default !important;
+    pointer-events: none;
+    user-select: text;
+    font-size: clamp(23px, 2.7vw, 34px);
+    margin: clamp(20px, 3vw, 34px) 0 clamp(14px, 2vw, 22px);
+}
+
+.bank-card-real-ratio .bank-card-bottom {
+    grid-template-columns: 1fr auto auto;
+}
+
+.bank-glass-panel {
+    border-radius: 32px;
+    padding: 28px;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.66));
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid rgba(255,255,255,.78);
+    box-shadow:
+        0 26px 58px rgba(15,23,42,.13),
+        inset 0 1px 0 rgba(255,255,255,.95);
+}
+
+.bank-glass-panel .panel-glow {
+    background:
+        radial-gradient(circle, rgba(249,115,22,.18), transparent 66%);
+}
+
+.qr-premium-shell.qr-premium-clean {
+    background:
+        linear-gradient(145deg, #ffffff, #f8fafc) padding-box,
+        linear-gradient(135deg, #f97316, #0284c7, #22c55e) border-box;
+    border: 2px solid transparent;
+    box-shadow:
+        0 18px 38px rgba(15, 23, 42, .10),
+        inset 0 2px 14px rgba(255,255,255,.96);
+}
+
+.bank-data-item {
+    background: rgba(255,255,255,.78);
+    border: 1px solid rgba(226,232,240,.90);
+}
+
+.bank-data-item:hover {
+    transform: translateY(-2px);
+    background: rgba(255,247,237,.92);
+}
+
+.bank-actions-row.bank-actions-single {
+    grid-template-columns: 1fr;
+    max-width: 245px;
+    margin: 18px auto 0;
+}
+
+.bank-copy-btn {
+    display: none !important;
+}
+
+.bank-print-btn.bank-print-btn-clean {
+    color: #075985;
+    background:
+        linear-gradient(#ffffff, #ffffff) padding-box,
+        linear-gradient(135deg, #0284c7, #22c55e) border-box;
+    border: 1px solid transparent;
+    box-shadow: 0 12px 24px rgba(2, 132, 199, .14);
+}
+
+.bank-print-btn.bank-print-btn-clean:hover {
+    color: #064e3b;
+    transform: translateY(-2px);
+    box-shadow: 0 16px 30px rgba(34, 197, 94, .16);
+}
+
+@media (max-width: 900px) {
+    .bank-neo-stage.bank-neo-stage-clean {
+        width: 96vw;
+        padding: 18px;
+        border-radius: 28px;
+    }
+
+    .bank-neo-stage-clean .bank-neo-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bank-card-3d.bank-card-real-ratio {
+        max-width: 100%;
+        border-radius: 24px;
+        padding: 22px;
+    }
+
+    .bank-card-real-ratio .bank-card-number {
+        grid-template-columns: repeat(2, max-content);
+        gap: 8px 18px;
+        font-size: clamp(22px, 7vw, 30px);
+    }
+
+    .bank-card-real-ratio .bank-card-bottom {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .bank-card-real-ratio .visa-neo {
+        grid-column: 1 / -1;
+        text-align: left !important;
+    }
+
+    .bank-glass-panel {
+        padding: 22px;
+    }
+}
+
+@media print {
+    .bank-neo-stage.bank-neo-stage-clean {
+        background: #ffffff !important;
+        box-shadow: none !important;
+        border: 0 !important;
+    }
+
+    .bank-soft-blob,
+    .bank-soft-grid,
+    .bank-card-sheen,
+    .bank-card-noise,
+    .bank-card-ambient,
+    .panel-glow,
+    .bank-actions-row {
+        display: none !important;
+    }
+
+    .bank-glass-panel {
+        background: #ffffff !important;
+        box-shadow: none !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+
+    .bank-card-3d.bank-card-real-ratio {
+        box-shadow: none !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+}
+
+
+/* =====================================================
+   AJUSTE VISUAL FINAL: FONDO SUAVE + BOTÓN CENTRADO
+   - Fondo menos agresivo y más limpio
+   - Botón imprimir centrado correctamente
+   - Número de tarjeta más legible sobre azul
+===================================================== */
+
+.bank-neo-stage.bank-neo-stage-clean {
+    width: min(1120px, 96vw) !important;
+    padding: 34px !important;
+    border-radius: 36px !important;
+    color: #0f172a !important;
+    background:
+        radial-gradient(circle at 12% 18%, rgba(186, 230, 253, .62), transparent 30%),
+        radial-gradient(circle at 88% 12%, rgba(255, 237, 213, .72), transparent 28%),
+        radial-gradient(circle at 78% 92%, rgba(220, 252, 231, .58), transparent 28%),
+        linear-gradient(145deg, #ffffff 0%, #f8fafc 42%, #eef6ff 100%) !important;
+    border: 1px solid rgba(226, 232, 240, .98) !important;
+    box-shadow:
+        0 28px 70px rgba(15, 23, 42, .16),
+        0 8px 22px rgba(15, 23, 42, .08),
+        inset 0 1px 0 rgba(255, 255, 255, .96) !important;
+}
+
+.bank-neo-stage.bank-neo-stage-clean::before {
+    background:
+        linear-gradient(115deg, transparent 0 34%, rgba(255,255,255,.58) 43%, transparent 52% 100%),
+        radial-gradient(circle at 48% 0%, rgba(255,255,255,.62), transparent 44%) !important;
+    opacity: .42 !important;
+}
+
+.bank-neo-stage.bank-neo-stage-clean::after {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border-radius: 30px;
+    background:
+        linear-gradient(rgba(15,23,42,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15,23,42,.025) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(circle at center, #000 0 38%, transparent 75%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bank-soft-blob-one {
+    background: rgba(125, 211, 252, .34) !important;
+    opacity: .36 !important;
+}
+
+.bank-soft-blob-two {
+    background: rgba(253, 186, 116, .24) !important;
+    opacity: .30 !important;
+}
+
+.bank-soft-grid {
+    opacity: .32 !important;
+}
+
+.bank-glass-panel {
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.90), rgba(248,250,252,.82)) !important;
+    border: 1px solid rgba(226,232,240,.92) !important;
+    box-shadow:
+        0 22px 48px rgba(15,23,42,.10),
+        inset 0 1px 0 rgba(255,255,255,.98) !important;
+}
+
+.bank-card-3d.bank-card-real-ratio {
+    box-shadow:
+        0 30px 58px rgba(2, 70, 128, .22),
+        0 14px 26px rgba(15, 23, 42, .13),
+        inset 0 1px 0 rgba(255,255,255,.30),
+        inset 0 -1px 0 rgba(0,0,0,.16) !important;
+}
+
+.bank-card-real-ratio .bank-card-number span {
+    color: rgba(255,255,255,.97) !important;
+    text-shadow: 0 2px 6px rgba(0,0,0,.18) !important;
+}
+
+.bank-card-real-ratio .bank-card-number span:last-child {
+    color: #ffe27a !important;
+}
+
+.bank-actions-row.bank-actions-single {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    grid-template-columns: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 22px auto 0 !important;
+    text-align: center !important;
+}
+
+.bank-print-btn.bank-print-btn-clean {
+    width: auto !important;
+    min-width: 230px !important;
+    min-height: 54px !important;
+    padding: 0 26px !important;
+    border-radius: 18px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    white-space: nowrap !important;
+    line-height: 1 !important;
+    font-size: 17px !important;
+    color: #075985 !important;
+    background:
+        linear-gradient(#ffffff, #ffffff) padding-box,
+        linear-gradient(135deg, #38bdf8, #34d399) border-box !important;
+    border: 1px solid transparent !important;
+    box-shadow:
+        0 14px 28px rgba(14, 165, 233, .12),
+        inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+
+.bank-print-btn.bank-print-btn-clean i {
+    font-size: 18px !important;
+    line-height: 1 !important;
+}
+
+.bank-print-btn.bank-print-btn-clean:hover {
+    color: #047857 !important;
+    transform: translateY(-2px) !important;
+    box-shadow:
+        0 18px 34px rgba(52, 211, 153, .16),
+        inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+
+@media (max-width: 900px) {
+    .bank-neo-stage.bank-neo-stage-clean {
+        padding: 18px !important;
+        border-radius: 28px !important;
+    }
+
+    .bank-print-btn.bank-print-btn-clean {
+        min-width: 210px !important;
+        min-height: 50px !important;
+        font-size: 15px !important;
+    }
+}
+
+/* =====================================================
+   TARJETA 3D AUTOMÁTICA
+   Movimiento sin depender del mouse
+   Agregado final
+===================================================== */
+
+/* Aplica a la tarjeta bancaria principal del modal */
+.bank-card-3d,
+.bank-card-real-ratio,
+.tarjeta-bbva-modal,
+.tarjeta-real-bbva {
+    transform-style: preserve-3d !important;
+    will-change: transform, box-shadow !important;
+}
+
+/* Tarjeta premium nueva */
+.bank-card-3d {
+    animation: bankCardAutoFloat 15s ease-in-out infinite !important;
+    transition: box-shadow .35s ease !important;
+}
+
+/* Variante de proporción real usada en las últimas versiones */
+.bank-card-real-ratio {
+    animation: bankCardAutoFloatReal 15s ease-in-out infinite !important;
+    transition: box-shadow .35s ease !important;
+}
+
+/* Compatibilidad con tarjetas anteriores */
+.tarjeta-bbva-modal,
+.tarjeta-real-bbva {
+    animation: bankCardAutoFloatLegacy 15s ease-in-out infinite !important;
+}
+
+/* Profundidad automática de elementos internos */
+.bank-card-3d .bank-card-top,
+.bank-card-3d .bank-card-mid,
+.bank-card-3d .bank-card-number,
+.bank-card-3d .bank-card-bottom,
+.bank-card-real-ratio .bank-card-top,
+.bank-card-real-ratio .bank-card-mid,
+.bank-card-real-ratio .bank-card-number,
+.bank-card-real-ratio .bank-card-bottom {
+    transform: translateZ(34px) !important;
+}
+
+.bank-card-3d .bank-logo-img,
+.bank-card-3d .bank-logo-text,
+.bank-card-real-ratio .bank-logo-img,
+.bank-card-real-ratio .bank-logo-text {
+    transform: translateZ(46px) !important;
+}
+
+.bank-card-3d .chip-neo,
+.bank-card-real-ratio .chip-neo,
+.tarjeta-bbva-modal .chip,
+.tarjeta-real-bbva .chip-real {
+    transform: translateZ(42px) !important;
+    box-shadow:
+        inset 0 2px 8px rgba(255,255,255,.65),
+        0 12px 24px rgba(0,0,0,.18) !important;
+}
+
+.bank-card-3d .contactless-neo,
+.bank-card-real-ratio .contactless-neo,
+.tarjeta-real-bbva .contactless-real {
+    transform: translateZ(38px) !important;
+}
+
+.bank-card-3d .bank-card-number,
+.bank-card-real-ratio .bank-card-number,
+.tarjeta-bbva-modal .numero,
+.tarjeta-real-bbva .numero-real {
+    transform: translateZ(36px) !important;
+    text-shadow:
+        0 2px 5px rgba(0,0,0,.24),
+        0 10px 22px rgba(0,0,0,.12) !important;
+}
+
+/* Brillo automático superior para la tarjeta nueva */
+.bank-card-3d::before,
+.bank-card-real-ratio::before {
+    pointer-events: none !important;
+}
+
+/* Capa de brillo móvil adicional */
+.bank-card-3d .bank-card-sheen,
+.bank-card-real-ratio .bank-card-sheen {
+    animation: bankCardAutoSheen 7.5s ease-in-out infinite !important;
+}
+
+/* En caso de tarjetas anteriores que no tengan sheen interno */
+.tarjeta-bbva-modal::before,
+.tarjeta-real-bbva::before {
+    content: "" !important;
+    position: absolute !important;
+    top: -120% !important;
+    left: -60% !important;
+    width: 120% !important;
+    height: 300% !important;
+    background:
+        linear-gradient(
+            110deg,
+            transparent 20%,
+            rgba(255,255,255,.20) 50%,
+            transparent 80%
+        ) !important;
+    transform: rotate(25deg) !important;
+    animation: bankCardLegacySheen 8s linear infinite !important;
+    pointer-events: none !important;
+    z-index: 4 !important;
+}
+
+/* Movimiento principal elegante */
+@keyframes bankCardAutoFloat {
+    0% {
+        transform:
+            perspective(1600px)
+            rotateX(3.5deg)
+            rotateY(-7deg)
+            translateY(0)
+            translateZ(0);
+        box-shadow:
+            0 30px 58px rgba(0,0,0,.34),
+            0 16px 36px rgba(0,94,168,.20),
+            inset 0 1px 0 rgba(255,255,255,.22),
+            inset 0 -1px 0 rgba(0,0,0,.22);
+    }
+
+    25% {
+        transform:
+            perspective(1600px)
+            rotateX(-2.5deg)
+            rotateY(6deg)
+            translateY(-8px)
+            translateZ(0);
+        box-shadow:
+            0 38px 70px rgba(0,0,0,.30),
+            0 20px 42px rgba(14,165,233,.22),
+            inset 0 1px 0 rgba(255,255,255,.25),
+            inset 0 -1px 0 rgba(0,0,0,.20);
+    }
+
+    50% {
+        transform:
+            perspective(1600px)
+            rotateX(2deg)
+            rotateY(8deg)
+            translateY(-2px)
+            translateZ(0);
+        box-shadow:
+            0 34px 64px rgba(0,0,0,.32),
+            0 18px 40px rgba(0,94,168,.24),
+            inset 0 1px 0 rgba(255,255,255,.23),
+            inset 0 -1px 0 rgba(0,0,0,.22);
+    }
+
+    75% {
+        transform:
+            perspective(1600px)
+            rotateX(-2deg)
+            rotateY(-5deg)
+            translateY(-10px)
+            translateZ(0);
+        box-shadow:
+            0 40px 74px rgba(0,0,0,.30),
+            0 20px 46px rgba(45,212,191,.18),
+            inset 0 1px 0 rgba(255,255,255,.25),
+            inset 0 -1px 0 rgba(0,0,0,.20);
+    }
+
+    100% {
+        transform:
+            perspective(1600px)
+            rotateX(3.5deg)
+            rotateY(-7deg)
+            translateY(0)
+            translateZ(0);
+        box-shadow:
+            0 30px 58px rgba(0,0,0,.34),
+            0 16px 36px rgba(0,94,168,.20),
+            inset 0 1px 0 rgba(255,255,255,.22),
+            inset 0 -1px 0 rgba(0,0,0,.22);
+    }
+}
+
+/* Movimiento para versión real-ratio */
+@keyframes bankCardAutoFloatReal {
+    0% {
+        transform:
+            perspective(1700px)
+            rotateX(4deg)
+            rotateY(-6deg)
+            translateY(0)
+            scale(1);
+    }
+
+    20% {
+        transform:
+            perspective(1700px)
+            rotateX(1deg)
+            rotateY(5deg)
+            translateY(-7px)
+            scale(1.004);
+    }
+
+    45% {
+        transform:
+            perspective(1700px)
+            rotateX(-3deg)
+            rotateY(7deg)
+            translateY(-2px)
+            scale(1);
+    }
+
+    70% {
+        transform:
+            perspective(1700px)
+            rotateX(2deg)
+            rotateY(-5deg)
+            translateY(-10px)
+            scale(1.006);
+    }
+
+    100% {
+        transform:
+            perspective(1700px)
+            rotateX(4deg)
+            rotateY(-6deg)
+            translateY(0)
+            scale(1);
+    }
+}
+
+/* Movimiento para compatibilidad con tarjeta antigua */
+@keyframes bankCardAutoFloatLegacy {
+    0% {
+        transform:
+            perspective(1500px)
+            rotateX(3deg)
+            rotateY(-6deg)
+            translateY(0);
+    }
+
+    25% {
+        transform:
+            perspective(1500px)
+            rotateX(-2deg)
+            rotateY(5deg)
+            translateY(-7px);
+    }
+
+    50% {
+        transform:
+            perspective(1500px)
+            rotateX(2deg)
+            rotateY(7deg)
+            translateY(-2px);
+    }
+
+    75% {
+        transform:
+            perspective(1500px)
+            rotateX(-2deg)
+            rotateY(-5deg)
+            translateY(-9px);
+    }
+
+    100% {
+        transform:
+            perspective(1500px)
+            rotateX(3deg)
+            rotateY(-6deg)
+            translateY(0);
+    }
+}
+
+/* Reflejo automático */
+@keyframes bankCardAutoSheen {
+    0%, 22% {
+        transform: translateX(-56%) rotate(12deg);
+        opacity: 0;
+    }
+
+    38% {
+        opacity: .88;
+    }
+
+    58%, 100% {
+        transform: translateX(56%) rotate(12deg);
+        opacity: 0;
+    }
+}
+
+@keyframes bankCardLegacySheen {
+    0% {
+        transform:
+            translateX(-150%)
+            rotate(25deg);
+        opacity: 0;
+    }
+
+    18% {
+        opacity: .85;
+    }
+
+    42% {
+        opacity: .55;
+    }
+
+    70%, 100% {
+        transform:
+            translateX(250%)
+            rotate(25deg);
+        opacity: 0;
+    }
+}
+
+/* Pausar animaciones únicamente al imprimir */
+@media print {
+    .bank-card-3d,
+    .bank-card-real-ratio,
+    .tarjeta-bbva-modal,
+    .tarjeta-real-bbva,
+    .bank-card-sheen,
+    .tarjeta-bbva-modal::before,
+    .tarjeta-real-bbva::before {
+        animation: none !important;
+        transform: none !important;
+    }
+}
+
+/* Respeta usuarios con reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+    .bank-card-3d,
+    .bank-card-real-ratio,
+    .tarjeta-bbva-modal,
+    .tarjeta-real-bbva,
+    .bank-card-sheen,
+    .tarjeta-bbva-modal::before,
+    .tarjeta-real-bbva::before {
+        animation: none !important;
+    }
+}

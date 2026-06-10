@@ -154,6 +154,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
           <a href="historial_stock.php"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
           <a href="ver_ventas.php"><i class="fas fa-chart-line"></i> Estadisticas</a>
           <a href="configuracion.php"><i class="fas fa-cogs"></i> Configuración</a>
+          <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i> Asignar Productos</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
               <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i> Registrar Ventas</a> -->
 
@@ -210,6 +211,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <a href="historial_reportes.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
         <a href="historial_stock.php"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
         <a href="ver_ventas.php"><i class="fas fa-chart-line"></i><span>Estadisticas</span></a>
+        <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i><span>Asignar Productos</span></a>
         <a href="configuracion.php"><i class="fas fa-cogs"></i><span>Configuración</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
             <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i><span>Registrar Ventas</span></a> -->
@@ -221,6 +223,8 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
         <a href="reportes_vendedor.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
+        <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i><span>Ajustes de Productos</span></a>
+        <a href="reporte_vendedor_productos.php"><i class="fas fa-chart-bar"></i><span>Reporte de Productos</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
       <?php endif; ?>
     </div>

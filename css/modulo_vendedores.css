@@ -1,0 +1,65 @@
+.vendedor-module {
+    background: radial-gradient(circle at top right, rgba(249, 115, 22, .11), transparent 32%), #f6f8fb;
+    min-height: calc(100vh - 57px);
+}
+.vendedor-module .content-header h1 { font-weight: 800; color: #111827; }
+.card-modern { border: 0; border-radius: 18px; overflow: hidden; }
+.card-modern .card-body { padding: 22px; }
+.asignacion-summary {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    background: linear-gradient(135deg, #fff7ed, #ffffff);
+    border: 1px solid #fed7aa; border-radius: 14px; padding: 12px 14px; color: #7c2d12;
+}
+.producto-check-card {
+    display: block; position: relative; cursor: pointer; height: 100%;
+    border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; padding: 16px;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.producto-check-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(17,24,39,.09); }
+.producto-check-card input { display: none; }
+.producto-check-card.is-selected { border-color: #f97316; box-shadow: 0 12px 28px rgba(249,115,22,.16); background: linear-gradient(135deg, #fff7ed, #fff); }
+.check-icon {
+    position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; background: #e5e7eb; color: #9ca3af;
+}
+.producto-check-card.is-selected .check-icon { background: #f97316; color: #fff; }
+.producto-title { display: block; padding-right: 34px; font-weight: 800; color: #111827; font-size: 1rem; min-height: 42px; }
+.producto-meta { display: block; color: #6b7280; font-size: .83rem; margin-top: 5px; }
+.producto-meta i { color: #f97316; width: 16px; }
+.producto-stats { display: block; margin-top: 12px; font-size: .84rem; color: #374151; }
+.sticky-actions { position: sticky; bottom: 0; background: rgba(255,255,255,.94); backdrop-filter: blur(10px); z-index: 5; }
+.gap-2 { gap: .5rem; }
+.product-manage-card {
+    background: #fff; border-radius: 20px; padding: 18px; border: 1px solid #e5e7eb; height: 100%;
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+.product-manage-card:hover { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(17,24,39,.1); }
+.product-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.product-head h3 { font-size: 1.05rem; font-weight: 800; margin: 0; color: #111827; }
+.product-head p { margin: 4px 0 0; color: #6b7280; font-size: .88rem; }
+.stock-pill { white-space: nowrap; background: #dcfce7; color: #166534; border-radius: 999px; padding: 7px 10px; font-weight: 800; font-size: .82rem; }
+.stock-pill.is-low { background: #fee2e2; color: #991b1b; }
+.product-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.product-money span { background: #f9fafb; border-radius: 12px; padding: 10px; text-align: center; font-weight: 800; color: #111827; }
+.product-money b { display: block; color: #6b7280; font-size: .72rem; font-weight: 700; margin-bottom: 3px; }
+.product-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.empty-state { text-align: center; padding: 60px 20px; color: #6b7280; background: #fff; border-radius: 18px; border: 1px dashed #cbd5e1; }
+.empty-state i { display: block; font-size: 4rem; color: #d1d5db; margin-bottom: 12px; }
+.kpi-card { position: relative; overflow: hidden; color: white; border-radius: 20px; min-height: 128px; padding: 20px; box-shadow: 0 16px 30px rgba(17,24,39,.13); }
+.kpi-card span { display: block; opacity: .92; font-weight: 700; }
+.kpi-card strong { display: block; font-size: 1.8rem; margin-top: 8px; }
+.kpi-card i { position: absolute; right: 18px; bottom: 12px; font-size: 3.2rem; opacity: .22; }
+.bg-blue { background: linear-gradient(135deg, #0ea5e9, #2563eb); }
+.bg-red { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+.bg-green { background: linear-gradient(135deg, #22c55e, #15803d); }
+.bg-orange { background: linear-gradient(135deg, #f97316, #c2410c); }
+.reporte-table th, .reporte-table td { text-align: center; vertical-align: middle !important; }
+@media print {
+    .main-sidebar, .main-header, .no-print, .btn, .content-header .col-md-4 { display: none !important; }
+    .content-wrapper { margin-left: 0 !important; background: #fff !important; }
+    .card { box-shadow: none !important; border: 1px solid #ddd !important; }
+}
+@media (max-width: 768px) {
+    .product-money { grid-template-columns: 1fr; }
+    .sticky-actions .btn { width: 100%; }
+}
