@@ -355,16 +355,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ========================= CONSULTA PRINCIPAL ========================= */
-$params = [];
-$types = '';
+$params = [$usuarioId, $usuarioId, $usuarioId, $usuarioId];
+$types = 'iiii';
 
 $sql = "
     SELECT
         p.id, p.nombre, p.categoria, p.proveedor, p.proveedor_id, p.cantidad,
         p.precio_compra, p.precio_venta, p.tipo_codigo, p.tipo_adquisicion,
         p.imagen, p.fecha_registro,
-        IFNULL(SUM(v.cantidad_vendida), 0) AS total_vendido,
-        IFNULL(MAX(v.fecha_venta), '') AS ultima_venta
+
+        /* Ventas propias: ventas realizadas por el vendedor actual */
+        IFNULL(SUM(CASE WHEN v.id_vendedor = ? THEN v.cantidad_vendida ELSE 0 END), 0) AS total_vendido_propio,
+
+        /* Ventas de terceros: mismo producto vendido por otro usuario o ventas antiguas sin vendedor */
+        IFNULL(SUM(CASE WHEN v.id_vendedor IS NULL OR v.id_vendedor <> ? THEN v.cantidad_vendida ELSE 0 END), 0) AS total_vendido_terceros,
+
+        IFNULL(MAX(CASE WHEN v.id_vendedor = ? THEN v.fecha_venta ELSE NULL END), '') AS ultima_venta_propia,
+        IFNULL(MAX(CASE WHEN v.id_vendedor IS NULL OR v.id_vendedor <> ? THEN v.fecha_venta ELSE NULL END), '') AS ultima_venta_terceros
     FROM productos p
 ";
 
@@ -412,13 +419,15 @@ $totalProductos = count($productos);
 $totalStock = 0;
 $totalValorInventario = 0;
 $totalVendidos = 0;
+$totalVendidosTerceros = 0;
 $productosStockBajo = 0;
 
 foreach ($productos as $p) {
     $stock = (float)$p['cantidad'];
     $totalStock += $stock;
     $totalValorInventario += $stock * (float)$p['precio_venta'];
-    $totalVendidos += (int)$p['total_vendido'];
+    $totalVendidos += (int)$p['total_vendido_propio'];
+    $totalVendidosTerceros += (int)$p['total_vendido_terceros'];
     if ($stock <= 5) $productosStockBajo++;
 }
 
@@ -446,9 +455,6 @@ include 'includes/navbar.php';
                 <div class="header-actions">
                     <a href="reporte_vendedor_productos.php" class="btn btn-outline-primary">
                         <i class="fas fa-chart-line mr-1"></i> Reporte
-                    </a>
-                    <a href="historial_stock.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-history mr-1"></i> Historial
                     </a>
                 </div>
             </div>
@@ -502,7 +508,7 @@ include 'includes/navbar.php';
                         <div>
                             <span>Vendidos</span>
                             <strong><?= number_format($totalVendidos) ?></strong>
-                            <small>ventas históricas</small>
+                            <small>Propias · <?= number_format($totalVendidosTerceros) ?> de terceros</small>
                         </div>
                         <i class="fas fa-chart-line"></i>
                     </div>
@@ -556,7 +562,7 @@ include 'includes/navbar.php';
                     <div class="col-lg-2 col-md-12 mb-3">
                         <div class="filter-buttons">
                             <button type="button" id="btnLimpiarFiltros" class="btn btn-outline-secondary btn-lg">
-                                <i class="fas fa-eraser"></i>
+                                <i class="fas fa-eraser"></i> Borrar filtros
                             </button>
                         </div>
                     </div>
@@ -591,7 +597,7 @@ include 'includes/navbar.php';
                                     <th class="text-right">Compra</th>
                                     <th class="text-right">Venta</th>
                                     <th class="text-center">Adquisición</th>
-                                    <th class="text-center">Vendidos</th>
+                                    <th class="text-center">Vendidos<br><small>Propios / terceros</small></th>
                                     <th class="text-center">Acciones</th>
                                 </tr>
                             </thead>
@@ -640,7 +646,21 @@ include 'includes/navbar.php';
                                                 <?= $p['tipo_adquisicion'] === 'pagado' ? 'Pagado' : 'Concesión' ?>
                                             </span>
                                         </td>
-                                        <td class="text-center"><?= number_format((int)$p['total_vendido']) ?></td>
+                                        <td class="text-center">
+                                            <div class="ventas-indicador">
+                                                <span class="venta-propia" title="Ventas realizadas por este vendedor">
+                                                    <i class="fas fa-user-check"></i>
+                                                    <?= number_format((int)$p['total_vendido_propio']) ?>
+                                                </span>
+
+                                                <?php if ((int)$p['total_vendido_terceros'] > 0): ?>
+                                                    <span class="venta-terceros" title="Ventas de este producto realizadas por otro vendedor o ventas antiguas sin vendedor registrado">
+                                                        <i class="fas fa-users"></i>
+                                                        <?= number_format((int)$p['total_vendido_terceros']) ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
                                         <td class="text-center">
                                             <div class="action-group">
                                                 <button type="button" class="btn-action btn-add js-open-modal" data-modal="modalAgregar<?= (int)$p['id'] ?>" title="Agregar stock">
@@ -705,7 +725,12 @@ include 'includes/navbar.php';
                                     </div>
                                     <div>
                                         <small>Vendidos</small>
-                                        <strong><?= number_format((int)$p['total_vendido']) ?></strong>
+                                        <strong>
+                                            <?= number_format((int)$p['total_vendido_propio']) ?>
+                                            <?php if ((int)$p['total_vendido_terceros'] > 0): ?>
+                                                <span class="mobile-terceros">+<?= number_format((int)$p['total_vendido_terceros']) ?> terceros</span>
+                                            <?php endif; ?>
+                                        </strong>
                                     </div>
                                 </div>
 
@@ -797,7 +822,21 @@ include 'includes/navbar.php';
                                 <input type="number" class="form-control mb-3" value="<?= e($stock) ?>" readonly>
 
                                 <label>Nueva cantidad</label>
-                                <input type="number" name="nueva_cantidad" min="0" step="1" class="form-control form-control-lg mb-3" value="<?= e($stock) ?>" required>
+                                <input 
+                                    type="number" 
+                                    name="nueva_cantidad" 
+                                    min="0" 
+                                    step="1" 
+                                    class="form-control form-control-lg mb-2 js-ajuste-cantidad" 
+                                    value="<?= e($stock) ?>" 
+                                    data-stock-actual="<?= e($stock) ?>"
+                                    required
+                                >
+
+                                <div class="ajuste-preview neutral">
+                                    <i class="fas fa-equals"></i>
+                                    <span>Sin cambios en inventario</span>
+                                </div>
 
                                 <label>Razón del ajuste</label>
                                 <textarea name="razon_ajuste" rows="3" class="form-control" required placeholder="Ej. Producto dañado, corrección de inventario, conteo físico..."></textarea>
@@ -894,6 +933,45 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const tableRows = Array.from(document.querySelectorAll('.producto-row'));
     const mobileCards = Array.from(document.querySelectorAll('.producto-card'));
+
+
+    function actualizarPreviewAjuste(input) {
+        const actual = parseFloat(input.dataset.stockActual || '0');
+        const nueva = parseFloat(input.value || '0');
+        const preview = input.closest('.modal-body')?.querySelector('.ajuste-preview');
+
+        if (!preview) return;
+
+        const diferencia = nueva - actual;
+
+        preview.classList.remove('increase', 'decrease', 'neutral');
+
+        if (isNaN(nueva) || diferencia === 0) {
+            preview.classList.add('neutral');
+            preview.innerHTML = '<i class="fas fa-equals"></i><span>Sin cambios en inventario</span>';
+            return;
+        }
+
+        if (diferencia > 0) {
+            preview.classList.add('increase');
+            preview.innerHTML = '<i class="fas fa-arrow-up"></i><span>Aumentará +' + diferencia.toLocaleString('es-MX') + ' piezas</span>';
+            return;
+        }
+
+        preview.classList.add('decrease');
+        preview.innerHTML = '<i class="fas fa-arrow-down"></i><span>Se descontarán ' + Math.abs(diferencia).toLocaleString('es-MX') + ' piezas</span>';
+    }
+
+    document.querySelectorAll('.js-ajuste-cantidad').forEach(input => {
+        actualizarPreviewAjuste(input);
+        input.addEventListener('input', function () {
+            actualizarPreviewAjuste(this);
+        });
+        input.addEventListener('change', function () {
+            actualizarPreviewAjuste(this);
+        });
+    });
+
 
     function aplicarFiltros() {
         const q = (buscador?.value || '').trim().toLowerCase();
@@ -1046,8 +1124,3 @@ document.addEventListener('DOMContentLoaded', function () {
     aplicarFiltros();
 });
 </script>
-
-<?php
-include 'includes/footer.php';
-ob_end_flush();
-?>

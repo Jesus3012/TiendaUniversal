@@ -191,8 +191,15 @@ $sqlProductos = "
         p.precio_venta,
         p.tipo_codigo,
         p.tipo_adquisicion,
+
+        /*
+         * Ventas informativas del vendedor seleccionado:
+         * Solo se suman ventas cuyo id_vendedor corresponde al vendedor seleccionado.
+         * Las ventas con id_vendedor NULL o de otro vendedor no cuentan en la card.
+         */
         IFNULL(SUM(v.cantidad_vendida), 0) AS total_vendido,
         IFNULL(MAX(v.fecha_venta), '') AS ultima_venta,
+
         MAX(CASE 
             WHEN vp_otro.vendedor_id IS NOT NULL THEN vp_otro.vendedor_id 
             ELSE NULL 
@@ -202,7 +209,9 @@ $sqlProductos = "
             ELSE NULL 
         END) AS asignado_otro_nombre
     FROM productos p
-    LEFT JOIN ventas v ON v.id_producto = p.id
+    LEFT JOIN ventas v 
+        ON v.id_producto = p.id
+       AND v.id_vendedor = ?
     LEFT JOIN vendedor_productos vp_otro 
         ON vp_otro.producto_id = p.id
        AND vp_otro.activo = 1
@@ -225,7 +234,7 @@ $sqlProductos = "
 
 $stmtProductos = $conn->prepare($sqlProductos);
 if ($stmtProductos) {
-    $stmtProductos->bind_param('i', $vendedorSeleccionado);
+    $stmtProductos->bind_param('ii', $vendedorSeleccionado, $vendedorSeleccionado);
     $stmtProductos->execute();
     $resProd = $stmtProductos->get_result();
 
@@ -288,6 +297,7 @@ include 'includes/navbar.php';
             <?php if (!empty($_SESSION['flash_success'])): ?>
                 <script>
                     document.addEventListener('DOMContentLoaded', function () {
+
                         Swal.fire({
                             icon: 'success',
                             title: 'Asignaciones guardadas',
@@ -323,7 +333,7 @@ include 'includes/navbar.php';
                 <form method="GET" class="row align-items-end">
                     <div class="col-lg-8 col-md-7 mb-3 mb-md-0">
                         <label>Selecciona vendedor</label>
-                        <select name="vendedor_id" class="form-control form-control-lg" onchange="this.form.submit()" required>
+                        <select name="vendedor_id" id="vendedorSelect" class="form-control form-control-lg" required>
                             <option value="">Selecciona un vendedor</option>
 
                             <?php foreach ($vendedores as $v): ?>
@@ -335,10 +345,11 @@ include 'includes/navbar.php';
                     </div>
 
                     <div class="col-lg-4 col-md-5">
-                        <button class="btn btn-primary btn-lg btn-block">
-                            <i class="fas fa-search mr-1"></i>
-                            Consultar vendedor
-                        </button>
+                        <a href="asignar_productos_vendedor.php"
+                        class="btn btn-outline-secondary btn-lg btn-block">
+                            <i class="fas fa-broom mr-1"></i>
+                            Limpiar filtros
+                        </a>
                     </div>
                 </form>
             </div>
@@ -494,6 +505,7 @@ include 'includes/navbar.php';
                                     $asignadoOtro = !empty($p['asignado_otro_id']);
                                     $stock = (float)$p['cantidad'];
                                     $precioVenta = (float)$p['precio_venta'];
+                                    // Venta informativa: solo ventas realizadas por el vendedor seleccionado.
                                     $totalVendido = (int)$p['total_vendido'];
                                     $valorInventarioProducto = $stock * $precioVenta;
                                     $proveedor = $p['proveedor'] ?: 'Sin proveedor';
@@ -631,6 +643,21 @@ include 'includes/navbar.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+
+    const vendedorSelect = document.getElementById('vendedorSelect');
+    if (vendedorSelect) {
+        vendedorSelect.addEventListener('change', function () {
+            const vendedorId = this.value;
+
+            if (vendedorId) {
+                window.location.href = 'asignar_productos_vendedor.php?vendedor_id=' + encodeURIComponent(vendedorId);
+            } else {
+                window.location.href = 'asignar_productos_vendedor.php';
+            }
+        });
+    }
+
+
     const buscar = document.getElementById('buscarProducto');
     const filtroProveedor = document.getElementById('filtroProveedor');
     const filtroCategoria = document.getElementById('filtroCategoria');
