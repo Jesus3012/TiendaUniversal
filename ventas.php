@@ -2402,22 +2402,131 @@ function actualizarDespuesDeFiltrar() {
 // ============ EVENTOS ============
 document.addEventListener('DOMContentLoaded', function() {
     if (ALERTA_SESION) {
+        const mensaje = ALERTA_SESION.mensaje || '';
+        const folio = ALERTA_SESION.folio || '';
+        const esSuccess = (ALERTA_SESION.tipo || 'success') === 'success';
+
+        const ticketEnviado = mensaje.toLowerCase().includes('ticket enviado');
+        const cambioMatch = mensaje.match(/Cambio:\s*\$?([\d.,]+)/i);
+        const cambioTexto = cambioMatch ? `$${cambioMatch[1]}` : '$0.00';
+
+        let correoTicket = '';
+        const correoMatch = mensaje.match(/Ticket enviado a\s+([^\n]+)/i);
+        if (correoMatch && correoMatch[1]) {
+            correoTicket = correoMatch[1].trim();
+        }
+
         Swal.fire({
             icon: ALERTA_SESION.tipo || 'success',
-            title: ALERTA_SESION.titulo || 'Operación completada',
-            html: `
+            title: esSuccess ? 'Venta completada' : (ALERTA_SESION.titulo || 'Aviso'),
+            html: esSuccess ? `
                 <div style="text-align:center; padding:4px 8px;">
-                    <div style="font-size:14px; color:#475569; line-height:1.6; white-space:pre-line; margin-bottom:12px;">
-                        ${escapeHtml(ALERTA_SESION.mensaje || '')}
+
+                    <div style="
+                        margin:6px auto 16px;
+                        width:76px;
+                        height:76px;
+                        border-radius:24px;
+                        background:linear-gradient(135deg,#16a34a,#22c55e);
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        box-shadow:0 12px 26px rgba(22,163,74,.28);
+                    ">
+                        <i class="fas fa-receipt" style="font-size:32px; color:white;"></i>
                     </div>
-                    ${ALERTA_SESION.folio ? `
-                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px; font-size:13px; color:#0f172a;">
-                            Folio: <strong>${escapeHtml(ALERTA_SESION.folio)}</strong>
+
+                    <div style="
+                        font-size:14px;
+                        color:#64748b;
+                        margin-bottom:16px;
+                        line-height:1.5;
+                    ">
+                        La venta fue registrada correctamente en el sistema.
+                    </div>
+
+                    <div style="
+                        display:grid;
+                        grid-template-columns:1fr 1fr;
+                        gap:10px;
+                        margin-bottom:12px;
+                    ">
+                        <div style="
+                            background:#f8fafc;
+                            border:1px solid #e2e8f0;
+                            border-radius:14px;
+                            padding:12px;
+                        ">
+                            <div style="
+                                font-size:10px;
+                                color:#94a3b8;
+                                text-transform:uppercase;
+                                letter-spacing:.5px;
+                                margin-bottom:5px;
+                            ">
+                                Cambio
+                            </div>
+                            <div style="
+                                font-size:18px;
+                                font-weight:900;
+                                color:#16a34a;
+                            ">
+                                ${escapeHtml(cambioTexto)}
+                            </div>
                         </div>
-                    ` : ''}
+
+                        <div style="
+                            background:#f8fafc;
+                            border:1px solid #e2e8f0;
+                            border-radius:14px;
+                            padding:12px;
+                        ">
+                            <div style="
+                                font-size:10px;
+                                color:#94a3b8;
+                                text-transform:uppercase;
+                                letter-spacing:.5px;
+                                margin-bottom:5px;
+                            ">
+                                Folio
+                            </div>
+                            <div style="
+                                font-size:13px;
+                                font-weight:800;
+                                color:#0f172a;
+                                word-break:break-word;
+                            ">
+                                ${escapeHtml(folio || 'Sin folio')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="
+                        background:${ticketEnviado ? '#ecfdf5' : '#fff7ed'};
+                        border:1px solid ${ticketEnviado ? '#bbf7d0' : '#fed7aa'};
+                        color:${ticketEnviado ? '#15803d' : '#9a3412'};
+                        border-radius:14px;
+                        padding:12px;
+                        font-size:13px;
+                        font-weight:700;
+                        line-height:1.5;
+                    ">
+                        ${
+                            ticketEnviado
+                                ? `Ticket enviado correctamente${correoTicket ? `<br><span style="font-weight:600;">${escapeHtml(correoTicket)}</span>` : ''}`
+                                : 'Venta registrada sin envío de ticket por correo.'
+                        }
+                    </div>
+
+                </div>
+            ` : `
+                <div style="text-align:center; padding:4px 8px;">
+                    <div style="font-size:14px; color:#475569; line-height:1.6; white-space:pre-line;">
+                        ${escapeHtml(mensaje)}
+                    </div>
                 </div>
             `,
-            width: '430px',
+            width: '440px',
             confirmButtonText: 'Entendido',
             confirmButtonColor: '#16a34a',
             allowOutsideClick: false,
