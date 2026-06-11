@@ -37,6 +37,19 @@ function inicialesProveedor($nombre) {
     return strtoupper(mb_substr($nombre, 0, 2));
 }
 
+function inicialesTexto($nombre) {
+    $nombre = trim((string)$nombre);
+    if ($nombre === '') return 'NA';
+
+    $palabras = preg_split('/\s+/', $nombre);
+
+    if (count($palabras) >= 2) {
+        return strtoupper(mb_substr($palabras[0], 0, 1) . mb_substr($palabras[1], 0, 1));
+    }
+
+    return strtoupper(mb_substr($nombre, 0, 2));
+}
+
 function imagenBase64($path) {
     if (empty($path) || !file_exists($path)) {
         return ['', 'png', 25, 25];
@@ -137,6 +150,7 @@ if (empty($logoTienda) || !file_exists($logoTienda)) {
 }
 
 [$logoTiendaBase64, $logoTiendaExt] = imagenBase64($logoTienda);
+$inicialesTienda = inicialesTexto($nombreTienda);
 
 /* =====================================================
    PROVEEDORES PARA FILTRO
@@ -188,7 +202,18 @@ $logoProveedorHeight = 25;
 $inicialesProveedor = inicialesProveedor($filtroProveedor);
 
 if ($filtroProveedor !== '') {
-    $stmtLogoProveedor = $conn->prepare("SELECT logo, nombre FROM proveedores WHERE nombre = ? LIMIT 1");
+    /*
+     * Logo del proveedor:
+     * Se toma de la tabla proveedores.logo.
+     * Si no existe logo o el archivo no se encuentra, en el PDF se muestran iniciales.
+     */
+    $stmtLogoProveedor = $conn->prepare("
+        SELECT logo, nombre
+        FROM proveedores
+        WHERE TRIM(LOWER(nombre)) = TRIM(LOWER(?))
+        LIMIT 1
+    ");
+
     if ($stmtLogoProveedor) {
         $stmtLogoProveedor->bind_param('s', $filtroProveedor);
         $stmtLogoProveedor->execute();
@@ -196,11 +221,16 @@ if ($filtroProveedor !== '') {
 
         if ($resLogoProveedor && $rowLogo = $resLogoProveedor->fetch_assoc()) {
             [$logoProveedorBase64, $logoProveedorExt, $logoProveedorWidth, $logoProveedorHeight] = imagenBase64($rowLogo['logo'] ?? '');
+
             if (empty($inicialesProveedor)) {
-                $inicialesProveedor = inicialesProveedor($rowLogo['nombre'] ?? '');
+                $inicialesProveedor = inicialesTexto($rowLogo['nombre'] ?? $filtroProveedor);
             }
         }
     }
+}
+
+if (empty($inicialesProveedor) && $filtroProveedor !== '') {
+    $inicialesProveedor = inicialesTexto($filtroProveedor);
 }
 
 /* =====================================================
@@ -415,6 +445,27 @@ include 'includes/navbar.php';
 
 <div class="content-wrapper reporte-asignados-page">
 
+    <div class="breadcrumb-card">
+        <a href="index.php">
+            <i class="fas fa-home"></i>
+            Inicio
+        </a>
+
+        <span>/</span>
+
+        <a href="dashboard_reportes_ventas.php">
+            <i class="fas fa-chart-pie"></i>
+            Reportes
+        </a>
+
+        <span>/</span>
+
+        <strong>
+            <i class="fas fa-user-check"></i>
+            Productos asignados
+        </strong>
+    </div>
+
     <section class="content-header reporte-header no-print">
         <div class="container-fluid">
             <div class="header-card">
@@ -597,8 +648,8 @@ include 'includes/navbar.php';
                     <span class="count-badge"><?= number_format(count($rows)) ?> registros</span>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm reporte-table">
+                <div class="table-responsive table-no-scroll assigned-detail-wrap">
+                    <table class="table table-hover table-sm reporte-table assigned-detail-table">
                         <thead>
                             <tr>
                                 <th>Vendedor asignado</th>
@@ -641,12 +692,10 @@ include 'includes/navbar.php';
                                 <tr class="<?= $rowClass ?>">
                                     <td>
                                         <strong><?= e($r['vendedor']) ?></strong>
-                                        <small class="d-block text-muted"><?= e($r['vendedor_email']) ?></small>
                                     </td>
 
                                     <td>
                                         <strong><?= e($r['producto']) ?></strong>
-                                        <small class="d-block text-muted">ID #<?= (int)$r['id'] ?> · <?= e(ucfirst($r['tipo_codigo'])) ?></small>
                                     </td>
 
                                     <td><?= e($r['proveedor'] ?: 'Sin proveedor') ?></td>
@@ -848,6 +897,7 @@ include 'includes/navbar.php';
 <script>
 const datosPDF = {
     nombreTienda: <?= json_encode(strtoupper($nombreTienda)) ?>,
+    inicialesTienda: <?= json_encode($inicialesTienda) ?>,
     proveedor: <?= json_encode($filtroProveedor) ?>,
     inicialesProveedor: <?= json_encode($inicialesProveedor) ?>,
     periodo: <?= json_encode($periodoTexto) ?>,
@@ -976,10 +1026,32 @@ function descargarPDFReporte() {
         const logoY = 12;
         const logoSize = 25;
 
+        /*
+         * Logo de tienda:
+         * Si existe logo en configuracion_galeria.logo se muestra.
+         * Si no existe, se muestran únicamente iniciales, sin cuadro.
+         */
         if (datosPDF.logoTiendaBase64) {
             try {
-                docProv.addImage(datosPDF.logoTiendaBase64, datosPDF.logoTiendaExt || 'png', 15, logoY, logoSize, logoSize);
-            } catch (e) {}
+                docProv.addImage(
+                    datosPDF.logoTiendaBase64,
+                    datosPDF.logoTiendaExt || 'png',
+                    15,
+                    logoY,
+                    logoSize,
+                    logoSize
+                );
+            } catch (e) {
+                docProv.setFontSize(18);
+                docProv.setTextColor(249, 115, 22);
+                docProv.setFont('helvetica', 'bold');
+                docProv.text(datosPDF.inicialesTienda || 'TP', 15 + logoSize / 2, logoY + 16, { align: 'center' });
+            }
+        } else {
+            docProv.setFontSize(18);
+            docProv.setTextColor(249, 115, 22);
+            docProv.setFont('helvetica', 'bold');
+            docProv.text(datosPDF.inicialesTienda || 'TP', 15 + logoSize / 2, logoY + 16, { align: 'center' });
         }
 
         docProv.setFontSize(datosPDF.proveedor ? 12 : 14);
@@ -987,29 +1059,39 @@ function descargarPDFReporte() {
         docProv.setFont('helvetica', 'bold');
         docProv.text(datosPDF.nombreTienda || 'PESCADORES DE LA PREHISTORIA', pageWidth / 2, logoY + logoSize / 2 + 4, { align: 'center' });
 
+        /*
+         * Logo de proveedor:
+         * Si hay filtro por proveedor y existe proveedores.logo se muestra.
+         * Si no hay logo, se muestran únicamente iniciales, sin cuadro.
+         */
         if (datosPDF.proveedor) {
+            const proveedorBoxSize = 25;
+            const proveedorX = pageWidth - proveedorBoxSize - 15;
+
             if (datosPDF.logoProveedorBase64) {
                 try {
-                    const logoX = pageWidth - Number(datosPDF.logoProveedorWidth || 25) - 15;
+                    const w = Number(datosPDF.logoProveedorWidth || 25);
+                    const h = Number(datosPDF.logoProveedorHeight || 25);
+                    const x = pageWidth - w - 15;
                     docProv.addImage(
                         datosPDF.logoProveedorBase64,
                         datosPDF.logoProveedorExt || 'png',
-                        logoX,
+                        x,
                         logoY,
-                        Number(datosPDF.logoProveedorWidth || 25),
-                        Number(datosPDF.logoProveedorHeight || 25)
+                        w,
+                        h
                     );
                 } catch (e) {
-                    docProv.setFontSize(26);
-                    docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+                    docProv.setFontSize(18);
+                    docProv.setTextColor(239, 68, 68);
                     docProv.setFont('helvetica', 'bold');
-                    docProv.text(datosPDF.inicialesProveedor || '', pageWidth - 50, logoY + logoSize / 2 + 6);
+                    docProv.text(datosPDF.inicialesProveedor || 'PR', proveedorX + proveedorBoxSize / 2, logoY + 16, { align: 'center' });
                 }
             } else {
-                docProv.setFontSize(26);
-                docProv.setTextColor(colors.danger[0], colors.danger[1], colors.danger[2]);
+                docProv.setFontSize(18);
+                docProv.setTextColor(239, 68, 68);
                 docProv.setFont('helvetica', 'bold');
-                docProv.text(datosPDF.inicialesProveedor || '', pageWidth - 50, logoY + logoSize / 2 + 6);
+                docProv.text(datosPDF.inicialesProveedor || 'PR', proveedorX + proveedorBoxSize / 2, logoY + 16, { align: 'center' });
             }
         }
 

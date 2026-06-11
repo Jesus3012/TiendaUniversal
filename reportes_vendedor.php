@@ -692,6 +692,76 @@ include 'includes/navbar.php';
     margin: 0 auto;
     display: block;
 }
+
+/* ==========================================
+   BREADCRUMB MODERNO
+========================================== */
+
+.breadcrumb-card{
+    background:#fff;
+    border:1px solid #e7edf5;
+    border-radius:22px;
+
+    min-height:64px;
+
+    padding:0 24px;
+    margin-bottom:22px;
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    box-shadow:0 4px 18px rgba(15,23,42,.05);
+
+    color:#64748b;
+    font-size:15px;
+    font-weight:600;
+}
+
+.breadcrumb-card a{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    text-decoration:none;
+    color:#64748b;
+    transition:.25s;
+}
+
+.breadcrumb-card a:hover{
+    color:#f97316;
+}
+
+.breadcrumb-card strong{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:#f97316;
+    font-weight:800;
+}
+
+.breadcrumb-card span{
+    color:#94a3b8;
+}
+
+/* MOVIL */
+
+@media(max-width:768px){
+
+    .breadcrumb-card{
+        min-height:54px;
+        padding:0 16px;
+        border-radius:18px;
+        font-size:13px;
+        gap:6px;
+        overflow-x:auto;
+        white-space:nowrap;
+    }
+
+    .breadcrumb-card::-webkit-scrollbar{
+        display:none;
+    }
+}
+
 </style>
 
 <!-- Loading Overlay -->
@@ -703,6 +773,27 @@ include 'includes/navbar.php';
 </div>
 
 <div class="content-wrapper">
+
+    <div class="breadcrumb-card">
+        <a href="index.php">
+            <i class="fas fa-home"></i>
+            Inicio
+        </a>
+
+        <span>/</span>
+
+        <a href="dashboard_reportes_ventas.php">
+            <i class="fas fa-chart-pie"></i>
+            Reportes
+        </a>
+
+        <span>/</span>
+
+        <strong>
+            <i class="fas fa-store"></i>
+            Reporte general
+        </strong>
+    </div>
     <section class="content-header mb-4">
         <div class="container-fluid">
             <div class="row align-items-center">
@@ -859,7 +950,7 @@ include 'includes/navbar.php';
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td><?
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -892,7 +983,9 @@ include 'includes/navbar.php';
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="4" class="text-center py-4 text-muted">No hay datos de clientes en este período</td><?
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No hay datos disponibles</td>
+                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>

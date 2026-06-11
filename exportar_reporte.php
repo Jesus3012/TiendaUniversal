@@ -261,7 +261,7 @@ function exportarPDF($conn, $ventas, $resumen, $fecha_inicio, $fecha_fin, $nombr
     $pdf->Cell(20, 7, 'Cant', 1, 0, 'C', true);
     $pdf->Cell(25, 7, 'Precio', 1, 0, 'C', true);
     $pdf->Cell(30, 7, 'Total', 1, 0, 'C', true);
-    $pdf->Cell(30, 7, 'Método', 1, 0, 'C', true);
+    $pdf->Cell(30, 7, 'Metodo', 1, 0, 'C', true);
     $pdf->Cell(35, 7, 'Cliente', 1, 1, 'C', true);
     
     $pdf->SetTextColor($color_texto[0], $color_texto[1], $color_texto[2]);

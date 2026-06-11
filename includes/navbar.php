@@ -163,7 +163,8 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
           <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
           <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
-          <a href="reportes_vendedor.php"><i class="fas fa-file-alt"></i> Reportes</a>
+          <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i> Reportes</a>
+          <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i> Ajustes de Productos</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
         <?php endif; ?>
         
@@ -222,9 +223,8 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <a href="ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
-        <a href="reportes_vendedor.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
+        <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
         <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i><span>Ajustes de Productos</span></a>
-        <a href="reporte_vendedor_productos.php"><i class="fas fa-chart-bar"></i><span>Reporte de Productos</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
       <?php endif; ?>
     </div>

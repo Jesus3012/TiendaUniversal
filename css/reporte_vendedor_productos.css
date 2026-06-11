@@ -760,3 +760,194 @@
     }
 }
 
+/* ==========================================
+   BREADCRUMB MODERNO
+========================================== */
+
+.breadcrumb-card{
+    background:#fff;
+    border:1px solid #e7edf5;
+    border-radius:22px;
+
+    min-height:64px;
+
+    padding:0 24px;
+    margin-bottom:22px;
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    box-shadow:0 4px 18px rgba(15,23,42,.05);
+
+    color:#64748b;
+    font-size:15px;
+    font-weight:600;
+}
+
+.breadcrumb-card a{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    text-decoration:none;
+    color:#64748b;
+    transition:.25s;
+}
+
+.breadcrumb-card a:hover{
+    color:#f97316;
+}
+
+.breadcrumb-card strong{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:#f97316;
+    font-weight:800;
+}
+
+.breadcrumb-card span{
+    color:#94a3b8;
+}
+
+/* MOVIL */
+
+@media(max-width:768px){
+
+    .breadcrumb-card{
+        min-height:54px;
+        padding:0 16px;
+        border-radius:18px;
+        font-size:13px;
+        gap:6px;
+        overflow-x:auto;
+        white-space:nowrap;
+    }
+
+    .breadcrumb-card::-webkit-scrollbar{
+        display:none;
+    }
+}
+
+
+/* =====================================================
+   AJUSTE TABLA DETALLE PRODUCTOS ASIGNADOS SIN SCROLL
+   Compacta la tabla principal para verla completa en PC.
+===================================================== */
+
+.assigned-detail-wrap.table-responsive{
+    overflow-x: visible !important;
+    width: 100%;
+}
+
+.assigned-detail-table{
+    width: 100% !important;
+    table-layout: fixed;
+    font-size: 0.72rem;
+}
+
+.assigned-detail-table thead th{
+    white-space: normal !important;
+    line-height: 1.15;
+    padding: 8px 5px;
+    font-size: 0.66rem;
+    text-align: center;
+}
+
+.assigned-detail-table tbody td,
+.assigned-detail-table tfoot th{
+    padding: 7px 5px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.assigned-detail-table th:nth-child(1),
+.assigned-detail-table td:nth-child(1){
+    width: 10.5%;
+}
+
+.assigned-detail-table th:nth-child(2),
+.assigned-detail-table td:nth-child(2){
+    width: 13%;
+}
+
+.assigned-detail-table th:nth-child(3),
+.assigned-detail-table td:nth-child(3){
+    width: 10.5%;
+}
+
+.assigned-detail-table th:nth-child(4),
+.assigned-detail-table td:nth-child(4),
+.assigned-detail-table th:nth-child(5),
+.assigned-detail-table td:nth-child(5),
+.assigned-detail-table th:nth-child(6),
+.assigned-detail-table td:nth-child(6),
+.assigned-detail-table th:nth-child(7),
+.assigned-detail-table td:nth-child(7){
+    width: 6.2%;
+}
+
+.assigned-detail-table th:nth-child(8),
+.assigned-detail-table td:nth-child(8),
+.assigned-detail-table th:nth-child(9),
+.assigned-detail-table td:nth-child(9),
+.assigned-detail-table th:nth-child(10),
+.assigned-detail-table td:nth-child(10),
+.assigned-detail-table th:nth-child(11),
+.assigned-detail-table td:nth-child(11),
+.assigned-detail-table th:nth-child(12),
+.assigned-detail-table td:nth-child(12){
+    width: 7.2%;
+}
+
+.assigned-detail-table th:nth-child(13),
+.assigned-detail-table td:nth-child(13){
+    width: 7%;
+}
+
+.assigned-detail-table td small{
+    font-size: 0.62rem;
+    line-height: 1.15;
+}
+
+.assigned-detail-table .badge-own,
+.assigned-detail-table .badge-third,
+.assigned-detail-table .badge-muted,
+.assigned-detail-table .badge-paid,
+.assigned-detail-table .badge-debt,
+.assigned-detail-table .stock-pill{
+    padding: 4px 6px;
+    font-size: 0.62rem;
+}
+
+.assigned-detail-table .badge-own i,
+.assigned-detail-table .badge-third i,
+.assigned-detail-table .badge-paid i,
+.assigned-detail-table .badge-debt i{
+    display:none;
+}
+
+/* En pantallas medianas y móviles se conserva lectura en tarjetas */
+@media(max-width: 991px){
+    .assigned-detail-wrap.table-responsive{
+        overflow-x: auto !important;
+    }
+
+    .assigned-detail-table{
+        min-width: 960px;
+        table-layout: auto;
+        font-size: 0.78rem;
+    }
+
+    .assigned-detail-table thead th{
+        white-space: nowrap !important;
+        font-size: 0.72rem;
+        padding: 9px 7px;
+    }
+
+    .assigned-detail-table tbody td,
+    .assigned-detail-table tfoot th{
+        padding: 8px 7px;
+    }
+}

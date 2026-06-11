@@ -621,6 +621,7 @@ if ($productos_result) {
 <script>
 let carrito = <?php echo $carrito_json; ?>;
 const VENTA_EXITOSA = <?= $venta_exitosa ? 'true' : 'false' ?>;
+const ALERTA_SESION = <?= json_encode($alerta ?? null, JSON_UNESCAPED_UNICODE) ?>;
 const POS_STORAGE_ACTIVA = 'pos_venta_activa';
 const POS_STORAGE_PENDIENTES = 'pos_ventas_pendientes';
 let ventaEnProceso = false;
@@ -1920,6 +1921,18 @@ function confirmarVenta() {
 
     const total = parseFloat(document.getElementById('total').value) || 0;
     const pago = parseFloat(document.getElementById('monto_pagado').value) || 0;
+    const metodo = document.querySelector('input[name="metodo_pago"]:checked')?.value;
+
+    if (!metodo) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Método de pago requerido',
+            text: 'Selecciona un método de pago para continuar.',
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Entendido'
+        });
+        return;
+    }
 
     if (!pago || pago <= 0) {
         Swal.fire({
@@ -1947,10 +1960,8 @@ function confirmarVenta() {
         return;
     }
 
-    const metodo = document.querySelector('input[name="metodo_pago"]:checked')?.value;
-
     if (metodo === 'transferencia') {
-        const folio = document.getElementById('folio_transferencia')?.value;
+        const folio = document.getElementById('folio_transferencia')?.value.trim();
 
         if (!folio || folio.length < 5) {
             Swal.fire({
@@ -1964,67 +1975,90 @@ function confirmarVenta() {
         }
     }
 
-    if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
-        // No se piden últimos 4 ni autorización manual.
-        // Esos datos los confirma Mercado Pago al aprobar la orden.
-    }
-
     let ticketItems = '';
 
     carrito.forEach(item => {
         const subtotal = item.precio * item.cantidad;
 
         ticketItems += `
-            <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
-                <span style="color: #334155;">${escapeHtml(item.nombre)} x${item.cantidad}</span>
-                <span style="font-weight: 600; color: #f97316;">$${subtotal.toFixed(2)}</span>
+            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; gap:12px;">
+                <span style="color:#334155; text-align:left;">${escapeHtml(item.nombre)} x${item.cantidad}</span>
+                <span style="font-weight:600; color:#f97316; white-space:nowrap;">$${subtotal.toFixed(2)}</span>
             </div>
         `;
     });
 
     const cambio = pago - total;
     const fecha = new Date().toLocaleString();
+    const correoCliente = document.getElementById('correo_cliente')?.value.trim() || '';
+
+    const metodoTexto =
+        metodo === 'efectivo'
+            ? 'EFECTIVO'
+            : metodo === 'transferencia'
+                ? 'TRANSFERENCIA'
+                : metodo === 'tarjeta_debito'
+                    ? 'TARJETA DÉBITO'
+                    : 'TARJETA CRÉDITO';
 
     Swal.fire({
         title: 'Confirmar venta',
         html: `
-            <div style="background: #ffffff; border-radius: 20px; padding: 20px; max-width: 400px; margin: 0 auto;">
-                <div style="text-align: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 16px;">
-                    <div style="font-size: 16px; font-weight: 800; color: #1e293b;">TIENDA PESCADORES</div>
-                    <div style="font-size: 10px; color: #6b7280;">${fecha}</div>
+            <div style="background:#ffffff; border-radius:20px; padding:20px; max-width:400px; margin:0 auto;">
+                <div style="text-align:center; border-bottom:2px solid #e5e7eb; padding-bottom:12px; margin-bottom:16px;">
+                    <div style="font-size:16px; font-weight:800; color:#1e293b;">TIENDA PESCADORES</div>
+                    <div style="font-size:10px; color:#6b7280;">${fecha}</div>
                 </div>
 
-                <div style="margin-bottom: 16px; max-height: 200px; overflow-y: auto;">
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 8px;">
+                <div style="margin-bottom:16px; max-height:200px; overflow-y:auto;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#9ca3af; border-bottom:1px solid #e5e7eb; padding-bottom:6px; margin-bottom:8px;">
                         <span>PRODUCTO</span>
                         <span>IMPORTE</span>
                     </div>
                     ${ticketItems}
                 </div>
 
-                <div style="background: #f8fafc; border-radius: 12px; padding: 12px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
-                        <span style="color: #475569;">TOTAL</span>
-                        <span style="font-weight: 700;">$${total.toFixed(2)}</span>
+                <div style="background:#f8fafc; border-radius:12px; padding:12px; margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                        <span style="color:#475569;">TOTAL</span>
+                        <span style="font-weight:700;">$${total.toFixed(2)}</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
-                        <span style="color: #475569;">PAGO CON</span>
-                        <span style="font-weight: 700;">$${pago.toFixed(2)}</span>
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                        <span style="color:#475569;">PAGO CON</span>
+                        <span style="font-weight:700;">$${pago.toFixed(2)}</span>
                     </div>
                 </div>
 
-                <div style="background: #16a34a; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 16px;">
-                    <div style="font-size: 14px; color: white; opacity: 0.9; margin-bottom: 8px;">SU CAMBIO</div>
-                    <div style="font-size: 42px; font-weight: 800; color: white;">$${cambio.toFixed(2)}</div>
-                    <div style="font-size: 11px; color: white; opacity: 0.7; margin-top: 8px;">Entregue esta cantidad al cliente</div>
+                ${
+                    metodo === 'efectivo'
+                        ? `
+                            <div style="background:#16a34a; border-radius:16px; padding:20px; text-align:center; margin-bottom:16px;">
+                                <div style="font-size:14px; color:white; opacity:0.9; margin-bottom:8px;">SU CAMBIO</div>
+                                <div style="font-size:42px; font-weight:800; color:white;">$${cambio.toFixed(2)}</div>
+                                <div style="font-size:11px; color:white; opacity:0.7; margin-top:8px;">Entregue esta cantidad al cliente</div>
+                            </div>
+                        `
+                        : ''
+                }
+
+                <div style="display:flex; justify-content:space-between; background:#f1f5f9; border-radius:10px; padding:10px 12px; margin-bottom:10px;">
+                    <span style="color:#475569;">MÉTODO DE PAGO</span>
+                    <span style="font-weight:700;">${metodoTexto}</span>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; background: #f1f5f9; border-radius: 10px; padding: 10px 12px;">
-                    <span style="color: #475569;">MÉTODO DE PAGO</span>
-                    <span style="font-weight: 700;">
-                        ${metodo === 'efectivo' ? 'EFECTIVO' : metodo === 'transferencia' ? 'TRANSFERENCIA' : metodo === 'tarjeta_debito' ? 'TARJETA DÉBITO' : 'TARJETA CRÉDITO'}
-                    </span>
-                </div>
+                ${
+                    correoCliente
+                        ? `
+                            <div style="background:#ecfdf5; border:1px solid #bbf7d0; color:#15803d; border-radius:10px; padding:10px; font-size:13px; font-weight:600;">
+                                El ticket se enviará al correo del cliente al registrar la venta.
+                            </div>
+                        `
+                        : `
+                            <div style="background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; border-radius:10px; padding:10px; font-size:13px;">
+                                No se capturó correo. Solo se registrará la venta.
+                            </div>
+                        `
+                }
             </div>
         `,
         icon: 'question',
@@ -2034,63 +2068,95 @@ function confirmarVenta() {
         confirmButtonColor: '#f97316',
         cancelButtonColor: '#94a3b8',
         allowOutsideClick: false,
-        allowEscapeKey: false,
-        preConfirm: () => {
-            ventaEnProceso = true;
-
-            const btn = document.getElementById('btnConfirmar');
-
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Procesando...';
-            }
-
-            return true;
-        }
+        allowEscapeKey: false
     }).then(async result => {
-        if (result.isConfirmed) {
-            Swal.fire({
-                title: 'Procesando venta',
-                text: 'Por favor espere...',
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-
-            try {
-                guardarCarrito();
-
-                if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
-                    await procesarPagoMercadoPago(total, metodo);
-                } else {
-                    limpiarDatosMercadoPago();
-                }
-
-                document.getElementById('carrito_json').value = JSON.stringify(carrito);
-
-                const audio = document.getElementById('sonidoCaja');
-                if (audio) audio.play().catch(e => console.log('Audio error:', e));
-
-                document.getElementById('ventaForm').submit();
-
-            } catch (error) {
-                Swal.close();
-                ventaEnProceso = false;
-                resetBotonVenta();
-
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error al procesar',
-                    text: error.message || 'Ocurrió un error inesperado',
-                    confirmButtonColor: '#f97316'
-                });
-            }
-        } else {
+        if (!result.isConfirmed) {
             ventaEnProceso = false;
             resetBotonVenta();
             enfocarCodigo();
+            return;
+        }
+
+        ventaEnProceso = true;
+
+        const btn = document.getElementById('btnConfirmar');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Procesando...';
+        }
+
+        Swal.fire({
+            title: metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito'
+                ? 'Procesando pago'
+                : 'Registrando venta',
+            html: `
+                <div style="text-align:center;">
+                    <p style="color:#64748b; font-size:14px; margin-bottom:8px;">
+                        ${metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito'
+                            ? 'Primero se validará el cobro en la terminal Mercado Pago.'
+                            : 'Guardando venta, generando ticket y actualizando inventario.'}
+                    </p>
+                    ${correoCliente
+                        ? '<p style="color:#16a34a; font-size:13px; font-weight:600;">También se enviará el ticket al correo del cliente.</p>'
+                        : '<p style="color:#64748b; font-size:13px;">No se capturó correo, solo se registrará la venta.</p>'}
+                </div>
+            `,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            guardarCarrito();
+
+            if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
+                await procesarPagoMercadoPago(total, metodo);
+            } else {
+                limpiarDatosMercadoPago();
+            }
+
+            document.getElementById('carrito_json').value = JSON.stringify(carrito);
+
+            const audio = document.getElementById('sonidoCaja');
+            if (audio) {
+                audio.play().catch(e => console.log('Audio error:', e));
+            }
+
+            Swal.fire({
+                title: 'Registrando venta',
+                html: `
+                    <div style="text-align:center;">
+                        <p style="color:#64748b; font-size:14px; margin-bottom:8px;">
+                            Guardando la venta en el sistema.
+                        </p>
+                        ${correoCliente
+                            ? '<p style="color:#16a34a; font-size:13px; font-weight:600;">Enviando ticket al correo del cliente.</p>'
+                            : '<p style="color:#64748b; font-size:13px;">Finalizando registro de venta.</p>'}
+                    </div>
+                `,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                    setTimeout(() => {
+                        document.getElementById('ventaForm').submit();
+                    }, 250);
+                }
+            });
+
+        } catch (error) {
+            Swal.close();
+            ventaEnProceso = false;
+            resetBotonVenta();
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al procesar',
+                text: error.message || 'Ocurrió un error inesperado',
+                confirmButtonColor: '#f97316'
+            });
         }
     });
 }
@@ -2335,6 +2401,30 @@ function actualizarDespuesDeFiltrar() {
 
 // ============ EVENTOS ============
 document.addEventListener('DOMContentLoaded', function() {
+    if (ALERTA_SESION) {
+        Swal.fire({
+            icon: ALERTA_SESION.tipo || 'success',
+            title: ALERTA_SESION.titulo || 'Operación completada',
+            html: `
+                <div style="text-align:center; padding:4px 8px;">
+                    <div style="font-size:14px; color:#475569; line-height:1.6; white-space:pre-line; margin-bottom:12px;">
+                        ${escapeHtml(ALERTA_SESION.mensaje || '')}
+                    </div>
+                    ${ALERTA_SESION.folio ? `
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px; font-size:13px; color:#0f172a;">
+                            Folio: <strong>${escapeHtml(ALERTA_SESION.folio)}</strong>
+                        </div>
+                    ` : ''}
+                </div>
+            `,
+            width: '430px',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#16a34a',
+            allowOutsideClick: false,
+            allowEscapeKey: false
+        });
+    }
+
     renderCarrito();
     mostrarCamposPago();
     restaurarVentaActivaLocal();
