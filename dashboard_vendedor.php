@@ -284,11 +284,21 @@ for ($i = 0; $i < 7; $i++) {
     $ventasPorDiaSemana[] = ['dia' => $diasSemana[$i], 'total' => $ventasPorDia[$i]];
 }
 
-// Obtener imagen del dashboard desde configuración
-$result_config = $conn->query("SELECT imagen_dashboard FROM configuracion_galeria WHERE id = 1");
+// Obtener imagen y título del dashboard desde configuración
+$result_config = $conn->query("
+    SELECT nombre, logo, imagen_dashboard
+    FROM configuracion_galeria
+    WHERE id = 1
+");
+
 $config_data = $result_config->fetch_assoc();
-$imagen_dashboard = isset($config_data['imagen_dashboard']) && file_exists($config_data['imagen_dashboard']) 
-    ? $config_data['imagen_dashboard'] 
+
+$nombre_tienda = $config_data['nombre'] ?? 'Mi Tienda';
+$logo_tienda   = $config_data['logo'] ?? '';
+
+$imagen_dashboard = !empty($config_data['imagen_dashboard']) &&
+                    file_exists($config_data['imagen_dashboard'])
+    ? $config_data['imagen_dashboard']
     : '';
 
 // Ventas recientes para el modal de hoy
@@ -451,7 +461,7 @@ if ($resSemanas) {
         <div class="hero-content text-center">
             <div class="hero-badge">
                 <i class="fas fa-fish"></i>
-                <span>DIARIO FINANCIERO (POS)</span>
+                <span><?= htmlspecialchars($nombre_tienda) ?></span>
             </div>
             <div class="hero-text">
                 <span class="hero-hello"><?= $saludo ?></span>
