@@ -985,3 +985,100 @@ body {
 .gap-2 {
     gap: 8px;
 }
+
+/* Centrar modales correctamente */
+.modal {
+    padding-right: 0 !important;
+}
+
+.modal.show {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-dialog {
+    margin: 1.75rem auto;
+    width: calc(100% - 30px);
+    max-height: calc(100vh - 3.5rem);
+}
+
+.modal-dialog-centered {
+    min-height: auto !important;
+}
+
+.modal-content {
+    max-height: calc(100vh - 3.5rem);
+    overflow: hidden;
+    border-radius: 18px;
+}
+
+.modal-body {
+    max-height: calc(100vh - 190px);
+    overflow-y: auto;
+}
+
+/* Modal grande proveedor */
+#modalProveedor .modal-dialog {
+    max-width: 850px;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .modal.show {
+        align-items: flex-start;
+        padding-top: 15px;
+    }
+
+    .modal-dialog {
+        width: calc(100% - 20px);
+        margin: 0 auto;
+    }
+
+    .modal-content {
+        max-height: calc(100vh - 30px);
+    }
+
+    .modal-body {
+        max-height: calc(100vh - 180px);
+    }
+}
+
+/* Corregir selects cortados dentro de modales */
+.modal select.form-control,
+.modal .form-control {
+    height: 46px !important;
+    min-height: 46px !important;
+    line-height: 1.5 !important;
+    padding: 10px 42px 10px 16px !important;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+}
+
+/* Solo para textarea, que no herede altura fija */
+.modal textarea.form-control {
+    height: auto !important;
+    min-height: 90px !important;
+}
+
+/* Mejora visual del select */
+.modal select.form-control {
+    appearance: auto !important;
+    -webkit-appearance: auto !important;
+    -moz-appearance: auto !important;
+}
+
+/* Select corregido en tab correo */
+select.select-corregido {
+    height: 32px !important;
+    min-height: 32px !important;
+    line-height: normal !important;
+    padding: 0 42px 0 16px !important;
+    font-size: 15px !important;
+    display: block !important;
+    align-items: unset !important;
+    appearance: auto !important;
+    -webkit-appearance: auto !important;
+    -moz-appearance: auto !important;
+}

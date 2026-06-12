@@ -1,8 +1,17 @@
 <?php
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 date_default_timezone_set('America/Mexico_City');
 
 session_start();
 require_once 'includes/db.php';
+
+// PHPMailer: instala con composer require phpmailer/phpmailer
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
 
 // Verificar si el usuario está logueado y es administrador
 if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
@@ -10,13 +19,37 @@ if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
     exit;
 }
 
-include 'includes/header.php';
-include 'includes/navbar.php';
-
-
 $mensaje = '';
 $tipo_mensaje = '';
 $tab_activo = isset($_POST['tab_activo']) ? $_POST['tab_activo'] : (isset($_GET['tab']) ? $_GET['tab'] : 'general');
+
+// ==================== RESPUESTA AJAX PARA NO SALIR DE LA PÁGINA ====================
+function esPeticionAjax() {
+    return (
+        (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') ||
+        (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+    );
+}
+
+function responderAjax($ok, $mensaje, $tipo_mensaje = 'success', $tab_activo = 'general', $extra = []) {
+    if (esPeticionAjax()) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+
+        echo json_encode(array_merge([
+            'ok' => $ok,
+            'mensaje' => $mensaje,
+            'tipo_mensaje' => $tipo_mensaje,
+            'tab_activo' => $tab_activo
+        ], $extra), JSON_UNESCAPED_UNICODE);
+
+        exit;
+    }
+}
+
 
 // ==================== FUNCIÓN PARA RESPALDOS SIN MYSQLDUMP ====================
 function backupDatabase($conn, $backup_dir = 'backups/') {
@@ -69,6 +102,166 @@ function backupDatabase($conn, $backup_dir = 'backups/') {
         return ['success' => true, 'filename' => $filename];
     }
     return ['success' => false, 'error' => 'No se pudo escribir el archivo'];
+}
+
+
+// ==================== FUNCIÓN PARA ENVIAR ACCESOS POR CORREO ====================
+function enviarCorreoAccesoUsuario($conn, $nombre, $email, $rol, $password_default) {
+    if (!class_exists(PHPMailer::class)) {
+        return ['ok' => false, 'error' => 'PHPMailer no está instalado. Ejecuta: composer require phpmailer/phpmailer'];
+    }
+
+    $stmt_config = $conn->prepare("SELECT * FROM configuracion_correo WHERE id = 1 AND activo = 1 LIMIT 1");
+    $stmt_config->execute();
+    $config = $stmt_config->get_result()->fetch_assoc();
+
+    if (!$config) {
+        return ['ok' => false, 'error' => 'No existe configuración SMTP activa.'];
+    }
+
+    $stmt_tienda = $conn->prepare("SELECT nombre, telefono, email, direccion, horario, logo FROM configuracion_galeria WHERE id = 1 LIMIT 1");
+    $stmt_tienda->execute();
+    $tienda = $stmt_tienda->get_result()->fetch_assoc() ?: [];
+
+    $nombreTienda = $tienda['nombre'] ?? 'Tienda Pescadores';
+    $telefonoTienda = $tienda['telefono'] ?? '';
+    $correoTienda = $tienda['email'] ?? ($config['correo_origen'] ?? '');
+    $horarioTienda = $tienda['horario'] ?? '';
+    $logoRuta = trim($tienda['logo'] ?? '');
+
+    $nombreSeguro = htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8');
+    $emailSeguro = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    $rolSeguro = htmlspecialchars(ucfirst($rol), ENT_QUOTES, 'UTF-8');
+    $passwordSeguro = htmlspecialchars($password_default, ENT_QUOTES, 'UTF-8');
+    $nombreTiendaSeguro = htmlspecialchars($nombreTienda, ENT_QUOTES, 'UTF-8');
+    $telefonoSeguro = htmlspecialchars($telefonoTienda, ENT_QUOTES, 'UTF-8');
+    $correoTiendaSeguro = htmlspecialchars($correoTienda, ENT_QUOTES, 'UTF-8');
+    $horarioSeguro = htmlspecialchars($horarioTienda, ENT_QUOTES, 'UTF-8');
+
+    /*
+     * Logo automático:
+     * 1) Si existe como archivo local, se incrusta en el correo con CID.
+     * 2) Si no se puede incrustar, intenta usar una URL pública construida con el dominio actual.
+     */
+    $logoHtml = '';
+    $logoLocalPath = '';
+
+    if ($logoRuta !== '') {
+        $logoRutaLimpia = ltrim($logoRuta, '/');
+        $posibleRutaLocal = __DIR__ . '/' . $logoRutaLimpia;
+
+        if (file_exists($posibleRutaLocal)) {
+            $logoLocalPath = $posibleRutaLocal;
+        } elseif (file_exists($logoRuta)) {
+            $logoLocalPath = $logoRuta;
+        }
+    }
+
+    $mail = new PHPMailer(true);
+
+    try {
+        $mail->isSMTP();
+        $mail->Host = $config['smtp_host'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['smtp_usuario'];
+        $mail->Password = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port = (int)$config['smtp_port'];
+        $mail->CharSet = 'UTF-8';
+
+        $mail->setFrom($config['correo_origen'], $config['nombre_origen']);
+        $mail->addAddress($email, $nombre);
+        $mail->isHTML(true);
+        $mail->Subject = "Tus accesos a {$nombreTienda}";
+
+        if ($logoLocalPath !== '') {
+            $cidLogo = 'logo_tienda_' . md5($logoLocalPath . time());
+            $mail->addEmbeddedImage($logoLocalPath, $cidLogo, basename($logoLocalPath));
+
+            $logoHtml = "
+                <div style='margin:0 auto 20px auto;text-align:center;'>
+                    <img src='cid:{$cidLogo}'
+                         alt='{$nombreTiendaSeguro}'
+                         style='max-width:190px;max-height:95px;width:auto;height:auto;display:inline-block;background:#ffffff;padding:10px;border-radius:14px;box-shadow:0 8px 20px rgba(15,23,42,.16);'>
+                </div>
+            ";
+        } elseif ($logoRuta !== '') {
+            $protocolo = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+            $host = $_SERVER['HTTP_HOST'] ?? '';
+
+            if ($host !== '') {
+                $logoUrl = $protocolo . $host . '/' . ltrim($logoRuta, '/');
+                $logoUrlSeguro = htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8');
+
+                $logoHtml = "
+                    <div style='margin:0 auto 20px auto;text-align:center;'>
+                        <img src='{$logoUrlSeguro}'
+                             alt='{$nombreTiendaSeguro}'
+                             style='max-width:190px;max-height:95px;width:auto;height:auto;display:inline-block;background:#ffffff;padding:10px;border-radius:14px;box-shadow:0 8px 20px rgba(15,23,42,.16);'>
+                    </div>
+                ";
+            }
+        }
+
+        $mail->Body = "
+        <!DOCTYPE html>
+        <html lang='es'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        </head>
+        <body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#1f2937;'>
+            <table width='100%' cellpadding='0' cellspacing='0' style='background:#f8fafc;padding:30px 12px;'>
+                <tr>
+                    <td align='center'>
+                        <table width='100%' cellpadding='0' cellspacing='0' style='max-width:640px;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,.14);'>
+                            <tr>
+                                <td style='background:linear-gradient(135deg,#f97316,#fb923c);padding:40px 28px;text-align:center;color:#ffffff;'>
+                                    {$logoHtml}
+
+                                    <h1 style='margin:0;font-size:30px;font-weight:800;'>Bienvenido(a)</h1>
+                                    <p style='margin:10px 0 0;font-size:15px;opacity:.95;'>Tu cuenta fue creada correctamente en <strong>{$nombreTiendaSeguro}</strong></p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style='padding:34px 30px;'>
+                                    <p style='font-size:16px;margin:0 0 12px;'>Hola <strong>{$nombreSeguro}</strong>,</p>
+                                    <p style='font-size:15px;line-height:1.6;margin:0 0 22px;color:#475569;'>Ya puedes ingresar al sistema con los siguientes datos de acceso:</p>
+
+                                    <table width='100%' cellpadding='0' cellspacing='0' style='background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:0;margin:0 0 22px;'>
+                                        <tr>
+                                            <td style='padding:20px;'>
+                                                <p style='margin:0 0 12px;font-size:15px;'><strong>Correo:</strong><br><span style='color:#f97316;font-weight:700;'>{$emailSeguro}</span></p>
+                                                <p style='margin:0 0 12px;font-size:15px;'><strong>Contraseña temporal:</strong><br><span style='display:inline-block;margin-top:6px;background:#111827;color:#ffffff;padding:9px 14px;border-radius:10px;font-weight:800;letter-spacing:.5px;'>{$passwordSeguro}</span></p>
+                                                <p style='margin:0;font-size:15px;'><strong>Rol asignado:</strong><br>{$rolSeguro}</p>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    <div style='background:#eff6ff;border-left:5px solid #3b82f6;border-radius:12px;padding:15px 16px;margin-bottom:22px;'>
+                                        <p style='margin:0;font-size:14px;line-height:1.5;color:#1e3a8a;'>Por seguridad, al iniciar sesión el sistema te solicitará cambiar esta contraseña temporal.</p>
+                                    </div>
+
+                                    <p style='font-size:13px;color:#64748b;line-height:1.6;margin:0;'>
+                                        {$nombreTiendaSeguro}<br>
+                                        " . (!empty($horarioSeguro) ? "Horario: {$horarioSeguro}" : "") . "
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>";
+
+        $mail->AltBody = "Hola {$nombre}. Tu cuenta fue creada en {$nombreTienda}. Correo: {$email}. Contraseña temporal: {$password_default}. Rol: {$rol}. Deberás cambiar tu contraseña al iniciar sesión.";
+        $mail->send();
+
+        return ['ok' => true, 'error' => ''];
+    } catch (Exception $e) {
+        return ['ok' => false, 'error' => $mail->ErrorInfo ?: $e->getMessage()];
+    }
 }
 
 // ==================== PROCESAR ACCIONES ====================
@@ -220,7 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $tab_activo = 'correo';
     }
     
-    // Crear usuario
+    // Crear usuario + notificación por correo
     elseif ($action === 'crear_usuario') {
         $nombre = trim($_POST['nombre'] ?? '');
         $email = trim($_POST['email'] ?? '');
@@ -228,21 +421,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $activo = intval($_POST['activo'] ?? 1);
         $password_default = 'Pescadores1';
         $password_hash = password_hash($password_default, PASSWORD_DEFAULT);
-        
-        $stmt = $conn->prepare("INSERT INTO usuarios (nombre, email, password, rol, activo, created_by, debe_cambiar_password) VALUES (?, ?, ?, ?, ?, ?, 1)");
-        $stmt->bind_param("ssssii", $nombre, $email, $password_hash, $rol, $activo, $usuario_id);
-        
-        if ($stmt->execute()) {
-            $mensaje = "Usuario creado correctamente. Contraseña por defecto: <strong>Pescadores1</strong>";
-            $tipo_mensaje = "success";
-            
-            $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Crear Usuario', ?, ?)");
-            $detalle = "Creó el usuario: $nombre ($email)";
-            $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
-            $stmt_audit->execute();
-        } else {
-            $mensaje = "Error al crear el usuario.";
+
+        if ($nombre === '' || $email === '') {
+            $mensaje = "Debes capturar nombre y correo electrónico.";
             $tipo_mensaje = "danger";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $mensaje = "El correo electrónico no tiene un formato válido.";
+            $tipo_mensaje = "danger";
+        } else {
+            $stmt_check = $conn->prepare("SELECT id FROM usuarios WHERE email = ? LIMIT 1");
+            $stmt_check->bind_param("s", $email);
+            $stmt_check->execute();
+            $existe_usuario = $stmt_check->get_result()->fetch_assoc();
+
+            if ($existe_usuario) {
+                $mensaje = "Ya existe un usuario registrado con el correo <strong>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</strong>.";
+                $tipo_mensaje = "danger";
+            } else {
+                $stmt = $conn->prepare("INSERT INTO usuarios (nombre, email, password, rol, activo, created_by, debe_cambiar_password) VALUES (?, ?, ?, ?, ?, ?, 1)");
+                $stmt->bind_param("ssssii", $nombre, $email, $password_hash, $rol, $activo, $usuario_id);
+
+                if ($stmt->execute()) {
+                    $correo = enviarCorreoAccesoUsuario($conn, $nombre, $email, $rol, $password_default);
+                    $email_html = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+
+                    if ($correo['ok']) {
+                        $mensaje = "
+                            <div style='text-align:left'>
+                                <strong>Usuario creado correctamente.</strong><br>
+                                Se envió la notificación con los datos de acceso a:<br>
+                                <span style='color:#f97316;font-weight:800'>{$email_html}</span>
+                            </div>
+                        ";
+                        $tipo_mensaje = "success";
+                    } else {
+                        $error_correo = htmlspecialchars($correo['error'], ENT_QUOTES, 'UTF-8');
+                        $mensaje = "
+                            <div style='text-align:left'>
+                                <strong>Usuario creado, pero no se pudo enviar el correo.</strong><br><br>
+                                <strong>Correo:</strong> {$email_html}<br>
+                                <strong>Contraseña temporal:</strong> {$password_default}<br><br>
+                                <small><strong>Error SMTP:</strong> {$error_correo}</small>
+                            </div>
+                        ";
+                        $tipo_mensaje = "warning";
+                    }
+
+                    $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Crear Usuario', ?, ?)");
+                    $detalle = "Creó el usuario: $nombre ($email)" . ($correo['ok'] ? " y se envió correo de acceso" : " pero falló el correo de acceso");
+                    $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
+                    $stmt_audit->execute();
+                } else {
+                    $mensaje = "Error al crear el usuario.";
+                    $tipo_mensaje = "danger";
+                }
+            }
         }
         $tab_activo = 'usuarios';
     }
@@ -452,6 +685,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
+// Si la acción vino por fetch/AJAX, regresamos JSON y evitamos renderizar toda la página
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && esPeticionAjax()) {
+    $ok_ajax = in_array($tipo_mensaje, ['success', 'warning', 'info'], true);
+    responderAjax($ok_ajax, $mensaje, $tipo_mensaje, $tab_activo);
+}
+
 // ==================== OBTENER DATOS PARA VISTAS ====================
 
 // Configuración General
@@ -616,6 +855,9 @@ $fecha_obtenida = obtenerFechaCommit();
 if ($fecha_obtenida) {
     $ultima_actualizacion = $fecha_obtenida;
 }
+
+include 'includes/header.php';
+include 'includes/navbar.php';
 ?>
 
 <!DOCTYPE html>
@@ -768,61 +1010,61 @@ if ($fecha_obtenida) {
                                     </form>
                                 </div>
 
-<!-- Acerca del Sistema - Versión Compacta -->
-<div class="acerca-card">
-    <div class="acerca-header">
-        <div class="acerca-logo">
-            <?php if ($logo_path && file_exists($logo_path)): ?>
-                <img src="<?= $logo_path ?>?v=<?= time() ?>" alt="Logo">
-            <?php else: ?>
-                <i class="fas fa-fish"></i>
-            <?php endif; ?>
-        </div>
-        <div class="acerca-info-header">
-            <h3><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h3>
-            <p>Sistema de Gestión de Inventario y Ventas</p>
-        </div>
-    </div>
-    
-    <div class="acerca-body">
-        <div class="acerca-row">
-            <div class="acerca-col">
-                <i class="fas fa-calendar-alt"></i>
-                <span class="label">Última actualización:</span>
-                <span class="value"><?= $ultima_actualizacion ?></span>
-            </div>
-            <div class="acerca-col">
-                <i class="fas fa-code-branch"></i>
-                <span class="label">Versión:</span>
-                <span class="value">2.0.0</span>
-            </div>
-        </div>
-        <div class="acerca-row">
-            <div class="acerca-col">
-                <i class="fas fa-user"></i>
-                <span class="label">Desarrollado por:</span>
-                <span class="value">Jesus Martinez Vidal</span>
-            </div>
-            <div class="acerca-col">
-                <i class="fas fa-envelope"></i>
-                <span class="label">Contacto:</span>
-                <span class="value">soportepescadores@gmail.com</span>
-            </div>
-        </div>
-        <div class="acerca-row">
-            <div class="acerca-col">
-                <i class="fas fa-phone-alt"></i>
-                <span class="label">Teléfono:</span>
-                <span class="value">+52 222 980 4687</span>
-            </div>
-            <div class="acerca-col">
-                <i class="fas fa-copyright"></i>
-                <span class="label">Derechos:</span>
-                <span class="value">2026</span>
-            </div>
-        </div>
-    </div>
-</div>
+                                <!-- Acerca del Sistema - Versión Compacta -->
+                                <div class="acerca-card">
+                                    <div class="acerca-header">
+                                        <div class="acerca-logo">
+                                            <?php if ($logo_path && file_exists($logo_path)): ?>
+                                                <img src="<?= $logo_path ?>?v=<?= time() ?>" alt="Logo">
+                                            <?php else: ?>
+                                                <i class="fas fa-fish"></i>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="acerca-info-header">
+                                            <h3><?= htmlspecialchars($config_general['nombre'] ?? 'Pescadores de la Prehistoria') ?></h3>
+                                            <p>Sistema de Gestión de Inventario y Ventas</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="acerca-body">
+                                        <div class="acerca-row">
+                                            <div class="acerca-col">
+                                                <i class="fas fa-calendar-alt"></i>
+                                                <span class="label">Última actualización:</span>
+                                                <span class="value"><?= $ultima_actualizacion ?></span>
+                                            </div>
+                                            <div class="acerca-col">
+                                                <i class="fas fa-code-branch"></i>
+                                                <span class="label">Versión:</span>
+                                                <span class="value">2.0.0</span>
+                                            </div>
+                                        </div>
+                                        <div class="acerca-row">
+                                            <div class="acerca-col">
+                                                <i class="fas fa-user"></i>
+                                                <span class="label">Desarrollado por:</span>
+                                                <span class="value">Jesus Martinez Vidal</span>
+                                            </div>
+                                            <div class="acerca-col">
+                                                <i class="fas fa-envelope"></i>
+                                                <span class="label">Contacto:</span>
+                                                <span class="value">soportepescadores@gmail.com</span>
+                                            </div>
+                                        </div>
+                                        <div class="acerca-row">
+                                            <div class="acerca-col">
+                                                <i class="fas fa-phone-alt"></i>
+                                                <span class="label">Teléfono:</span>
+                                                <span class="value">+52 222 980 4687</span>
+                                            </div>
+                                            <div class="acerca-col">
+                                                <i class="fas fa-copyright"></i>
+                                                <span class="label">Derechos:</span>
+                                                <span class="value">2026</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -844,7 +1086,15 @@ if ($fecha_obtenida) {
                                     <div class="col-md-6"><div class="form-group"><label>Contraseña SMTP</label><input type="password" class="form-control" name="smtp_password" placeholder="Dejar en blanco para mantener actual"><small class="text-muted">Dejar en blanco para mantener actual</small></div></div>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-6"><div class="form-group"><label>Seguridad</label><select class="form-control" name="smtp_secure"><option value="tls" <?= ($config_correo['smtp_secure'] ?? 'tls') == 'tls' ? 'selected' : '' ?>>TLS</option><option value="ssl" <?= ($config_correo['smtp_secure'] ?? '') == 'ssl' ? 'selected' : '' ?>>SSL</option></select></div></div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label>Seguridad</label>
+                                            <select class="form-control select-corregido" name="smtp_secure">
+                                                <option value="tls" <?= ($config_correo['smtp_secure'] ?? 'tls') == 'tls' ? 'selected' : '' ?>>TLS</option>
+                                                <option value="ssl" <?= ($config_correo['smtp_secure'] ?? '') == 'ssl' ? 'selected' : '' ?>>SSL</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div class="col-md-6"><div class="form-group"><label>Nombre de origen</label><input type="text" class="form-control" name="nombre_origen" value="<?= htmlspecialchars($config_correo['nombre_origen'] ?? 'Tienda Pescadores') ?>"></div></div>
                                 </div>
                                 <div class="form-group"><label>Correo de origen</label><input type="email" class="form-control" name="correo_origen" value="<?= htmlspecialchars($config_correo['correo_origen'] ?? '') ?>"></div>
@@ -1194,28 +1444,71 @@ if ($fecha_obtenida) {
 // ==================== FUNCIÓN GENÉRICA PARA ENVIAR FORMULARIOS CON FETCH ====================
 async function enviarFormularioFetch(form, actionValue) {
     const formData = new FormData(form);
-    formData.append('action', actionValue);
-    
-    // Si el formulario tiene enctype multipart, usamos FormData directamente
+
+    if (actionValue) {
+        formData.set('action', actionValue);
+    }
+
     const isMultipart = form.getAttribute('enctype') === 'multipart/form-data';
-    
+
     let body;
-    let headers = {};
-    
+    let headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+    };
+
     if (isMultipart) {
         body = formData;
     } else {
         headers['Content-Type'] = 'application/x-www-form-urlencoded';
         body = new URLSearchParams(formData).toString();
     }
-    
+
     const response = await fetch(window.location.href, {
         method: 'POST',
         headers: headers,
-        body: body
+        body: body,
+        credentials: 'same-origin'
     });
-    
-    return response;
+
+    const raw = await response.text();
+
+    let data;
+    try {
+        data = JSON.parse(raw);
+    } catch (e) {
+        console.error('Respuesta no JSON del servidor:', raw);
+        throw new Error('El servidor no regresó una respuesta válida. Revisa errores PHP o sesión expirada.');
+    }
+
+    if (!response.ok || data.ok === false) {
+        const error = new Error(data.mensaje || 'No se pudo completar la operación.');
+        error.data = data;
+        throw error;
+    }
+
+    return data;
+}
+
+function mostrarAlertaServidor(data, fallbackTitle = 'Resultado') {
+    const tipo = data.tipo_mensaje || (data.ok ? 'success' : 'danger');
+
+    Swal.fire({
+        title: tipo === 'success' ? '¡Listo!' : (tipo === 'warning' ? 'Aviso' : '¡Error!'),
+        html: data.mensaje || fallbackTitle,
+        icon: tipo === 'success' ? 'success' : (tipo === 'warning' ? 'warning' : 'error'),
+        confirmButtonColor: '#f97316',
+        confirmButtonText: 'Aceptar',
+        background: '#ffffff',
+        color: '#1f2937',
+        customClass: {
+            popup: 'swal2-config-popup',
+            confirmButton: 'swal2-config-confirm'
+        }
+    }).then(() => {
+        const tab = data.tab_activo || 'usuarios';
+        window.location.href = window.location.pathname + '?tab=' + encodeURIComponent(tab);
+    });
 }
 
 // ==================== FORMULARIO GENERAL ====================
@@ -1313,44 +1606,63 @@ const formUsuario = document.getElementById('formUsuario');
 if (formUsuario) {
     formUsuario.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         const action = document.getElementById('usuarioAction').value;
         const esNuevo = action === 'crear_usuario';
-        
+        const nombre = document.getElementById('usuario_nombre').value.trim();
+        const email = document.getElementById('usuario_email').value.trim();
+
+        if (!nombre || !email) {
+            Swal.fire({
+                title: 'Campos incompletos',
+                text: 'Captura el nombre y correo del usuario.',
+                icon: 'warning',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
         const result = await Swal.fire({
-            title: esNuevo ? '¿Crear usuario?' : '¿Editar usuario?',
-            text: esNuevo ? 'Se creará un nuevo usuario con contraseña por defecto.' : 'Se actualizarán los datos del usuario.',
+            title: esNuevo ? '¿Crear nuevo usuario?' : '¿Actualizar usuario?',
+            html: esNuevo
+                ? `Se creará el usuario <strong>${nombre}</strong> y se enviarán sus datos de acceso a:<br><strong style="color:#f97316">${email}</strong>`
+                : `Se actualizarán los datos de <strong>${nombre}</strong>.`,
             icon: 'question',
             showCancelButton: true,
             confirmButtonColor: '#f97316',
-            confirmButtonText: 'Sí, guardar',
-            cancelButtonText: 'Cancelar'
+            cancelButtonColor: '#64748b',
+            confirmButtonText: esNuevo ? 'Sí, crear y notificar' : 'Sí, actualizar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
         });
-        
+
         if (result.isConfirmed) {
             Swal.fire({
-                title: 'Guardando...',
+                title: esNuevo ? 'Creando usuario...' : 'Actualizando usuario...',
+                html: esNuevo ? 'Estamos guardando el usuario y enviando la notificación por correo.' : 'Estamos guardando los cambios.',
                 allowOutsideClick: false,
+                allowEscapeKey: false,
                 didOpen: () => Swal.showLoading()
             });
-            
+
             try {
-                await enviarFormularioFetch(formUsuario, action);
+                const data = await enviarFormularioFetch(formUsuario, action);
                 $('#modalUsuario').modal('hide');
-                Swal.fire({
-                    title: '¡Éxito!',
-                    text: esNuevo ? 'Usuario creado correctamente.' : 'Usuario actualizado correctamente.',
-                    icon: 'success',
-                    confirmButtonColor: '#f97316'
-                }).then(() => {
-                    window.location.href = window.location.pathname + '?tab=usuarios';
-                });
+                mostrarAlertaServidor(data, esNuevo ? 'Usuario creado correctamente.' : 'Usuario actualizado correctamente.');
             } catch (error) {
+                console.error(error);
+                const data = error.data || {
+                    ok: false,
+                    tipo_mensaje: 'danger',
+                    mensaje: error.message || 'No se pudo guardar el usuario.',
+                    tab_activo: 'usuarios'
+                };
                 Swal.fire({
-                    title: 'Error',
-                    text: 'No se pudo guardar el usuario.',
-                    icon: 'error',
-                    confirmButtonColor: '#f97316'
+                    title: data.tipo_mensaje === 'warning' ? 'Aviso' : '¡Error!',
+                    html: data.mensaje,
+                    icon: data.tipo_mensaje === 'warning' ? 'warning' : 'error',
+                    confirmButtonColor: '#f97316',
+                    confirmButtonText: 'Aceptar'
                 });
             }
         }
@@ -1693,25 +2005,19 @@ function eliminarProveedor(id, nombre) {
 // ==================== ALERTAS CON SWEETALERT ====================
 <?php if ($mensaje): ?>
 Swal.fire({
-    title: '<?= $tipo_mensaje === 'success' ? '¡Éxito!' : ($tipo_mensaje === 'danger' ? '¡Error!' : 'Información') ?>',
-    html: '<?= addslashes($mensaje) ?>',
-    icon: '<?= $tipo_mensaje === 'success' ? "success" : ($tipo_mensaje === "danger" ? "error" : "info") ?>',
+    title: '<?= $tipo_mensaje === 'success' ? '¡Listo!' : ($tipo_mensaje === 'warning' ? 'Usuario creado con aviso' : ($tipo_mensaje === 'danger' ? '¡Error!' : 'Información')) ?>',
+    html: `<?= str_replace(['`', "\r", "\n"], ['\\`', '', ''], $mensaje) ?>`,
+    icon: '<?= $tipo_mensaje === 'success' ? "success" : ($tipo_mensaje === "warning" ? "warning" : ($tipo_mensaje === "danger" ? "error" : "info")) ?>',
     confirmButtonColor: '#f97316',
-    confirmButtonText: 'Aceptar'
+    confirmButtonText: 'Aceptar',
+    background: '#ffffff',
+    color: '#1f2937',
+    customClass: {
+        popup: 'swal2-config-popup',
+        confirmButton: 'swal2-config-confirm'
+    }
 });
 <?php endif; ?>
-
-// Forzar centrado de modales cuando se abren
-$('#modalUsuario, #modalProveedor').on('show.bs.modal', function(e) {
-    $(this).css('display', 'flex').css('align-items', 'center');
-});
-
-// También al redimensionar la ventana
-$(window).on('resize', function() {
-    $('.modal.show').each(function() {
-        $(this).css('display', 'flex').css('align-items', 'center');
-    });
-});
 
 </script>
 </body>

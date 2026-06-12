@@ -68,19 +68,20 @@ class ComposerStaticInitfb52988056a2a71ecaa9884341386d4f
     );
 
     public static $prefixLengthsPsr4 = array (
-        'P' => 
+        'P' =>
         array (
             'Psr\\SimpleCache\\' => 16,
             'Psr\\Cache\\' => 10,
             'Picqer\\Barcode\\' => 15,
             'PhpOffice\\PhpSpreadsheet\\' => 25,
+            'PHPMailer\\PHPMailer\\' => 20,
         ),
-        'M' => 
+        'M' =>
         array (
             'MercadoPago\\' => 12,
             'Matrix\\' => 7,
         ),
-        'D' => 
+        'D' =>
         array (
             'Doctrine\\Persistence\\' => 21,
             'Doctrine\\Deprecations\\' => 22,
@@ -89,30 +90,34 @@ class ComposerStaticInitfb52988056a2a71ecaa9884341386d4f
             'Doctrine\\Common\\Annotations\\' => 28,
             'Doctrine\\Common\\' => 16,
         ),
-        'C' => 
+        'C' =>
         array (
             'Complex\\' => 8,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
-        'Psr\\SimpleCache\\' => 
+        'Psr\\SimpleCache\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/simple-cache/src',
         ),
-        'Psr\\Cache\\' => 
+        'Psr\\Cache\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/cache/src',
         ),
-        'Picqer\\Barcode\\' => 
+        'Picqer\\Barcode\\' =>
         array (
             0 => __DIR__ . '/..' . '/picqer/php-barcode-generator/src',
         ),
-        'PhpOffice\\PhpSpreadsheet\\' => 
+        'PhpOffice\\PhpSpreadsheet\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpoffice/phpspreadsheet/src/PhpSpreadsheet',
         ),
-        'MercadoPago\\' => 
+        'PHPMailer\\PHPMailer\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/phpmailer/phpmailer/src',
+        ),
+        'MercadoPago\\' =>
         array (
             0 => __DIR__ . '/..' . '/mercadopago/dx-php/src/MercadoPago',
             1 => __DIR__ . '/..' . '/mercadopago/dx-php/tests',
@@ -120,46 +125,46 @@ class ComposerStaticInitfb52988056a2a71ecaa9884341386d4f
             3 => __DIR__ . '/..' . '/mercadopago/dx-php/src/MercadoPago/Entities',
             4 => __DIR__ . '/..' . '/mercadopago/dx-php/src/MercadoPago/Entities/Shared',
         ),
-        'Matrix\\' => 
+        'Matrix\\' =>
         array (
             0 => __DIR__ . '/..' . '/markbaker/matrix/classes/src',
         ),
-        'Doctrine\\Persistence\\' => 
+        'Doctrine\\Persistence\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/persistence/src/Persistence',
         ),
-        'Doctrine\\Deprecations\\' => 
+        'Doctrine\\Deprecations\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/deprecations/src',
         ),
-        'Doctrine\\Common\\Lexer\\' => 
+        'Doctrine\\Common\\Lexer\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/lexer/src',
         ),
-        'Doctrine\\Common\\Cache\\' => 
+        'Doctrine\\Common\\Cache\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/cache/lib/Doctrine/Common/Cache',
         ),
-        'Doctrine\\Common\\Annotations\\' => 
+        'Doctrine\\Common\\Annotations\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/annotations/lib/Doctrine/Common/Annotations',
         ),
-        'Doctrine\\Common\\' => 
+        'Doctrine\\Common\\' =>
         array (
             0 => __DIR__ . '/..' . '/doctrine/common/src',
-            1 => __DIR__ . '/..' . '/doctrine/event-manager/src',
-            2 => __DIR__ . '/..' . '/doctrine/persistence/src/Common',
+            1 => __DIR__ . '/..' . '/doctrine/persistence/src/Common',
+            2 => __DIR__ . '/..' . '/doctrine/event-manager/src',
         ),
-        'Complex\\' => 
+        'Complex\\' =>
         array (
             0 => __DIR__ . '/..' . '/markbaker/complex/classes/src',
         ),
     );
 
     public static $prefixesPsr0 = array (
-        'D' => 
+        'D' =>
         array (
-            'Doctrine\\Common\\Collections\\' => 
+            'Doctrine\\Common\\Collections\\' =>
             array (
                 0 => __DIR__ . '/..' . '/doctrine/collections/lib',
             ),
