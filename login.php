@@ -4,10 +4,21 @@ include('includes/header.php');
 include('includes/session.php');
 require_once('includes/csrf.php');
 
-$logo_login = 'img/logo_galeria_pescadores.png';
+$logo_login = '';
+$nombre_tienda = 'Pescadores de la Prehistoria';
 
-$result_logo = $conn->query("SELECT logo FROM configuracion_galeria WHERE id = 1");
+$result_logo = $conn->query("
+    SELECT nombre, logo
+    FROM configuracion_galeria
+    WHERE id = 1
+");
+
 if ($result_logo && $row_logo = $result_logo->fetch_assoc()) {
+
+    if (!empty($row_logo['nombre'])) {
+        $nombre_tienda = $row_logo['nombre'];
+    }
+
     if (!empty($row_logo['logo']) && file_exists($row_logo['logo'])) {
         $logo_login = $row_logo['logo'];
     }
@@ -292,6 +303,11 @@ if (isset($_POST['login'])) {
             align-items: center;
             justify-content: center;
             margin-bottom: 1rem;
+        }
+
+        .store-icon{
+            font-size:42px;
+            color:#f97316;
         }
 
         .logo-img:hover {
@@ -599,12 +615,21 @@ if (isset($_POST['login'])) {
             <div class="card-header">
                 <div class="logo-wrapper">
                     <div class="logo-img">
-                        <img src="<?= htmlspecialchars($logo_login) ?>?v=<?= time() ?>" 
-                        alt="Pescadores de la Prehistoria Logo" 
-                        onerror="this.src='img/logo.png'; this.onerror=null;">
+
+                        <?php if(!empty($logo_login)): ?>
+
+                            <img src="<?= htmlspecialchars($logo_login) ?>?v=<?= time() ?>"
+                                alt="<?= htmlspecialchars($nombre_tienda) ?>">
+
+                        <?php else: ?>
+
+                            <i class="fas fa-store store-icon"></i>
+
+                        <?php endif; ?>
+
                     </div>
                 </div>
-                <h2>Pescadores de la Prehistoria</h2>
+                <h2><?= htmlspecialchars($nombre_tienda) ?></h2>
                 <p>Inicia sesión para continuar</p>
             </div>
             

@@ -170,7 +170,7 @@ if ($resItems) {
         $item['cantidad'] = floatval($item['cantidad']);
         $tipo = $item['tipo_inventario'];
         $cantidad = $item['cantidad'];
-        $umbralStockBajo = ($tipo === 'insumo') ? 2.0 : 20;
+        $umbralStockBajo = ($tipo === 'insumo') ? 2.0 : 5;
         
         if ($cantidad < $umbralStockBajo) {
             $itemsStockBajo[] = $item;
