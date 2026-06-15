@@ -457,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         text: 'El producto fue eliminado correctamente.',
         confirmButtonColor: '#f97316'
     }).then(() => {
-        window.location='inventario.php';
+        window.location='ajustes_productos.php';
     });
     </script>";
     exit;
