@@ -1,8 +1,6 @@
 <?php
 include 'includes/session.php';
 include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -28,31 +26,18 @@ function caja_to_float($value) {
     return is_numeric($value) ? (float)$value : 0.00;
 }
 
-function caja_fecha_normal($value, $fallback) {
-    $value = trim((string)$value);
-
-    if ($value === '') {
-        return $fallback;
-    }
-
-    $value = str_replace('T', ' ', $value);
-
-    if (strlen($value) === 16) {
-        $value .= ':00';
-    }
-
-    $time = strtotime($value);
-
-    if ($time === false) {
-        return $fallback;
-    }
-
-    return date('Y-m-d H:i:s', $time);
+function caja_usuario_id() {
+    return $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? null;
 }
 
-function caja_fecha_input($value) {
-    $time = strtotime($value);
-    return $time ? date('Y-m-d\TH:i', $time) : '';
+function caja_usuario_nombre() {
+    return $_SESSION['usuario_nombre']
+        ?? $_SESSION['nombre_usuario']
+        ?? $_SESSION['nombre']
+        ?? 'Usuario del sistema';
 }
 
 function caja_fetch_all(mysqli $conn, string $sql, string $types = '', array $params = []) {
@@ -79,7 +64,7 @@ function caja_fetch_all(mysqli $conn, string $sql, string $types = '', array $pa
 
 function caja_fetch_one(mysqli $conn, string $sql, string $types = '', array $params = []) {
     $rows = caja_fetch_all($conn, $sql, $types, $params);
-    return $rows[0] ?? [];
+    return $rows[0] ?? null;
 }
 
 function caja_execute(mysqli $conn, string $sql, string $types = '', array $params = []) {
@@ -103,42 +88,141 @@ function caja_execute(mysqli $conn, string $sql, string $types = '', array $para
     return $insertId;
 }
 
-function caja_usuario_id() {
-    return $_SESSION['usuario_id']
-        ?? $_SESSION['id_usuario']
-        ?? $_SESSION['id']
-        ?? null;
-}
+function caja_execute_affected(mysqli $conn, string $sql, string $types = '', array $params = []) {
+    $stmt = $conn->prepare($sql);
 
-function caja_usuario_nombre() {
-    return $_SESSION['usuario_nombre']
-        ?? $_SESSION['nombre_usuario']
-        ?? $_SESSION['nombre']
-        ?? 'Usuario del sistema';
-}
+    if ($types !== '' && count($params) > 0) {
+        $bind = [];
+        $bind[] = $types;
 
-/* ================== EXPRESIONES DEL CORTE ================== */
+        foreach ($params as $key => $value) {
+            $bind[] = &$params[$key];
+        }
 
-function caja_filtros_venta($fechaInicio, $fechaFin, $vendedorId) {
-    $where = 'v.fecha_venta >= ? AND v.fecha_venta <= ?';
-    $types = 'ss';
-    $params = [$fechaInicio, $fechaFin];
-
-    if ((int)$vendedorId > 0) {
-        $where .= ' AND v.id_vendedor = ?';
-        $types .= 'i';
-        $params[] = (int)$vendedorId;
+        call_user_func_array([$stmt, 'bind_param'], $bind);
     }
 
-    return [$where, $types, $params];
+    $stmt->execute();
+    $affectedRows = $stmt->affected_rows;
+    $stmt->close();
+
+    return $affectedRows;
 }
+
+function caja_redirect(array $params = []) {
+    $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+
+    if (!empty($params)) {
+        header('Location: ' . $baseUrl . '?' . http_build_query($params));
+    } else {
+        header('Location: ' . $baseUrl);
+    }
+
+    exit;
+}
+
+function caja_registrar_auditoria(mysqli $conn, $usuarioId, $accion, $detalle) {
+    try {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+
+        caja_execute(
+            $conn,
+            "INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, ?, ?, ?)",
+            "isss",
+            [$usuarioId, $accion, $detalle, $ip]
+        );
+    } catch (Throwable $e) {
+        // No detenemos caja si falla auditoría general.
+    }
+}
+
+/* ================== CAJA ================== */
+
+function caja_obtener_abierta(mysqli $conn) {
+    return caja_fetch_one(
+        $conn,
+        "SELECT * FROM caja_sesiones WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1"
+    );
+}
+
+function caja_obtener_historial(mysqli $conn) {
+    return caja_fetch_all(
+        $conn,
+        "SELECT * FROM caja_sesiones ORDER BY created_at DESC LIMIT 12"
+    );
+}
+
+function caja_guardar_movimiento(
+    mysqli $conn,
+    $cajaId,
+    $tipo,
+    $concepto,
+    $monto,
+    $usuarioId,
+    $usuarioNombre,
+    $observaciones = ''
+) {
+    return caja_execute(
+        $conn,
+        "
+        INSERT INTO caja_movimientos (
+            caja_id,
+            tipo,
+            concepto,
+            monto,
+            usuario_id,
+            usuario_nombre,
+            observaciones
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ",
+        "issdiss",
+        [
+            (int)$cajaId,
+            $tipo,
+            $concepto,
+            (float)$monto,
+            $usuarioId,
+            $usuarioNombre,
+            $observaciones
+        ]
+    );
+}
+
+function caja_obtener_movimientos(mysqli $conn, $cajaId) {
+    return caja_fetch_all(
+        $conn,
+        "SELECT * FROM caja_movimientos WHERE caja_id = ? ORDER BY fecha DESC",
+        "i",
+        [(int)$cajaId]
+    );
+}
+
+function caja_obtener_totales_movimientos(mysqli $conn, $cajaId) {
+    $row = caja_fetch_one(
+        $conn,
+        "
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN monto ELSE 0 END), 0) AS entradas,
+            COALESCE(SUM(CASE WHEN tipo = 'salida' THEN monto ELSE 0 END), 0) AS salidas
+        FROM caja_movimientos
+        WHERE caja_id = ?
+        ",
+        "i",
+        [(int)$cajaId]
+    );
+
+    return [
+        'entradas' => (float)($row['entradas'] ?? 0),
+        'salidas' => (float)($row['salidas'] ?? 0),
+    ];
+}
+
+/* ================== VENTAS ================== */
 
 function caja_joins_devoluciones() {
     return "
         LEFT JOIN (
-            SELECT 
-                id_venta,
-                SUM(cantidad_devuelta) AS cantidad_devuelta
+            SELECT id_venta, SUM(cantidad_devuelta) AS cantidad_devuelta
             FROM devoluciones_parciales
             GROUP BY id_venta
         ) dp ON dp.id_venta = v.id
@@ -154,7 +238,7 @@ function caja_joins_devoluciones() {
     ";
 }
 
-function caja_expresiones() {
+function caja_expresiones_venta() {
     $cancelada = "
         (
             CASE
@@ -197,444 +281,468 @@ function caja_expresiones() {
     return [$cancelada, $devuelta, $neta, $metodo];
 }
 
-/* ================== CONSULTAS ================== */
-
-function caja_obtener_resumen(mysqli $conn, $fechaInicio, $fechaFin, $vendedorId) {
-    [$where, $types, $params] = caja_filtros_venta($fechaInicio, $fechaFin, $vendedorId);
-    [$cancelada, $devuelta, $neta] = caja_expresiones();
+function caja_obtener_resumen_ventas(mysqli $conn, $fechaInicio, $fechaFin) {
+    [, , $neta, $metodo] = caja_expresiones_venta();
 
     $sql = "
         SELECT
-            COALESCE(SUM(v.cantidad_vendida * p.precio_venta), 0) AS ventas_brutas,
-            COALESCE(SUM({$devuelta} * p.precio_venta), 0) AS devoluciones,
-            COALESCE(SUM({$cancelada} * p.precio_venta), 0) AS cancelaciones,
-            COALESCE(SUM({$neta} * p.precio_venta), 0) AS total_neto_sistema,
-            COALESCE(SUM({$neta} * p.precio_compra), 0) AS costo_estimado,
+            COALESCE(SUM({$neta} * p.precio_venta), 0) AS ventas_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'efectivo' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS efectivo_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'tarjeta' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS tarjeta_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'transferencia' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS transferencia_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'otros' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS otros_sistema,
+            COALESCE(SUM({$neta}), 0) AS total_piezas,
             COALESCE(SUM({$neta} * (p.precio_venta - p.precio_compra)), 0) AS utilidad_estimada,
-            COALESCE(SUM({$neta}), 0) AS total_productos_vendidos,
             COUNT(DISTINCT IFNULL(v.folio_ticket, CONCAT('VENTA-', v.id))) AS total_tickets
         FROM ventas v
         INNER JOIN productos p ON p.id = v.id_producto
         " . caja_joins_devoluciones() . "
-        WHERE {$where}
+        WHERE v.fecha_venta >= ? AND v.fecha_venta <= ?
     ";
 
-    $row = caja_fetch_one($conn, $sql, $types, $params);
+    $row = caja_fetch_one($conn, $sql, 'ss', [$fechaInicio, $fechaFin]);
 
     return [
-        'ventas_brutas' => (float)($row['ventas_brutas'] ?? 0),
-        'devoluciones' => (float)($row['devoluciones'] ?? 0),
-        'cancelaciones' => (float)($row['cancelaciones'] ?? 0),
-        'total_neto_sistema' => (float)($row['total_neto_sistema'] ?? 0),
-        'costo_estimado' => (float)($row['costo_estimado'] ?? 0),
+        'ventas_sistema' => (float)($row['ventas_sistema'] ?? 0),
+        'efectivo_sistema' => (float)($row['efectivo_sistema'] ?? 0),
+        'tarjeta_sistema' => (float)($row['tarjeta_sistema'] ?? 0),
+        'transferencia_sistema' => (float)($row['transferencia_sistema'] ?? 0),
+        'otros_sistema' => (float)($row['otros_sistema'] ?? 0),
+        'total_piezas' => (float)($row['total_piezas'] ?? 0),
         'utilidad_estimada' => (float)($row['utilidad_estimada'] ?? 0),
-        'total_productos_vendidos' => (float)($row['total_productos_vendidos'] ?? 0),
         'total_tickets' => (int)($row['total_tickets'] ?? 0),
     ];
 }
 
-function caja_obtener_metodos(mysqli $conn, $fechaInicio, $fechaFin, $vendedorId) {
-    [$where, $types, $params] = caja_filtros_venta($fechaInicio, $fechaFin, $vendedorId);
-    [, , $neta, $metodo] = caja_expresiones();
-
-    $sql = "
-        SELECT
-            {$metodo} AS metodo,
-            COUNT(DISTINCT IFNULL(v.folio_ticket, CONCAT('VENTA-', v.id))) AS ventas,
-            COALESCE(SUM({$neta}), 0) AS productos,
-            COALESCE(SUM({$neta} * p.precio_venta), 0) AS total_sistema
+function caja_contar_ventas(mysqli $conn, $fechaInicio, $fechaFin) {
+    $row = caja_fetch_one(
+        $conn,
+        "
+        SELECT COUNT(*) AS total
         FROM ventas v
-        INNER JOIN productos p ON p.id = v.id_producto
-        " . caja_joins_devoluciones() . "
-        WHERE {$where}
-        GROUP BY metodo
-        ORDER BY total_sistema DESC
-    ";
+        WHERE v.fecha_venta >= ? AND v.fecha_venta <= ?
+        ",
+        "ss",
+        [$fechaInicio, $fechaFin]
+    );
 
-    $rows = caja_fetch_all($conn, $sql, $types, $params);
-
-    $metodos = [
-        'efectivo' => ['metodo' => 'efectivo', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'tarjeta' => ['metodo' => 'tarjeta', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'transferencia' => ['metodo' => 'transferencia', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'otros' => ['metodo' => 'otros', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-    ];
-
-    foreach ($rows as $row) {
-        $key = $row['metodo'] ?? 'otros';
-
-        if (!isset($metodos[$key])) {
-            $key = 'otros';
-        }
-
-        $metodos[$key] = [
-            'metodo' => $key,
-            'ventas' => (int)$row['ventas'],
-            'productos' => (float)$row['productos'],
-            'total_sistema' => (float)$row['total_sistema'],
-        ];
-    }
-
-    return $metodos;
+    return (int)($row['total'] ?? 0);
 }
 
-function caja_obtener_productos(mysqli $conn, $fechaInicio, $fechaFin, $vendedorId) {
-    [$where, $types, $params] = caja_filtros_venta($fechaInicio, $fechaFin, $vendedorId);
-    [$cancelada, $devuelta, $neta] = caja_expresiones();
-
-    $sql = "
-        SELECT
-            p.id AS producto_id,
-            p.nombre AS producto_nombre,
-            p.categoria,
-            MAX(p.precio_venta) AS precio_venta,
-            COALESCE(SUM(v.cantidad_vendida), 0) AS cantidad_bruta,
-            COALESCE(SUM({$devuelta} + {$cancelada}), 0) AS cantidad_devuelta_cancelada,
-            COALESCE(SUM({$neta}), 0) AS cantidad_neta,
-            COALESCE(SUM({$neta} * p.precio_venta), 0) AS subtotal,
-            COALESCE(SUM({$neta} * (p.precio_venta - p.precio_compra)), 0) AS utilidad_estimada
-        FROM ventas v
-        INNER JOIN productos p ON p.id = v.id_producto
-        " . caja_joins_devoluciones() . "
-        WHERE {$where}
-        GROUP BY p.id, p.nombre, p.categoria
-        HAVING cantidad_bruta > 0
-        ORDER BY subtotal DESC, p.nombre ASC
-        LIMIT 30
-    ";
-
-    return caja_fetch_all($conn, $sql, $types, $params);
-}
-
-function caja_obtener_ventas_recientes(mysqli $conn, $fechaInicio, $fechaFin, $vendedorId) {
-    [$where, $types, $params] = caja_filtros_venta($fechaInicio, $fechaFin, $vendedorId);
-    [, , $neta, $metodo] = caja_expresiones();
+function caja_obtener_ventas_paginadas(mysqli $conn, $fechaInicio, $fechaFin, $pagina = 1, $porPagina = 10) {
+    $pagina = max(1, (int)$pagina);
+    $porPagina = max(5, (int)$porPagina);
+    $offset = ($pagina - 1) * $porPagina;
 
     $sql = "
         SELECT
             v.id,
             v.folio_ticket,
             v.fecha_venta,
+            v.metodo_pago,
+            v.referencia_pago,
+            v.cantidad_vendida,
+            p.nombre AS producto_nombre,
+            p.precio_venta,
+            p.precio_compra,
             u.nombre AS vendedor_nombre,
-            {$metodo} AS metodo_normalizado,
-            SUM({$neta} * p.precio_venta) AS total_ticket,
-            SUM({$neta}) AS piezas
+            (v.cantidad_vendida * p.precio_venta) AS subtotal,
+            (v.cantidad_vendida * (p.precio_venta - p.precio_compra)) AS utilidad_estimada
         FROM ventas v
         INNER JOIN productos p ON p.id = v.id_producto
         LEFT JOIN usuarios u ON u.id = v.id_vendedor
-        " . caja_joins_devoluciones() . "
-        WHERE {$where}
-        GROUP BY v.id, v.folio_ticket, v.fecha_venta, u.nombre, metodo_normalizado
-        ORDER BY v.fecha_venta DESC
-        LIMIT 20
+        WHERE v.fecha_venta >= ? AND v.fecha_venta <= ?
+        ORDER BY v.fecha_venta DESC, v.id DESC
+        LIMIT ? OFFSET ?
     ";
 
-    return caja_fetch_all($conn, $sql, $types, $params);
+    return caja_fetch_all($conn, $sql, "ssii", [$fechaInicio, $fechaFin, $porPagina, $offset]);
 }
 
-function caja_obtener_vendedores(mysqli $conn) {
+function caja_guardar_ventas_auditoria(mysqli $conn, $cajaId, $fechaInicio, $fechaFin) {
     $sql = "
-        SELECT id, nombre, rol
-        FROM usuarios
-        WHERE rol IN ('administrador', 'vendedor')
-        ORDER BY nombre ASC
+        INSERT INTO caja_ventas_auditoria (
+            caja_id,
+            venta_id,
+            folio_ticket,
+            id_producto,
+            producto_nombre,
+            id_vendedor,
+            vendedor_nombre,
+            cantidad_vendida,
+            metodo_pago,
+            referencia_pago,
+            precio_venta,
+            precio_compra,
+            subtotal,
+            utilidad_estimada,
+            fecha_venta
+        )
+        SELECT
+            ? AS caja_id,
+            v.id AS venta_id,
+            v.folio_ticket,
+            v.id_producto,
+            p.nombre AS producto_nombre,
+            v.id_vendedor,
+            u.nombre AS vendedor_nombre,
+            v.cantidad_vendida,
+            v.metodo_pago,
+            v.referencia_pago,
+            p.precio_venta,
+            p.precio_compra,
+            (v.cantidad_vendida * p.precio_venta) AS subtotal,
+            (v.cantidad_vendida * (p.precio_venta - p.precio_compra)) AS utilidad_estimada,
+            v.fecha_venta
+        FROM ventas v
+        INNER JOIN productos p ON p.id = v.id_producto
+        LEFT JOIN usuarios u ON u.id = v.id_vendedor
+        WHERE v.fecha_venta >= ?
+          AND v.fecha_venta <= ?
+        ON DUPLICATE KEY UPDATE
+            folio_ticket = VALUES(folio_ticket),
+            id_producto = VALUES(id_producto),
+            producto_nombre = VALUES(producto_nombre),
+            id_vendedor = VALUES(id_vendedor),
+            vendedor_nombre = VALUES(vendedor_nombre),
+            cantidad_vendida = VALUES(cantidad_vendida),
+            metodo_pago = VALUES(metodo_pago),
+            referencia_pago = VALUES(referencia_pago),
+            precio_venta = VALUES(precio_venta),
+            precio_compra = VALUES(precio_compra),
+            subtotal = VALUES(subtotal),
+            utilidad_estimada = VALUES(utilidad_estimada),
+            fecha_venta = VALUES(fecha_venta),
+            fecha_auditoria = CURRENT_TIMESTAMP
     ";
 
-    return caja_fetch_all($conn, $sql);
+    return caja_execute_affected($conn, $sql, "iss", [(int)$cajaId, $fechaInicio, $fechaFin]);
 }
 
-function caja_obtener_historial(mysqli $conn) {
-    $sql = "
-        SELECT 
-            c.*,
-            u.nombre AS vendedor_nombre
-        FROM cortes_caja c
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        ORDER BY c.created_at DESC
-        LIMIT 15
-    ";
+/* ================== ACCIONES POST ANTES DE IMPRIMIR HTML ================== */
 
-    return caja_fetch_all($conn, $sql);
-}
-
-function caja_registrar_auditoria(mysqli $conn, $usuarioId, $accion, $detalle) {
-    try {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
-
-        caja_execute(
-            $conn,
-            "INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, ?, ?, ?)",
-            "isss",
-            [$usuarioId, $accion, $detalle, $ip]
-        );
-    } catch (Throwable $e) {
-        // No detenemos el corte si falla auditoría.
-    }
-}
-
-/* ================== DATOS INICIALES ================== */
-
-$hoyInicio = date('Y-m-d 00:00:00');
-$hoyFin = date('Y-m-d 23:59:59');
-
-$usuarioSesionId = caja_usuario_id();
-$usuarioSesionNombre = caja_usuario_nombre();
+$usuarioId = caja_usuario_id();
+$usuarioNombre = caja_usuario_nombre();
 
 $error = '';
 $mensaje = '';
 
-/* ================== GUARDAR CORTE ================== */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'guardar_corte') {
-    $fechaInicioPost = caja_fecha_normal($_POST['fecha_inicio'] ?? '', $hoyInicio);
-    $fechaFinPost = caja_fecha_normal($_POST['fecha_fin'] ?? '', $hoyFin);
-    $vendedorPost = (int)($_POST['vendedor_id'] ?? 0);
-
-    $efectivoContado = caja_to_float($_POST['efectivo_contado'] ?? 0);
-    $tarjetaContado = caja_to_float($_POST['tarjeta_contado'] ?? 0);
-    $transferenciaContado = caja_to_float($_POST['transferencia_contado'] ?? 0);
-    $otrosContado = caja_to_float($_POST['otros_contado'] ?? 0);
-    $observaciones = trim((string)($_POST['observaciones'] ?? ''));
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accion = $_POST['accion'] ?? '';
 
     try {
-        $resumenPost = caja_obtener_resumen($conn, $fechaInicioPost, $fechaFinPost, $vendedorPost);
-        $metodosPost = caja_obtener_metodos($conn, $fechaInicioPost, $fechaFinPost, $vendedorPost);
-        $productosPost = caja_obtener_productos($conn, $fechaInicioPost, $fechaFinPost, $vendedorPost);
+        if ($accion === 'abrir_caja') {
+            $cajaAbierta = caja_obtener_abierta($conn);
 
-        $totalContado = $efectivoContado + $tarjetaContado + $transferenciaContado + $otrosContado;
-        $totalSistema = (float)$resumenPost['total_neto_sistema'];
-        $diferencia = $totalContado - $totalSistema;
-        $estado = abs($diferencia) <= 0.01 ? 'cuadrado' : 'con_diferencia';
+            if ($cajaAbierta) {
+                throw new Exception('Ya existe una caja abierta. Primero debes cerrar la caja actual.');
+            }
 
-        $folio = 'CORTE-' . date('Ymd-His') . '-' . random_int(100, 999);
+            $montoInicial = caja_to_float($_POST['monto_inicial'] ?? 0);
+            $observaciones = trim((string)($_POST['observaciones_apertura'] ?? ''));
 
-        $vendedorGuardar = $vendedorPost > 0 ? $vendedorPost : null;
-        $usuarioGuardar = $usuarioSesionId ? (int)$usuarioSesionId : null;
+            if ($montoInicial < 0) {
+                throw new Exception('El monto inicial no puede ser negativo.');
+            }
 
-        $conn->begin_transaction();
+            $folio = 'CAJA-' . date('Ymd-His') . '-' . random_int(100, 999);
 
-        $corteId = caja_execute(
-            $conn,
-            "
-            INSERT INTO cortes_caja (
-                folio_corte,
-                fecha_inicio,
-                fecha_fin,
-                vendedor_id,
-                usuario_corte_id,
-                usuario_corte_nombre,
-                ventas_brutas,
-                devoluciones,
-                cancelaciones,
-                total_neto_sistema,
-                efectivo_sistema,
-                tarjeta_sistema,
-                transferencia_sistema,
-                otros_sistema,
-                efectivo_contado,
-                tarjeta_contado,
-                transferencia_contado,
-                otros_contado,
-                total_contado,
-                diferencia,
-                utilidad_estimada,
-                total_productos_vendidos,
-                total_tickets,
-                observaciones,
-                estado
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ",
-            "sssiisddddddddddddddddiss",
-            [
-                $folio,
-                $fechaInicioPost,
-                $fechaFinPost,
-                $vendedorGuardar,
-                $usuarioGuardar,
-                $usuarioSesionNombre,
-                $resumenPost['ventas_brutas'],
-                $resumenPost['devoluciones'],
-                $resumenPost['cancelaciones'],
-                $resumenPost['total_neto_sistema'],
-                $metodosPost['efectivo']['total_sistema'],
-                $metodosPost['tarjeta']['total_sistema'],
-                $metodosPost['transferencia']['total_sistema'],
-                $metodosPost['otros']['total_sistema'],
+            $conn->begin_transaction();
+
+            $cajaId = caja_execute(
+                $conn,
+                "
+                INSERT INTO caja_sesiones (
+                    folio_caja,
+                    usuario_apertura_id,
+                    usuario_apertura_nombre,
+                    monto_inicial,
+                    observaciones_apertura
+                ) VALUES (?, ?, ?, ?, ?)
+                ",
+                "sisds",
+                [
+                    $folio,
+                    $usuarioId,
+                    $usuarioNombre,
+                    $montoInicial,
+                    $observaciones
+                ]
+            );
+
+            caja_guardar_movimiento(
+                $conn,
+                $cajaId,
+                'apertura',
+                'Apertura de caja',
+                $montoInicial,
+                $usuarioId,
+                $usuarioNombre,
+                $observaciones
+            );
+
+            caja_registrar_auditoria(
+                $conn,
+                $usuarioId,
+                'ABRIR_CAJA',
+                'Se abrió la caja ' . $folio . ' con monto inicial ' . caja_money($montoInicial)
+            );
+
+            $conn->commit();
+
+            caja_redirect(['abierta' => 1]);
+        }
+
+        if ($accion === 'agregar_movimiento') {
+            $cajaAbierta = caja_obtener_abierta($conn);
+
+            if (!$cajaAbierta) {
+                throw new Exception('No hay una caja abierta.');
+            }
+
+            $tipo = $_POST['tipo'] ?? '';
+            $concepto = trim((string)($_POST['concepto'] ?? ''));
+            $monto = caja_to_float($_POST['monto'] ?? 0);
+            $observaciones = trim((string)($_POST['observaciones'] ?? ''));
+
+            if (!in_array($tipo, ['entrada', 'salida'], true)) {
+                throw new Exception('Selecciona si el movimiento es entrada o salida.');
+            }
+
+            if ($concepto === '') {
+                throw new Exception('Escribe el concepto del movimiento.');
+            }
+
+            if ($monto <= 0) {
+                throw new Exception('El monto debe ser mayor a 0.');
+            }
+
+            caja_guardar_movimiento(
+                $conn,
+                (int)$cajaAbierta['id'],
+                $tipo,
+                $concepto,
+                $monto,
+                $usuarioId,
+                $usuarioNombre,
+                $observaciones
+            );
+
+            caja_registrar_auditoria(
+                $conn,
+                $usuarioId,
+                'MOVIMIENTO_CAJA',
+                ucfirst($tipo) . ' de caja por ' . caja_money($monto) . '. Concepto: ' . $concepto
+            );
+
+            caja_redirect(['movimiento' => 1]);
+        }
+
+        if ($accion === 'cerrar_caja') {
+            $cajaAbierta = caja_obtener_abierta($conn);
+
+            if (!$cajaAbierta) {
+                throw new Exception('No hay una caja abierta para cerrar.');
+            }
+
+            $fechaInicio = $cajaAbierta['fecha_apertura'];
+            $fechaFin = date('Y-m-d H:i:s');
+
+            $resumen = caja_obtener_resumen_ventas($conn, $fechaInicio, $fechaFin);
+            $movs = caja_obtener_totales_movimientos($conn, (int)$cajaAbierta['id']);
+
+            $efectivoContado = caja_to_float($_POST['efectivo_contado'] ?? 0);
+            $observacionesCierre = trim((string)($_POST['observaciones_cierre'] ?? ''));
+
+            if ($efectivoContado < 0) {
+                throw new Exception('El efectivo contado no puede ser negativo.');
+            }
+
+            $montoInicial = (float)$cajaAbierta['monto_inicial'];
+            $entradas = (float)$movs['entradas'];
+            $salidas = (float)$movs['salidas'];
+
+            $efectivoEsperado = $montoInicial + $resumen['efectivo_sistema'] + $entradas - $salidas;
+            $diferencia = $efectivoContado - $efectivoEsperado;
+
+            $totalVentasParaAuditoria = caja_contar_ventas($conn, $fechaInicio, $fechaFin);
+
+            $conn->begin_transaction();
+
+            $filasAuditoriaVentas = caja_guardar_ventas_auditoria(
+                $conn,
+                (int)$cajaAbierta['id'],
+                $fechaInicio,
+                $fechaFin
+            );
+
+            caja_execute(
+                $conn,
+                "
+                UPDATE caja_sesiones
+                SET
+                    estado = 'cerrada',
+                    usuario_cierre_id = ?,
+                    usuario_cierre_nombre = ?,
+                    fecha_cierre = ?,
+
+                    ventas_sistema = ?,
+                    efectivo_sistema = ?,
+                    tarjeta_sistema = ?,
+                    transferencia_sistema = ?,
+                    otros_sistema = ?,
+
+                    entradas_efectivo = ?,
+                    salidas_efectivo = ?,
+                    efectivo_esperado = ?,
+                    efectivo_contado = ?,
+                    diferencia_efectivo = ?,
+
+                    total_tickets = ?,
+                    total_piezas = ?,
+                    utilidad_estimada = ?,
+                    observaciones_cierre = ?
+                WHERE id = ?
+                ",
+                "issddddddddddiddsi",
+                [
+                    $usuarioId,
+                    $usuarioNombre,
+                    $fechaFin,
+
+                    $resumen['ventas_sistema'],
+                    $resumen['efectivo_sistema'],
+                    $resumen['tarjeta_sistema'],
+                    $resumen['transferencia_sistema'],
+                    $resumen['otros_sistema'],
+
+                    $entradas,
+                    $salidas,
+                    $efectivoEsperado,
+                    $efectivoContado,
+                    $diferencia,
+
+                    $resumen['total_tickets'],
+                    $resumen['total_piezas'],
+                    $resumen['utilidad_estimada'],
+                    $observacionesCierre,
+                    (int)$cajaAbierta['id']
+                ]
+            );
+
+            caja_guardar_movimiento(
+                $conn,
+                (int)$cajaAbierta['id'],
+                'cierre',
+                'Cierre de caja',
                 $efectivoContado,
-                $tarjetaContado,
-                $transferenciaContado,
-                $otrosContado,
-                $totalContado,
-                $diferencia,
-                $resumenPost['utilidad_estimada'],
-                $resumenPost['total_productos_vendidos'],
-                $resumenPost['total_tickets'],
-                $observaciones,
-                $estado
-            ]
-        );
-
-        $conteos = [
-            'efectivo' => $efectivoContado,
-            'tarjeta' => $tarjetaContado,
-            'transferencia' => $transferenciaContado,
-            'otros' => $otrosContado,
-        ];
-
-        foreach (['efectivo', 'tarjeta', 'transferencia', 'otros'] as $metodo) {
-            $sistema = (float)$metodosPost[$metodo]['total_sistema'];
-            $contado = (float)$conteos[$metodo];
-
-            caja_execute(
-                $conn,
-                "
-                INSERT INTO cortes_caja_metodos (
-                    corte_id,
-                    metodo,
-                    ventas,
-                    productos,
-                    total_sistema,
-                    total_contado,
-                    diferencia
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ",
-                "isidddd",
-                [
-                    $corteId,
-                    $metodo,
-                    $metodosPost[$metodo]['ventas'],
-                    $metodosPost[$metodo]['productos'],
-                    $sistema,
-                    $contado,
-                    $contado - $sistema
-                ]
+                $usuarioId,
+                $usuarioNombre,
+                $observacionesCierre
             );
-        }
 
-        foreach ($productosPost as $producto) {
-            caja_execute(
+            caja_registrar_auditoria(
                 $conn,
-                "
-                INSERT INTO cortes_caja_productos (
-                    corte_id,
-                    producto_id,
-                    producto_nombre,
-                    categoria,
-                    cantidad_bruta,
-                    cantidad_devuelta_cancelada,
-                    cantidad_neta,
-                    precio_venta,
-                    subtotal,
-                    utilidad_estimada
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ",
-                "iissdddddd",
-                [
-                    $corteId,
-                    $producto['producto_id'],
-                    $producto['producto_nombre'],
-                    $producto['categoria'],
-                    $producto['cantidad_bruta'],
-                    $producto['cantidad_devuelta_cancelada'],
-                    $producto['cantidad_neta'],
-                    $producto['precio_venta'],
-                    $producto['subtotal'],
-                    $producto['utilidad_estimada']
-                ]
+                $usuarioId,
+                'AUDITORIA_VENTAS_CAJA',
+                'Caja ' . $cajaAbierta['folio_caja'] .
+                '. Ventas detectadas: ' . $totalVentasParaAuditoria .
+                '. Filas afectadas auditoría: ' . $filasAuditoriaVentas
             );
+
+            caja_registrar_auditoria(
+                $conn,
+                $usuarioId,
+                'CERRAR_CAJA',
+                'Se cerró la caja ' . $cajaAbierta['folio_caja'] . '. Diferencia: ' . caja_money($diferencia)
+            );
+
+            $conn->commit();
+
+            caja_redirect(['cerrada' => 1]);
         }
-
-        caja_registrar_auditoria(
-            $conn,
-            $usuarioGuardar,
-            'CORTE_CAJA',
-            'Se generó el corte de caja ' . $folio . ' por ' . caja_money($totalSistema)
-        );
-
-        $conn->commit();
-
-        $redirect = strtok($_SERVER['REQUEST_URI'], '?') . '?' . http_build_query([
-            'guardado' => 1,
-            'folio' => $folio,
-            'fecha_inicio' => $fechaInicioPost,
-            'fecha_fin' => $fechaFinPost,
-            'vendedor_id' => $vendedorPost
-        ]);
-
-        header('Location: ' . $redirect);
-        exit;
     } catch (Throwable $e) {
         try {
             $conn->rollback();
         } catch (Throwable $rollbackError) {}
 
-        $error = 'No se pudo guardar el corte: ' . $e->getMessage();
+        $error = $e->getMessage();
     }
 }
 
-/* ================== CARGA DE VISTA ================== */
+/* ================== CARGA DE DATOS ================== */
 
-$fechaInicio = caja_fecha_normal($_GET['fecha_inicio'] ?? '', $hoyInicio);
-$fechaFin = caja_fecha_normal($_GET['fecha_fin'] ?? '', $hoyFin);
-$vendedorFiltro = (int)($_GET['vendedor_id'] ?? 0);
+$cajaAbierta = caja_obtener_abierta($conn);
+$historial = caja_obtener_historial($conn);
 
-if (strtotime($fechaInicio) > strtotime($fechaFin)) {
-    $temporal = $fechaInicio;
-    $fechaInicio = $fechaFin;
-    $fechaFin = $temporal;
-}
+$resumen = [
+    'ventas_sistema' => 0,
+    'efectivo_sistema' => 0,
+    'tarjeta_sistema' => 0,
+    'transferencia_sistema' => 0,
+    'otros_sistema' => 0,
+    'total_piezas' => 0,
+    'utilidad_estimada' => 0,
+    'total_tickets' => 0,
+];
 
-try {
-    $resumen = caja_obtener_resumen($conn, $fechaInicio, $fechaFin, $vendedorFiltro);
-    $metodos = caja_obtener_metodos($conn, $fechaInicio, $fechaFin, $vendedorFiltro);
-    $productos = caja_obtener_productos($conn, $fechaInicio, $fechaFin, $vendedorFiltro);
-    $ventasRecientes = caja_obtener_ventas_recientes($conn, $fechaInicio, $fechaFin, $vendedorFiltro);
-    $vendedores = caja_obtener_vendedores($conn);
-    $historial = caja_obtener_historial($conn);
-} catch (Throwable $e) {
-    $resumen = [
-        'ventas_brutas' => 0,
-        'devoluciones' => 0,
-        'cancelaciones' => 0,
-        'total_neto_sistema' => 0,
-        'costo_estimado' => 0,
-        'utilidad_estimada' => 0,
-        'total_productos_vendidos' => 0,
-        'total_tickets' => 0,
-    ];
+$movimientos = [];
+$totalesMovimientos = ['entradas' => 0, 'salidas' => 0];
+$ventasCaja = [];
+$totalVentasAuditoria = 0;
+$totalPaginasVentas = 1;
+$paginaVentas = isset($_GET['pagina_ventas']) ? max(1, (int)$_GET['pagina_ventas']) : 1;
+$ventasPorPagina = 10;
+$efectivoEsperado = 0;
+$fechaInicioCaja = null;
+$fechaFinCaja = null;
 
-    $metodos = [
-        'efectivo' => ['metodo' => 'efectivo', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'tarjeta' => ['metodo' => 'tarjeta', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'transferencia' => ['metodo' => 'transferencia', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-        'otros' => ['metodo' => 'otros', 'ventas' => 0, 'productos' => 0, 'total_sistema' => 0],
-    ];
+if ($cajaAbierta) {
+    $fechaInicioCaja = $cajaAbierta['fecha_apertura'];
+    $fechaFinCaja = date('Y-m-d H:i:s');
 
-    $productos = [];
-    $ventasRecientes = [];
-    $vendedores = [];
-    $historial = [];
+    $resumen = caja_obtener_resumen_ventas($conn, $fechaInicioCaja, $fechaFinCaja);
+    $movimientos = caja_obtener_movimientos($conn, (int)$cajaAbierta['id']);
+    $totalesMovimientos = caja_obtener_totales_movimientos($conn, (int)$cajaAbierta['id']);
 
-    $error = $error ?: 'Error al cargar el corte: ' . $e->getMessage();
-}
+    $totalVentasAuditoria = caja_contar_ventas($conn, $fechaInicioCaja, $fechaFinCaja);
+    $totalPaginasVentas = max(1, (int)ceil($totalVentasAuditoria / $ventasPorPagina));
 
-if (isset($_GET['guardado']) && $_GET['guardado'] == '1') {
-    $mensaje = 'Corte guardado correctamente' . (isset($_GET['folio']) ? ': ' . caja_h($_GET['folio']) : '') . '.';
-}
-
-$nombreVendedorFiltro = 'Todos los vendedores';
-
-foreach ($vendedores as $vendedor) {
-    if ((int)$vendedor['id'] === $vendedorFiltro) {
-        $nombreVendedorFiltro = $vendedor['nombre'];
-        break;
+    if ($paginaVentas > $totalPaginasVentas) {
+        $paginaVentas = $totalPaginasVentas;
     }
+
+    $ventasCaja = caja_obtener_ventas_paginadas(
+        $conn,
+        $fechaInicioCaja,
+        $fechaFinCaja,
+        $paginaVentas,
+        $ventasPorPagina
+    );
+
+    $efectivoEsperado =
+        (float)$cajaAbierta['monto_inicial']
+        + (float)$resumen['efectivo_sistema']
+        + (float)$totalesMovimientos['entradas']
+        - (float)$totalesMovimientos['salidas'];
 }
 
-$totalSistema = (float)$resumen['total_neto_sistema'];
+if (isset($_GET['abierta'])) {
+    $mensaje = 'Caja abierta correctamente.';
+}
 
-$estadoPreview = 'Cuadrado';
-$estadoPreviewClass = 'caja-status-ok';
+if (isset($_GET['movimiento'])) {
+    $mensaje = 'Movimiento registrado correctamente.';
+}
+
+if (isset($_GET['cerrada'])) {
+    $mensaje = 'Caja cerrada correctamente.';
+}
+
+/* ================== HTML ================== */
+
+include 'includes/header.php';
+include 'includes/navbar.php';
 ?>
 
 <style>
@@ -657,11 +765,20 @@ $estadoPreviewClass = 'caja-status-ok';
     margin-top: 4px;
 }
 
-.caja-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    flex-wrap: wrap;
+.caja-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.03);
+    transition: all .35s ease;
+}
+
+.caja-card:hover {
+    box-shadow: 0 18px 45px rgba(0,0,0,0.12);
+}
+
+.caja-card-body {
+    padding: 20px;
 }
 
 .caja-btn {
@@ -671,10 +788,15 @@ $estadoPreviewClass = 'caja-status-ok';
     font-weight: 700;
     transition: all .28s ease;
     box-shadow: 0 8px 18px rgba(0,0,0,.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .caja-btn:hover {
     transform: translateY(-2px);
+    text-decoration: none;
 }
 
 .caja-btn-primary {
@@ -699,28 +821,14 @@ $estadoPreviewClass = 'caja-status-ok';
     border: 1px solid #ffd2d2;
 }
 
-.caja-card {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.03);
-    transition: all .35s ease;
+.caja-btn-success {
+    background: #111;
+    color: white;
 }
 
-.caja-card:hover {
-    box-shadow: 0 18px 45px rgba(0,0,0,0.12);
-}
-
-.caja-card-body {
-    padding: 18px;
-}
-
-.caja-filter-card {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.03);
-    padding: 18px;
+.caja-btn-success:hover {
+    background: #007bff;
+    color: white;
 }
 
 .caja-label {
@@ -743,7 +851,7 @@ $estadoPreviewClass = 'caja-status-ok';
 }
 
 .caja-textarea {
-    min-height: 92px;
+    min-height: 86px;
     resize: vertical;
 }
 
@@ -754,9 +862,31 @@ $estadoPreviewClass = 'caja-status-ok';
     box-shadow: 0 0 0 3px rgba(17,17,17,.08) !important;
 }
 
+.caja-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: 40px;
+    padding: 8px 13px;
+    font-size: .8rem;
+    font-weight: 800;
+}
+
+.caja-status-open {
+    background: #eaf8ef;
+    color: #16a34a;
+    border: 1px solid #c9efd6;
+}
+
+.caja-status-closed {
+    background: #f1f3f5;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
 .caja-summary-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
 }
 
@@ -766,7 +896,7 @@ $estadoPreviewClass = 'caja-status-ok';
     box-shadow: 0 10px 26px rgba(0,0,0,0.08);
     border: 1px solid rgba(0,0,0,0.03);
     padding: 16px;
-    height: 100%;
+    min-height: 142px;
     position: relative;
     overflow: hidden;
 }
@@ -779,10 +909,10 @@ $estadoPreviewClass = 'caja-status-ok';
     background: #007bff;
 }
 
+.caja-stat.stat-dark::before { background: #111; }
 .caja-stat.stat-success::before { background: #28a745; }
 .caja-stat.stat-danger::before { background: #dc3545; }
 .caja-stat.stat-warning::before { background: #ffc107; }
-.caja-stat.stat-dark::before { background: #111; }
 
 .caja-stat-icon {
     width: 42px;
@@ -794,7 +924,6 @@ $estadoPreviewClass = 'caja-status-ok';
     justify-content: center;
     color: #34495e;
     margin-bottom: 12px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
 }
 
 .caja-stat-label {
@@ -807,7 +936,7 @@ $estadoPreviewClass = 'caja-status-ok';
 }
 
 .caja-stat-value {
-    font-size: 1.32rem;
+    font-size: 1.35rem;
     line-height: 1.1;
     font-weight: 800;
     color: #212529;
@@ -837,127 +966,6 @@ $estadoPreviewClass = 'caja-status-ok';
 
 .caja-section-title small {
     color: #6c757d;
-}
-
-.caja-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 40px;
-    padding: 7px 12px;
-    font-size: .75rem;
-    font-weight: 800;
-    background: #eef6ff;
-    color: #007bff;
-    border: 1px solid #d7eaff;
-}
-
-.caja-badge-dark {
-    background: #111;
-    color: white;
-    border-color: #111;
-}
-
-.caja-badge-success {
-    background: #eaf8ef;
-    color: #16a34a;
-    border-color: #c9efd6;
-}
-
-.caja-badge-danger {
-    background: #fff0f0;
-    color: #dc3545;
-    border-color: #ffd2d2;
-}
-
-.caja-method-card {
-    background: #f8fafc;
-    border: 1px solid #edf1f5;
-    border-radius: 16px;
-    padding: 9px;
-}
-
-.caja-method-row {
-    display: grid;
-    grid-template-columns: 1fr 150px;
-    gap: 10px;
-    align-items: center;
-    background: white;
-    border: 1px solid #e8eef5;
-    border-radius: 14px;
-    padding: 10px;
-    margin-bottom: 8px;
-}
-
-.caja-method-row:last-child {
-    margin-bottom: 0;
-}
-
-.caja-method-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.caja-method-icon {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    border-radius: 12px;
-    background: #f9fbfd;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #34495e;
-}
-
-.caja-method-name {
-    font-weight: 800;
-    color: #222;
-    line-height: 1.1;
-}
-
-.caja-method-sub {
-    color: #6c757d;
-    font-size: .78rem;
-    margin-top: 3px;
-}
-
-.caja-total-box {
-    background: linear-gradient(135deg, #111 0%, #343a40 100%);
-    color: white;
-    border-radius: 18px;
-    padding: 18px;
-    min-height: 100%;
-}
-
-.caja-total-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,.12);
-}
-
-.caja-total-line:last-child {
-    border-bottom: none;
-}
-
-.caja-total-line span {
-    color: rgba(255,255,255,.75);
-    font-weight: 700;
-}
-
-.caja-total-line strong {
-    font-weight: 900;
-}
-
-.caja-difference-ok {
-    color: #52d273 !important;
-}
-
-.caja-difference-bad {
-    color: #ff7676 !important;
 }
 
 .caja-table-wrapper {
@@ -1006,24 +1014,164 @@ $estadoPreviewClass = 'caja-status-ok';
     margin-bottom: 12px;
 }
 
-.caja-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 11px;
-    border-radius: 40px;
-    font-size: .72rem;
+.caja-open-hero {
+    background: linear-gradient(135deg, #111 0%, #343a40 100%);
+    color: white;
+    border-radius: 22px;
+    padding: 24px;
+    box-shadow: 0 16px 38px rgba(0,0,0,.14);
+}
+
+.caja-open-hero h3 {
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.caja-open-hero p {
+    color: rgba(255,255,255,.78);
+    margin-bottom: 0;
+}
+
+.caja-cierre-box {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    color: #222;
+    border-radius: 18px;
+    padding: 20px;
+    border: 1px solid rgba(0,0,0,0.03);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
+}
+
+.caja-cierre-box h5 {
+    color: #222;
+}
+
+.caja-cierre-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid #edf1f5;
+}
+
+.caja-cierre-line:last-child {
+    border-bottom: none;
+}
+
+.caja-cierre-line span {
+    color: #69798b;
+    font-weight: 700;
+}
+
+.caja-cierre-line strong {
+    color: #212529;
     font-weight: 900;
 }
 
-.caja-status-ok {
-    background: #eaf8ef;
-    color: #16a34a;
+.caja-cierre-box label {
+    color: #222 !important;
 }
 
-.caja-status-bad {
+.caja-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 40px;
+    padding: 7px 12px;
+    font-size: .75rem;
+    font-weight: 800;
+    background: #eef6ff;
+    color: #007bff;
+    border: 1px solid #d7eaff;
+}
+
+.caja-badge-success {
+    background: #eaf8ef;
+    color: #16a34a;
+    border-color: #c9efd6;
+}
+
+.caja-badge-danger {
     background: #fff0f0;
     color: #dc3545;
+    border-color: #ffd2d2;
+}
+
+.caja-badge-muted {
+    background: #f1f3f5;
+    color: #495057;
+    border-color: #dee2e6;
+}
+
+.pagination-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 25px;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+}
+
+.pagination-btn {
+    padding: 10px 20px;
+    background: white;
+    border: 2px solid #007bff;
+    border-radius: 40px;
+    color: #007bff;
+    font-weight: 600;
+    transition: all 0.3s;
+    cursor: pointer;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.pagination-btn:hover:not(.disabled) {
+    background: #007bff;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+    text-decoration: none;
+}
+
+.pagination-btn.disabled,
+.pagination-btn.disabled:hover {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    background: white;
+    color: #007bff;
+    transform: none;
+    box-shadow: none;
+}
+
+.page-number {
+    min-width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    color: #495057;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 0 3px;
+    text-decoration: none;
+}
+
+.page-number:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
+    text-decoration: none;
+}
+
+.page-number.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: white;
 }
 
 .toast-custom {
@@ -1045,23 +1193,9 @@ $estadoPreviewClass = 'caja-status-ok';
     to { transform: translateX(0); opacity: 1; }
 }
 
-@media (max-width: 1399px) {
-    .caja-summary-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 991px) {
-    .content-wrapper {
-        padding: 18px;
-    }
-
+@media (max-width: 1199px) {
     .caja-summary-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .caja-toolbar {
-        justify-content: flex-start;
     }
 }
 
@@ -1079,18 +1213,18 @@ $estadoPreviewClass = 'caja-status-ok';
         grid-template-columns: 1fr;
     }
 
-    .caja-method-row {
-        grid-template-columns: 1fr;
-    }
-
-    .caja-btn {
-        width: 100%;
-        justify-content: center;
-    }
-
     .caja-section-title {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .caja-btn,
+    .pagination-btn {
+        width: 100%;
+    }
+
+    .pagination-wrapper {
+        gap: 8px;
     }
 }
 
@@ -1098,9 +1232,7 @@ $estadoPreviewClass = 'caja-status-ok';
     .main-sidebar,
     .main-header,
     .no-print,
-    .caja-toolbar,
-    .caja-filter-card,
-    .historial-cortes {
+    .historial-cajas {
         display: none !important;
     }
 
@@ -1113,32 +1245,178 @@ $estadoPreviewClass = 'caja-status-ok';
 
     .caja-card,
     .caja-stat,
-    .caja-filter-card {
+    .caja-cierre-box {
         box-shadow: none !important;
         border: 1px solid #ddd !important;
     }
 
     .caja-summary-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 8px;
-    }
-
-    .caja-stat {
-        padding: 10px;
-    }
-
-    .caja-stat-icon {
-        display: none;
-    }
-
-    .caja-stat-value {
-        font-size: 1rem;
     }
 
     .table td,
     .table th {
         font-size: 10px;
         padding: 6px;
+    }
+}
+/* ================== DISEÑO ABRIR CAJA SIN NEGRO ================== */
+
+.row.justify-content-center .col-lg-7 {
+    max-width: 760px;
+}
+
+/* Encabezado de abrir caja */
+.caja-open-hero {
+    background: linear-gradient(135deg, #fff2e8 0%, #ffffff 72%);
+    color: #2f2f2f;
+    border-radius: 20px;
+    padding: 22px 24px;
+    box-shadow: 0 12px 28px rgba(255, 122, 61, 0.12);
+    border: 1px solid rgba(255, 122, 61, 0.22);
+    position: relative;
+    overflow: hidden;
+}
+
+.caja-open-hero::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 18px;
+    bottom: 18px;
+    width: 6px;
+    border-radius: 0 12px 12px 0;
+    background: linear-gradient(180deg, #ff6b35, #ff9f43);
+}
+
+.caja-open-hero::after {
+    content: "";
+    position: absolute;
+    right: -42px;
+    top: -42px;
+    width: 125px;
+    height: 125px;
+    border-radius: 50%;
+    background: rgba(255, 122, 61, 0.08);
+}
+
+.caja-open-hero h3 {
+    font-size: 1.52rem;
+    font-weight: 850;
+    margin: 0 0 8px;
+    color: #3a2a20;
+    position: relative;
+    z-index: 1;
+}
+
+.caja-open-hero h3 i {
+    color: #ff6b35;
+    margin-right: 8px;
+}
+
+.caja-open-hero p {
+    margin: 0;
+    color: #745a49;
+    font-size: .94rem;
+    line-height: 1.5;
+    position: relative;
+    z-index: 1;
+}
+
+/* Tarjeta del formulario */
+.row.justify-content-center .col-lg-7 > .caja-card {
+    border-radius: 20px;
+    box-shadow: 0 12px 28px rgba(255, 122, 61, 0.09);
+    border: 1px solid rgba(255, 122, 61, 0.18);
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf6 100%);
+}
+
+.row.justify-content-center .col-lg-7 > .caja-card .caja-card-body {
+    padding: 24px;
+}
+
+/* Labels */
+.row.justify-content-center .caja-label {
+    color: #70472e;
+    font-size: .7rem;
+    font-weight: 850;
+    letter-spacing: .35px;
+    margin-bottom: 8px;
+}
+
+.row.justify-content-center .caja-label i {
+    color: #ff6b35;
+    margin-right: 6px !important;
+}
+
+/* Inputs */
+.row.justify-content-center .caja-input,
+.row.justify-content-center .caja-textarea {
+    border-radius: 15px !important;
+    border: 1px solid #e6d8cf !important;
+    background: #ffffff;
+    min-height: 48px;
+    padding: 11px 14px !important;
+    font-size: .94rem;
+    color: #3f3f46;
+    transition: all .22s ease;
+}
+
+.row.justify-content-center .caja-textarea {
+    min-height: 92px;
+}
+
+.row.justify-content-center .caja-input:hover,
+.row.justify-content-center .caja-textarea:hover {
+    border-color: #ffb27f !important;
+}
+
+.row.justify-content-center .caja-input:focus,
+.row.justify-content-center .caja-textarea:focus {
+    border-color: #ff6b35 !important;
+    box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.13) !important;
+}
+
+/* Botón abrir caja */
+.row.justify-content-center .caja-btn-primary {
+    min-height: 50px;
+    border-radius: 15px;
+    background: linear-gradient(135deg, #ff6b35 0%, #ff9f43 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 22px rgba(255, 122, 61, 0.24);
+    font-size: .96rem;
+    border: none;
+}
+
+.row.justify-content-center .caja-btn-primary:hover {
+    background: linear-gradient(135deg, #f45f2d 0%, #ff8f2f 100%);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 13px 28px rgba(255, 122, 61, 0.30);
+}
+
+.row.justify-content-center .form-group {
+    margin-bottom: 18px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .row.justify-content-center .col-lg-7 {
+        max-width: 100%;
+    }
+
+    .caja-open-hero {
+        padding: 20px;
+        border-radius: 18px;
+    }
+
+    .caja-open-hero h3 {
+        font-size: 1.35rem;
+    }
+
+    .row.justify-content-center .col-lg-7 > .caja-card .caja-card-body {
+        padding: 20px;
     }
 }
 </style>
@@ -1149,35 +1427,43 @@ $estadoPreviewClass = 'caja-status-ok';
             <div class="row align-items-center">
                 <div class="col-lg-7">
                     <h1 class="page-title mb-0">
-                        <i class="fas fa-cash-register mr-2"></i> Corte de Caja
+                        <i class="fas fa-cash-register mr-2"></i> Caja
                     </h1>
+
                     <div class="caja-subtitle">
-                        Del <strong><?= caja_h(date('d/m/Y H:i', strtotime($fechaInicio))) ?></strong>
-                        al <strong><?= caja_h(date('d/m/Y H:i', strtotime($fechaFin))) ?></strong>
-                        · <?= caja_h($nombreVendedorFiltro) ?>
+                        <?php if ($cajaAbierta): ?>
+                            Caja abierta desde
+                            <strong><?= caja_h(date('d/m/Y H:i', strtotime($cajaAbierta['fecha_apertura']))) ?></strong>
+                            · <?= caja_h($cajaAbierta['folio_caja']) ?>
+                        <?php else: ?>
+                            Primero abre caja con el monto inicial para comenzar el turno.
+                        <?php endif; ?>
                     </div>
                 </div>
 
-                <div class="col-lg-5 mt-3 mt-lg-0">
-                    <div class="caja-toolbar">
+                <div class="col-lg-5 mt-3 mt-lg-0 text-lg-right no-print">
+                    <?php if ($cajaAbierta): ?>
                         <button type="button" class="caja-btn caja-btn-light" onclick="window.print()">
-                            <i class="fas fa-print mr-1"></i> Imprimir
+                            <i class="fas fa-print"></i> Imprimir resumen
                         </button>
-
-                        <a href="<?= caja_h(strtok($_SERVER['REQUEST_URI'], '?')) ?>" class="caja-btn caja-btn-danger">
-                            <i class="fas fa-broom mr-1"></i> Limpiar
-                        </a>
-                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
             <div class="row mt-3">
                 <div class="col-12">
-                    <small class="text-muted">
-                        <i class="fas fa-user-check mr-1"></i>
-                        Corte generado por: <strong><?= caja_h($usuarioSesionNombre) ?></strong>
-                        · Tickets: <strong><?= (int)$resumen['total_tickets'] ?></strong>
-                        · Productos vendidos: <strong><?= number_format((float)$resumen['total_productos_vendidos'], 2) ?></strong>
+                    <?php if ($cajaAbierta): ?>
+                        <span class="caja-status-pill caja-status-open">
+                            <i class="fas fa-lock-open"></i> Caja abierta
+                        </span>
+                    <?php else: ?>
+                        <span class="caja-status-pill caja-status-closed">
+                            <i class="fas fa-lock"></i> Caja cerrada
+                        </span>
+                    <?php endif; ?>
+
+                    <small class="text-muted ml-2">
+                        Usuario: <strong><?= caja_h($usuarioNombre) ?></strong>
                     </small>
                 </div>
             </div>
@@ -1189,7 +1475,7 @@ $estadoPreviewClass = 'caja-status-ok';
 
             <?php if ($mensaje): ?>
                 <div class="alert alert-success text-center">
-                    <i class="fas fa-check-circle mr-1"></i> <?= $mensaje ?>
+                    <i class="fas fa-check-circle mr-1"></i> <?= caja_h($mensaje) ?>
                 </div>
             <?php endif; ?>
 
@@ -1199,116 +1485,98 @@ $estadoPreviewClass = 'caja-status-ok';
                 </div>
             <?php endif; ?>
 
-            <div class="caja-filter-card mb-4 no-print">
-                <form method="GET">
-                    <div class="row align-items-end">
-                        <div class="col-xl-3 col-lg-4 col-md-6 mb-3 mb-xl-0">
-                            <div class="caja-label">
-                                <i class="fas fa-calendar-alt mr-1"></i> Fecha inicio
+            <?php if (!$cajaAbierta): ?>
+
+                <div class="row justify-content-center">
+                    <div class="col-lg-7">
+                        <div class="caja-open-hero mb-4">
+                            <h3>
+                                <i class="fas fa-door-open mr-2"></i>
+                                Abrir caja
+                            </h3>
+                            <p>
+                                Ingresa el efectivo inicial con el que empieza el turno.
+                                Desde este momento se tomarán las ventas para el cierre.
+                            </p>
+                        </div>
+
+                        <div class="caja-card mb-4">
+                            <div class="caja-card-body">
+                                <form method="POST" id="formAbrirCaja">
+                                    <input type="hidden" name="accion" value="abrir_caja">
+
+                                    <div class="form-group">
+                                        <div class="caja-label">
+                                            <i class="fas fa-money-bill-wave mr-1"></i> Monto inicial en caja
+                                        </div>
+                                        <input type="number"
+                                               step="0.50"
+                                               min="0"
+                                               name="monto_inicial"
+                                               class="form-control caja-input"
+                                               placeholder="Ejemplo: 500.50"
+                                               required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="caja-label">
+                                            <i class="fas fa-sticky-note mr-1"></i> Observaciones
+                                        </div>
+                                        <textarea name="observaciones_apertura"
+                                                  class="form-control caja-textarea"
+                                                  placeholder="Ejemplo: Caja abierta con cambio inicial."></textarea>
+                                    </div>
+
+                                    <button type="submit" class="caja-btn caja-btn-primary w-100">
+                                        <i class="fas fa-lock-open"></i> Abrir caja
+                                    </button>
+                                </form>
                             </div>
-                            <input type="datetime-local"
-                                   name="fecha_inicio"
-                                   class="form-control caja-input"
-                                   value="<?= caja_h(caja_fecha_input($fechaInicio)) ?>">
-                        </div>
-
-                        <div class="col-xl-3 col-lg-4 col-md-6 mb-3 mb-xl-0">
-                            <div class="caja-label">
-                                <i class="fas fa-calendar-check mr-1"></i> Fecha fin
-                            </div>
-                            <input type="datetime-local"
-                                   name="fecha_fin"
-                                   class="form-control caja-input"
-                                   value="<?= caja_h(caja_fecha_input($fechaFin)) ?>">
-                        </div>
-
-                        <div class="col-xl-3 col-lg-4 col-md-6 mb-3 mb-xl-0">
-                            <div class="caja-label">
-                                <i class="fas fa-user-tag mr-1"></i> Vendedor
-                            </div>
-                            <select name="vendedor_id" class="form-control caja-select">
-                                <option value="0">Todos los vendedores</option>
-
-                                <?php foreach ($vendedores as $vendedor): ?>
-                                    <option value="<?= (int)$vendedor['id'] ?>" <?= (int)$vendedor['id'] === $vendedorFiltro ? 'selected' : '' ?>>
-                                        <?= caja_h($vendedor['nombre']) ?><?= !empty($vendedor['rol']) ? ' · ' . caja_h($vendedor['rol']) : '' ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-xl-3 col-lg-12 col-md-6">
-                            <button type="submit" class="caja-btn caja-btn-primary w-100">
-                                <i class="fas fa-sync-alt mr-1"></i> Actualizar corte
-                            </button>
                         </div>
                     </div>
-                </form>
-            </div>
-
-            <div class="caja-summary-grid mb-4">
-                <div class="caja-stat stat-dark">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-receipt"></i>
-                    </div>
-                    <div class="caja-stat-label">Venta bruta</div>
-                    <div class="caja-stat-value"><?= caja_money($resumen['ventas_brutas']) ?></div>
-                    <div class="caja-stat-small">Antes de devoluciones</div>
                 </div>
 
-                <div class="caja-stat stat-danger">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-undo-alt"></i>
-                    </div>
-                    <div class="caja-stat-label">Devoluciones</div>
-                    <div class="caja-stat-value text-danger"><?= caja_money($resumen['devoluciones']) ?></div>
-                    <div class="caja-stat-small">Parciales registradas</div>
-                </div>
+            <?php else: ?>
 
-                <div class="caja-stat stat-danger">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-ban"></i>
+                <div class="caja-summary-grid mb-4">
+                    <div class="caja-stat stat-dark">
+                        <div class="caja-stat-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div class="caja-stat-label">Monto inicial</div>
+                        <div class="caja-stat-value"><?= caja_money($cajaAbierta['monto_inicial']) ?></div>
+                        <div class="caja-stat-small">Efectivo al abrir caja</div>
                     </div>
-                    <div class="caja-stat-label">Cancelaciones</div>
-                    <div class="caja-stat-value text-danger"><?= caja_money($resumen['cancelaciones']) ?></div>
-                    <div class="caja-stat-small">Ventas canceladas</div>
-                </div>
 
-                <div class="caja-stat">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-calculator"></i>
+                    <div class="caja-stat stat-success">
+                        <div class="caja-stat-icon">
+                            <i class="fas fa-money-bill-wave"></i>
+                        </div>
+                        <div class="caja-stat-label">Ventas en efectivo</div>
+                        <div class="caja-stat-value text-success"><?= caja_money($resumen['efectivo_sistema']) ?></div>
+                        <div class="caja-stat-small">Registradas en sistema</div>
                     </div>
-                    <div class="caja-stat-label">Neto sistema</div>
-                    <div class="caja-stat-value text-primary"><?= caja_money($resumen['total_neto_sistema']) ?></div>
-                    <div class="caja-stat-small">Total esperado</div>
-                </div>
 
-                <div class="caja-stat stat-success">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-chart-line"></i>
+                    <div class="caja-stat">
+                        <div class="caja-stat-icon">
+                            <i class="fas fa-receipt"></i>
+                        </div>
+                        <div class="caja-stat-label">Ventas totales</div>
+                        <div class="caja-stat-value text-primary"><?= caja_money($resumen['ventas_sistema']) ?></div>
+                        <div class="caja-stat-small">
+                            <?= (int)$resumen['total_tickets'] ?> tickets · <?= number_format((float)$resumen['total_piezas'], 2) ?> piezas
+                        </div>
                     </div>
-                    <div class="caja-stat-label">Utilidad estimada</div>
-                    <div class="caja-stat-value text-success"><?= caja_money($resumen['utilidad_estimada']) ?></div>
-                    <div class="caja-stat-small">Según precio actual</div>
-                </div>
 
-                <div class="caja-stat stat-warning">
-                    <div class="caja-stat-icon">
-                        <i class="fas fa-boxes"></i>
+                    <div class="caja-stat stat-warning">
+                        <div class="caja-stat-icon">
+                            <i class="fas fa-calculator"></i>
+                        </div>
+                        <div class="caja-stat-label">Efectivo esperado</div>
+                        <div class="caja-stat-value"><?= caja_money($efectivoEsperado) ?></div>
+                        <div class="caja-stat-small">Inicial + efectivo + entradas - salidas</div>
                     </div>
-                    <div class="caja-stat-label">Tickets / piezas</div>
-                    <div class="caja-stat-value">
-                        <?= (int)$resumen['total_tickets'] ?> / <?= number_format((float)$resumen['total_productos_vendidos'], 2) ?>
-                    </div>
-                    <div class="caja-stat-small">Movimientos del periodo</div>
                 </div>
-            </div>
-
-            <form method="POST" id="formCorteCaja">
-                <input type="hidden" name="accion" value="guardar_corte">
-                <input type="hidden" name="fecha_inicio" value="<?= caja_h($fechaInicio) ?>">
-                <input type="hidden" name="fecha_fin" value="<?= caja_h($fechaFin) ?>">
-                <input type="hidden" name="vendedor_id" value="<?= (int)$vendedorFiltro ?>">
 
                 <div class="row mb-4">
                     <div class="col-lg-8 mb-4 mb-lg-0">
@@ -1317,289 +1585,382 @@ $estadoPreviewClass = 'caja-status-ok';
                                 <div class="caja-section-title">
                                     <div>
                                         <h5>
-                                            <i class="fas fa-money-check-alt mr-2"></i>
-                                            Conteo por método de pago
+                                            <i class="fas fa-chart-pie mr-2"></i>
+                                            Resumen de caja
                                         </h5>
-                                        <small>Captura lo contado físicamente para comparar contra el sistema.</small>
+                                        <small>Vista simple del dinero registrado desde que se abrió la caja.</small>
                                     </div>
-
-                                    <span class="caja-badge caja-badge-dark">
-                                        Sistema: <?= caja_money($totalSistema) ?>
-                                    </span>
                                 </div>
 
-                                <div class="caja-method-card">
-                                    <?php
-                                    $iconsMetodo = [
-                                        'efectivo' => 'fas fa-money-bill-wave',
-                                        'tarjeta' => 'fas fa-credit-card',
-                                        'transferencia' => 'fas fa-exchange-alt',
-                                        'otros' => 'fas fa-wallet',
-                                    ];
-
-                                    foreach ($metodos as $metodo => $info):
-                                        $inputName = $metodo . '_contado';
-                                    ?>
-                                        <div class="caja-method-row">
-                                            <div class="caja-method-info">
-                                                <div class="caja-method-icon">
-                                                    <i class="<?= caja_h($iconsMetodo[$metodo] ?? 'fas fa-wallet') ?>"></i>
-                                                </div>
-
-                                                <div>
-                                                    <div class="caja-method-name"><?= caja_h(ucfirst($metodo)) ?></div>
-                                                    <div class="caja-method-sub">
-                                                        Sistema: <?= caja_money($info['total_sistema']) ?>
-                                                        · Tickets: <?= (int)$info['ventas'] ?>
-                                                        · Piezas: <?= number_format((float)$info['productos'], 2) ?>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <input type="number"
-                                                   step="0.01"
-                                                   min="0"
-                                                   name="<?= caja_h($inputName) ?>"
-                                                   id="<?= caja_h($inputName) ?>"
-                                                   data-sistema="<?= caja_h($info['total_sistema']) ?>"
-                                                   class="form-control caja-input monto-contado"
-                                                   value="<?= caja_h(number_format((float)$info['total_sistema'], 2, '.', '')) ?>">
-                                        </div>
-                                    <?php endforeach; ?>
+                                <div class="caja-table-wrapper table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Concepto</th>
+                                                <th class="caja-num">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><i class="fas fa-wallet text-dark mr-2"></i> Monto inicial</td>
+                                                <td class="caja-num"><strong><?= caja_money($cajaAbierta['monto_inicial']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-money-bill-wave text-success mr-2"></i> Ventas en efectivo</td>
+                                                <td class="caja-num"><strong><?= caja_money($resumen['efectivo_sistema']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-credit-card text-primary mr-2"></i> Ventas con tarjeta</td>
+                                                <td class="caja-num"><strong><?= caja_money($resumen['tarjeta_sistema']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-exchange-alt text-info mr-2"></i> Transferencias</td>
+                                                <td class="caja-num"><strong><?= caja_money($resumen['transferencia_sistema']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-wallet text-muted mr-2"></i> Otros métodos</td>
+                                                <td class="caja-num"><strong><?= caja_money($resumen['otros_sistema']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-plus-circle text-success mr-2"></i> Entradas manuales</td>
+                                                <td class="caja-num"><strong><?= caja_money($totalesMovimientos['entradas']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-minus-circle text-danger mr-2"></i> Salidas manuales</td>
+                                                <td class="caja-num"><strong><?= caja_money($totalesMovimientos['salidas']) ?></strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Efectivo esperado</strong></td>
+                                                <td class="caja-num"><strong><?= caja_money($efectivoEsperado) ?></strong></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
 
-                                <div class="form-group mt-3 mb-0">
-                                    <div class="caja-label">
-                                        <i class="fas fa-sticky-note mr-1"></i> Observaciones
+                                <div class="row mt-3">
+                                    <div class="col-md-6 mb-2 mb-md-0">
+                                        <span class="caja-badge caja-badge-success">
+                                            <i class="fas fa-plus-circle"></i>
+                                            Entradas: <?= caja_money($totalesMovimientos['entradas']) ?>
+                                        </span>
                                     </div>
-                                    <textarea name="observaciones"
-                                              class="form-control caja-textarea"
-                                              placeholder="Ejemplo: diferencia por cambio, pago pendiente, devolución registrada, etc."></textarea>
+
+                                    <div class="col-md-6 text-md-right">
+                                        <span class="caja-badge caja-badge-danger">
+                                            <i class="fas fa-minus-circle"></i>
+                                            Salidas: <?= caja_money($totalesMovimientos['salidas']) ?>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="col-lg-4">
-                        <div class="caja-total-box">
-                            <div class="mb-3">
-                                <span class="caja-badge caja-badge-success">
-                                    <i class="fas fa-check-circle"></i> Resumen del corte
-                                </span>
-                            </div>
-
-                            <div class="caja-total-line">
-                                <span>Total sistema</span>
-                                <strong><?= caja_money($totalSistema) ?></strong>
-                            </div>
-
-                            <div class="caja-total-line">
-                                <span>Total contado</span>
-                                <strong id="total_contado_view">$0.00</strong>
-                            </div>
-
-                            <div class="caja-total-line">
-                                <span>Diferencia</span>
-                                <strong id="diferencia_view">$0.00</strong>
-                            </div>
-
-                            <div class="caja-total-line">
-                                <span>Estado</span>
-                                <strong id="estado_view">Cuadrado</strong>
-                            </div>
-
-                            <div class="mt-4 no-print">
-                                <button type="button" class="caja-btn caja-btn-light w-100 mb-2" onclick="window.print()">
-                                    <i class="fas fa-print mr-1"></i> Imprimir antes de guardar
-                                </button>
-
-                                <button type="submit" class="caja-btn caja-btn-primary w-100">
-                                    <i class="fas fa-save mr-1"></i> Guardar corte de caja
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </form>
-
-            <div class="row mb-4">
-                <div class="col-lg-6 mb-4 mb-lg-0">
-                    <div class="caja-card h-100">
-                        <div class="caja-card-body">
-                            <div class="caja-section-title">
-                                <div>
-                                    <h5>
-                                        <i class="fas fa-list-ul mr-2"></i>
-                                        Métodos de pago
-                                    </h5>
-                                    <small>Totales calculados por el sistema.</small>
-                                </div>
-                            </div>
-
-                            <div class="caja-table-wrapper table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>Método</th>
-                                            <th class="caja-num">Tickets</th>
-                                            <th class="caja-num">Piezas</th>
-                                            <th class="caja-num">Sistema</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($metodos as $metodo => $info): ?>
-                                            <tr>
-                                                <td>
-                                                    <strong><?= caja_h(ucfirst($metodo)) ?></strong>
-                                                </td>
-                                                <td class="caja-num"><?= (int)$info['ventas'] ?></td>
-                                                <td class="caja-num"><?= number_format((float)$info['productos'], 2) ?></td>
-                                                <td class="caja-num">
-                                                    <strong><?= caja_money($info['total_sistema']) ?></strong>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-lg-6">
-                    <div class="caja-card h-100">
-                        <div class="caja-card-body">
-                            <div class="caja-section-title">
-                                <div>
-                                    <h5>
-                                        <i class="fas fa-receipt mr-2"></i>
-                                        Últimas ventas del periodo
-                                    </h5>
-                                    <small>Vista rápida de los últimos movimientos.</small>
-                                </div>
-                            </div>
-
-                            <?php if (count($ventasRecientes) > 0): ?>
-                                <div class="caja-table-wrapper table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Folio</th>
-                                                <th>Fecha</th>
-                                                <th>Método</th>
-                                                <th class="caja-num">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($ventasRecientes as $venta): ?>
-                                                <tr>
-                                                    <td>
-                                                        <strong><?= caja_h($venta['folio_ticket'] ?: 'VENTA-' . $venta['id']) ?></strong>
-                                                        <br>
-                                                        <small class="text-muted"><?= caja_h($venta['vendedor_nombre'] ?: 'Sin vendedor') ?></small>
-                                                    </td>
-                                                    <td><?= caja_h(date('d/m/Y H:i', strtotime($venta['fecha_venta']))) ?></td>
-                                                    <td>
-                                                        <span class="caja-badge">
-                                                            <?= caja_h(ucfirst($venta['metodo_normalizado'])) ?>
-                                                        </span>
-                                                    </td>
-                                                    <td class="caja-num">
-                                                        <strong><?= caja_money($venta['total_ticket']) ?></strong>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php else: ?>
-                                <div class="caja-empty">
-                                    <i class="fas fa-search"></i>
-                                    <h5>No hay ventas en este periodo</h5>
-                                    <p class="text-muted mb-0">Ajusta el rango de fechas o selecciona otro vendedor.</p>
-                                </div>
-                            <?php endif; ?>
-
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="caja-card mb-4">
-                <div class="caja-card-body">
-                    <div class="caja-section-title">
-                        <div>
-                            <h5>
-                                <i class="fas fa-boxes mr-2"></i>
-                                Productos vendidos en el corte
+                        <div class="caja-cierre-box h-100">
+                            <h5 class="font-weight-bold mb-3">
+                                <i class="fas fa-lock mr-2"></i> Cerrar caja
                             </h5>
-                            <small>Detalle neto considerando devoluciones y cancelaciones.</small>
-                        </div>
 
-                        <span class="caja-badge">
-                            <i class="fas fa-cube"></i> <?= count($productos) ?> productos
-                        </span>
+                            <div class="caja-cierre-line">
+                                <span>Monto inicial</span>
+                                <strong><?= caja_money($cajaAbierta['monto_inicial']) ?></strong>
+                            </div>
+
+                            <div class="caja-cierre-line">
+                                <span>Ventas efectivo</span>
+                                <strong><?= caja_money($resumen['efectivo_sistema']) ?></strong>
+                            </div>
+
+                            <div class="caja-cierre-line">
+                                <span>Entradas</span>
+                                <strong><?= caja_money($totalesMovimientos['entradas']) ?></strong>
+                            </div>
+
+                            <div class="caja-cierre-line">
+                                <span>Salidas</span>
+                                <strong><?= caja_money($totalesMovimientos['salidas']) ?></strong>
+                            </div>
+
+                            <div class="caja-cierre-line">
+                                <span>Efectivo esperado</span>
+                                <strong><?= caja_money($efectivoEsperado) ?></strong>
+                            </div>
+
+                            <form method="POST" id="formCerrarCaja" class="mt-3 no-print">
+                                <input type="hidden" name="accion" value="cerrar_caja">
+
+                                <div class="form-group">
+                                    <label class="font-weight-bold small">
+                                        Efectivo contado físicamente
+                                    </label>
+                                    <input type="number"
+                                           step="0.50"
+                                           min="0"
+                                           name="efectivo_contado"
+                                           id="efectivo_contado"
+                                           class="form-control caja-input"
+                                           value="<?= caja_h(number_format($efectivoEsperado, 2, '.', '')) ?>"
+                                           required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="font-weight-bold small">
+                                        Observaciones de cierre
+                                    </label>
+                                    <textarea name="observaciones_cierre"
+                                              class="form-control caja-textarea"
+                                              placeholder="Ejemplo: caja sin diferencia, faltante de cambio, etc."></textarea>
+                                </div>
+
+                                <button type="submit" class="caja-btn caja-btn-success w-100">
+                                    <i class="fas fa-check-circle"></i> Cerrar caja
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-lg-5 mb-4 mb-lg-0">
+                        <div class="caja-card h-100">
+                            <div class="caja-card-body">
+                                <div class="caja-section-title">
+                                    <div>
+                                        <h5>
+                                            <i class="fas fa-random mr-2"></i>
+                                            Entradas y salidas
+                                        </h5>
+                                        <small>Registra dinero agregado o retirado de caja.</small>
+                                    </div>
+                                </div>
+
+                                <form method="POST" id="formMovimientoCaja" class="no-print mb-3">
+                                    <input type="hidden" name="accion" value="agregar_movimiento">
+
+                                    <div class="form-group">
+                                        <div class="caja-label">Tipo</div>
+                                        <select name="tipo" class="form-control caja-select" required>
+                                            <option value="entrada">Entrada de efectivo</option>
+                                            <option value="salida">Salida de efectivo</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="caja-label">Concepto</div>
+                                        <input type="text"
+                                               name="concepto"
+                                               class="form-control caja-input"
+                                               placeholder="Ejemplo: cambio adicional"
+                                               required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="caja-label">Monto</div>
+                                        <input type="number"
+                                               step="0.50"
+                                               min="0.50"
+                                               name="monto"
+                                               class="form-control caja-input"
+                                               placeholder="0.50"
+                                               required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <div class="caja-label">Observaciones</div>
+                                        <textarea name="observaciones"
+                                                  class="form-control caja-textarea"
+                                                  placeholder="Opcional"></textarea>
+                                    </div>
+
+                                    <button type="submit" class="caja-btn caja-btn-primary w-100">
+                                        <i class="fas fa-save"></i> Registrar movimiento
+                                    </button>
+                                </form>
+
+                                <?php if (count($movimientos) > 0): ?>
+                                    <div class="caja-table-wrapper table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Tipo</th>
+                                                    <th>Concepto</th>
+                                                    <th class="caja-num">Monto</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($movimientos as $mov): ?>
+                                                    <tr>
+                                                        <td>
+                                                            <?php if ($mov['tipo'] === 'entrada'): ?>
+                                                                <span class="text-success font-weight-bold">Entrada</span>
+                                                            <?php elseif ($mov['tipo'] === 'salida'): ?>
+                                                                <span class="text-danger font-weight-bold">Salida</span>
+                                                            <?php elseif ($mov['tipo'] === 'apertura'): ?>
+                                                                <span class="text-primary font-weight-bold">Apertura</span>
+                                                            <?php else: ?>
+                                                                <span class="text-dark font-weight-bold">Cierre</span>
+                                                            <?php endif; ?>
+                                                        </td>
+                                                        <td>
+                                                            <?= caja_h($mov['concepto']) ?>
+                                                            <br>
+                                                            <small class="text-muted">
+                                                                <?= caja_h(date('d/m/Y H:i', strtotime($mov['fecha']))) ?>
+                                                            </small>
+                                                        </td>
+                                                        <td class="caja-num">
+                                                            <strong><?= caja_money($mov['monto']) ?></strong>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="caja-empty">
+                                        <i class="fas fa-random"></i>
+                                        <h5>Sin movimientos</h5>
+                                        <p class="text-muted mb-0">Aquí aparecerán apertura, entradas, salidas y cierre.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                     </div>
 
-                    <?php if (count($productos) > 0): ?>
-                        <div class="caja-table-wrapper table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Producto</th>
-                                        <th>Categoría</th>
-                                        <th class="caja-num">Vendidas</th>
-                                        <th class="caja-num">Dev./Canc.</th>
-                                        <th class="caja-num">Netas</th>
-                                        <th class="caja-num">Precio</th>
-                                        <th class="caja-num">Subtotal</th>
-                                        <th class="caja-num">Utilidad</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($productos as $producto): ?>
-                                        <tr>
-                                            <td>
-                                                <strong><?= caja_h($producto['producto_nombre']) ?></strong>
-                                            </td>
-                                            <td><?= caja_h($producto['categoria'] ?? 'Sin categoría') ?></td>
-                                            <td class="caja-num"><?= number_format((float)$producto['cantidad_bruta'], 2) ?></td>
-                                            <td class="caja-num"><?= number_format((float)$producto['cantidad_devuelta_cancelada'], 2) ?></td>
-                                            <td class="caja-num">
-                                                <strong><?= number_format((float)$producto['cantidad_neta'], 2) ?></strong>
-                                            </td>
-                                            <td class="caja-num"><?= caja_money($producto['precio_venta']) ?></td>
-                                            <td class="caja-num">
-                                                <strong><?= caja_money($producto['subtotal']) ?></strong>
-                                            </td>
-                                            <td class="caja-num text-success">
-                                                <strong><?= caja_money($producto['utilidad_estimada']) ?></strong>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php else: ?>
-                        <div class="caja-empty">
-                            <i class="fas fa-box-open"></i>
-                            <h5>No hay productos vendidos</h5>
-                            <p class="text-muted mb-0">No se encontraron ventas dentro del rango seleccionado.</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
+                    <div class="col-lg-7">
+                        <div class="caja-card h-100">
+                            <div class="caja-card-body">
+                                <div class="caja-section-title">
+                                    <div>
+                                        <h5>
+                                            <i class="fas fa-clipboard-list mr-2"></i>
+                                            Ventas de la caja
+                                        </h5>
+                                        <small>Auditoría de todas las ventas registradas desde la apertura.</small>
+                                    </div>
 
-            <div class="caja-card historial-cortes">
+                                    <span class="caja-badge">
+                                        <?= (int)$totalVentasAuditoria ?> registros
+                                    </span>
+                                </div>
+
+                                <?php if (count($ventasCaja) > 0): ?>
+                                    <div class="caja-table-wrapper table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Folio</th>
+                                                    <th>Producto</th>
+                                                    <th>Fecha</th>
+                                                    <th>Método</th>
+                                                    <th class="caja-num">Cant.</th>
+                                                    <th class="caja-num">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($ventasCaja as $venta): ?>
+                                                    <tr>
+                                                        <td>
+                                                            <strong><?= caja_h($venta['folio_ticket'] ?: 'VENTA-' . $venta['id']) ?></strong>
+                                                            <br>
+                                                            <small class="text-muted"><?= caja_h($venta['vendedor_nombre'] ?: 'Sin vendedor') ?></small>
+                                                        </td>
+
+                                                        <td><?= caja_h($venta['producto_nombre']) ?></td>
+
+                                                        <td><?= caja_h(date('d/m/Y H:i', strtotime($venta['fecha_venta']))) ?></td>
+
+                                                        <td>
+                                                            <span class="caja-badge">
+                                                                <?= caja_h($venta['metodo_pago'] ?: 'Sin método') ?>
+                                                            </span>
+                                                        </td>
+
+                                                        <td class="caja-num"><?= number_format((float)$venta['cantidad_vendida'], 2) ?></td>
+
+                                                        <td class="caja-num">
+                                                            <strong><?= caja_money($venta['subtotal']) ?></strong>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <?php if ($totalPaginasVentas > 1): ?>
+                                        <div class="pagination-wrapper no-print">
+                                            <?php
+                                            $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                                            $queryActual = $_GET;
+
+                                            $urlPrimera = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => 1]));
+                                            $urlAnterior = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => max(1, $paginaVentas - 1)]));
+                                            $urlSiguiente = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => min($totalPaginasVentas, $paginaVentas + 1)]));
+                                            $urlUltima = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => $totalPaginasVentas]));
+                                            ?>
+
+                                            <a class="pagination-btn <?= $paginaVentas <= 1 ? 'disabled' : '' ?>"
+                                               href="<?= caja_h($urlPrimera) ?>">
+                                                <i class="fas fa-angle-double-left"></i> Primera
+                                            </a>
+
+                                            <a class="pagination-btn <?= $paginaVentas <= 1 ? 'disabled' : '' ?>"
+                                               href="<?= caja_h($urlAnterior) ?>">
+                                                <i class="fas fa-chevron-left"></i> Anterior
+                                            </a>
+
+                                            <div class="pagination-pages">
+                                                <?php
+                                                $rango = 2;
+                                                $inicio = max(1, $paginaVentas - $rango);
+                                                $fin = min($totalPaginasVentas, $paginaVentas + $rango);
+
+                                                for ($i = $inicio; $i <= $fin; $i++):
+                                                    $urlPagina = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => $i]));
+                                                ?>
+                                                    <a href="<?= caja_h($urlPagina) ?>"
+                                                       class="page-number <?= $i === $paginaVentas ? 'active' : '' ?>">
+                                                        <?= $i ?>
+                                                    </a>
+                                                <?php endfor; ?>
+                                            </div>
+
+                                            <a class="pagination-btn <?= $paginaVentas >= $totalPaginasVentas ? 'disabled' : '' ?>"
+                                               href="<?= caja_h($urlSiguiente) ?>">
+                                                Siguiente <i class="fas fa-chevron-right"></i>
+                                            </a>
+
+                                            <a class="pagination-btn <?= $paginaVentas >= $totalPaginasVentas ? 'disabled' : '' ?>"
+                                               href="<?= caja_h($urlUltima) ?>">
+                                                Última <i class="fas fa-angle-double-right"></i>
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+
+                                <?php else: ?>
+                                    <div class="caja-empty">
+                                        <i class="fas fa-search"></i>
+                                        <h5>No hay ventas todavía</h5>
+                                        <p class="text-muted mb-0">Las ventas aparecerán aquí después de abrir caja.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            <?php endif; ?>
+
+            <div class="caja-card historial-cajas">
                 <div class="caja-card-body">
                     <div class="caja-section-title">
                         <div>
                             <h5>
                                 <i class="fas fa-history mr-2"></i>
-                                Historial de cortes
+                                Historial de cajas
                             </h5>
-                            <small>Últimos cortes guardados.</small>
+                            <small>Últimas aperturas y cierres registrados.</small>
                         </div>
                     </div>
 
@@ -1609,56 +1970,54 @@ $estadoPreviewClass = 'caja-status-ok';
                                 <thead>
                                     <tr>
                                         <th>Folio</th>
-                                        <th>Periodo</th>
-                                        <th>Vendedor</th>
-                                        <th class="caja-num">Sistema</th>
+                                        <th>Estado</th>
+                                        <th>Apertura</th>
+                                        <th>Cierre</th>
+                                        <th class="caja-num">Inicial</th>
+                                        <th class="caja-num">Ventas</th>
+                                        <th class="caja-num">Esperado</th>
                                         <th class="caja-num">Contado</th>
                                         <th class="caja-num">Diferencia</th>
-                                        <th>Estado</th>
-                                        <th>Fecha corte</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($historial as $corte): ?>
+                                    <?php foreach ($historial as $caja): ?>
                                         <tr>
                                             <td>
-                                                <strong><?= caja_h($corte['folio_corte']) ?></strong>
+                                                <strong><?= caja_h($caja['folio_caja']) ?></strong>
                                                 <br>
-                                                <small class="text-muted"><?= caja_h($corte['usuario_corte_nombre'] ?? '') ?></small>
+                                                <small class="text-muted"><?= caja_h($caja['usuario_apertura_nombre'] ?? '') ?></small>
                                             </td>
 
                                             <td>
-                                                <?= caja_h(date('d/m/Y H:i', strtotime($corte['fecha_inicio']))) ?>
-                                                <br>
-                                                <small class="text-muted">
-                                                    a <?= caja_h(date('d/m/Y H:i', strtotime($corte['fecha_fin']))) ?>
-                                                </small>
-                                            </td>
-
-                                            <td><?= caja_h($corte['vendedor_nombre'] ?: 'Todos') ?></td>
-
-                                            <td class="caja-num"><?= caja_money($corte['total_neto_sistema']) ?></td>
-                                            <td class="caja-num"><?= caja_money($corte['total_contado']) ?></td>
-
-                                            <td class="caja-num">
-                                                <strong class="<?= abs((float)$corte['diferencia']) <= 0.01 ? 'text-success' : 'text-danger' ?>">
-                                                    <?= caja_money($corte['diferencia']) ?>
-                                                </strong>
-                                            </td>
-
-                                            <td>
-                                                <?php if ($corte['estado'] === 'cuadrado'): ?>
-                                                    <span class="caja-status caja-status-ok">
-                                                        <i class="fas fa-check-circle"></i> Cuadrado
+                                                <?php if ($caja['estado'] === 'abierta'): ?>
+                                                    <span class="caja-status-pill caja-status-open">
+                                                        <i class="fas fa-lock-open"></i> Abierta
                                                     </span>
                                                 <?php else: ?>
-                                                    <span class="caja-status caja-status-bad">
-                                                        <i class="fas fa-exclamation-circle"></i> Con diferencia
+                                                    <span class="caja-status-pill caja-status-closed">
+                                                        <i class="fas fa-lock"></i> Cerrada
                                                     </span>
                                                 <?php endif; ?>
                                             </td>
 
-                                            <td><?= caja_h(date('d/m/Y H:i', strtotime($corte['created_at']))) ?></td>
+                                            <td><?= caja_h(date('d/m/Y H:i', strtotime($caja['fecha_apertura']))) ?></td>
+
+                                            <td>
+                                                <?= $caja['fecha_cierre']
+                                                    ? caja_h(date('d/m/Y H:i', strtotime($caja['fecha_cierre'])))
+                                                    : '<span class="text-muted">---</span>' ?>
+                                            </td>
+
+                                            <td class="caja-num"><?= caja_money($caja['monto_inicial']) ?></td>
+                                            <td class="caja-num"><?= caja_money($caja['ventas_sistema']) ?></td>
+                                            <td class="caja-num"><?= caja_money($caja['efectivo_esperado']) ?></td>
+                                            <td class="caja-num"><?= caja_money($caja['efectivo_contado']) ?></td>
+                                            <td class="caja-num">
+                                                <strong class="<?= abs((float)$caja['diferencia_efectivo']) <= 0.01 ? 'text-success' : 'text-danger' ?>">
+                                                    <?= caja_money($caja['diferencia_efectivo']) ?>
+                                                </strong>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -1667,8 +2026,8 @@ $estadoPreviewClass = 'caja-status-ok';
                     <?php else: ?>
                         <div class="caja-empty">
                             <i class="fas fa-clock"></i>
-                            <h5>Todavía no hay cortes guardados</h5>
-                            <p class="text-muted mb-0">Cuando guardes un corte aparecerá aquí.</p>
+                            <h5>Todavía no hay cajas registradas</h5>
+                            <p class="text-muted mb-0">Cuando abras y cierres caja aparecerá el historial aquí.</p>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -1681,7 +2040,7 @@ $estadoPreviewClass = 'caja-status-ok';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-const totalSistema = <?= json_encode((float)$totalSistema) ?>;
+const efectivoEsperado = <?= json_encode((float)$efectivoEsperado) ?>;
 
 function cajaFormatoMoneda(value) {
     const number = Number(value || 0);
@@ -1692,49 +2051,7 @@ function cajaFormatoMoneda(value) {
     });
 }
 
-function cajaCalcularConteo() {
-    const inputs = document.querySelectorAll('.monto-contado');
-    let total = 0;
-
-    inputs.forEach(input => {
-        total += Number(input.value || 0);
-    });
-
-    const diferencia = total - totalSistema;
-
-    const totalView = document.getElementById('total_contado_view');
-    const diferenciaView = document.getElementById('diferencia_view');
-    const estadoView = document.getElementById('estado_view');
-
-    if (totalView) {
-        totalView.textContent = cajaFormatoMoneda(total);
-    }
-
-    if (diferenciaView) {
-        diferenciaView.textContent = cajaFormatoMoneda(diferencia);
-        diferenciaView.classList.remove('caja-difference-ok', 'caja-difference-bad');
-
-        if (Math.abs(diferencia) <= 0.01) {
-            diferenciaView.classList.add('caja-difference-ok');
-        } else {
-            diferenciaView.classList.add('caja-difference-bad');
-        }
-    }
-
-    if (estadoView) {
-        if (Math.abs(diferencia) <= 0.01) {
-            estadoView.textContent = 'Cuadrado';
-            estadoView.classList.remove('caja-difference-bad');
-            estadoView.classList.add('caja-difference-ok');
-        } else {
-            estadoView.textContent = 'Con diferencia';
-            estadoView.classList.remove('caja-difference-ok');
-            estadoView.classList.add('caja-difference-bad');
-        }
-    }
-}
-
-function cajaMostrarToast(mensaje, tipo = 'success') {
+function cajaToast(mensaje, tipo = 'success') {
     const toast = document.createElement('div');
     toast.className = 'toast-custom';
     toast.textContent = mensaje;
@@ -1751,50 +2068,114 @@ function cajaMostrarToast(mensaje, tipo = 'success') {
     }, 2200);
 }
 
-document.querySelectorAll('.monto-contado').forEach(input => {
-    input.addEventListener('input', cajaCalcularConteo);
-});
+const formAbrirCaja = document.getElementById('formAbrirCaja');
 
-const formCorte = document.getElementById('formCorteCaja');
-
-if (formCorte) {
-    formCorte.addEventListener('submit', function(e) {
+if (formAbrirCaja) {
+    formAbrirCaja.addEventListener('submit', function(e) {
         e.preventDefault();
-        cajaCalcularConteo();
 
-        const diferenciaTexto = document.getElementById('diferencia_view')?.textContent || '$0.00';
-        const estadoTexto = document.getElementById('estado_view')?.textContent || 'Cuadrado';
+        const monto = this.querySelector('[name="monto_inicial"]').value || '0';
 
         Swal.fire({
-            icon: estadoTexto === 'Cuadrado' ? 'question' : 'warning',
-            title: '¿Guardar corte de caja?',
+            icon: 'question',
+            title: '¿Abrir caja?',
             html: `
                 <div class="text-center">
-                    <p class="mb-2">Se guardará el corte con el rango seleccionado.</p>
-                    <div style="background:#f8fafc;border-radius:14px;padding:14px;border:1px solid #edf1f5;">
-                        <strong>Diferencia:</strong> ${diferenciaTexto}<br>
-                        <strong>Estado:</strong> ${estadoTexto}
-                    </div>
+                    <p>Se abrirá caja con monto inicial:</p>
+                    <h3 style="font-weight:800;">${cajaFormatoMoneda(monto)}</h3>
                 </div>
             `,
             showCancelButton: true,
-            confirmButtonText: 'Sí, guardar corte',
+            confirmButtonText: 'Sí, abrir caja',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#111',
             cancelButtonColor: '#6c757d'
         }).then((result) => {
             if (result.isConfirmed) {
-                formCorte.submit();
+                formAbrirCaja.submit();
             }
         });
     });
 }
 
-cajaCalcularConteo();
+const formMovimientoCaja = document.getElementById('formMovimientoCaja');
+
+if (formMovimientoCaja) {
+    formMovimientoCaja.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const tipo = this.querySelector('[name="tipo"]').value;
+        const concepto = this.querySelector('[name="concepto"]').value || '';
+        const monto = this.querySelector('[name="monto"]').value || '0';
+
+        Swal.fire({
+            icon: 'question',
+            title: '¿Registrar movimiento?',
+            html: `
+                <div class="text-center">
+                    <p class="mb-2">Se registrará el movimiento en caja.</p>
+                    <div style="background:#f8fafc;border-radius:14px;padding:14px;border:1px solid #edf1f5;">
+                        <strong>Tipo:</strong> ${tipo}<br>
+                        <strong>Concepto:</strong> ${concepto}<br>
+                        <strong>Monto:</strong> ${cajaFormatoMoneda(monto)}
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, registrar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#111',
+            cancelButtonColor: '#6c757d'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                formMovimientoCaja.submit();
+            }
+        });
+    });
+}
+
+const formCerrarCaja = document.getElementById('formCerrarCaja');
+
+if (formCerrarCaja) {
+    formCerrarCaja.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const contadoInput = document.getElementById('efectivo_contado');
+        const contado = Number(contadoInput ? contadoInput.value : 0);
+        const diferencia = contado - efectivoEsperado;
+
+        Swal.fire({
+            icon: Math.abs(diferencia) <= 0.01 ? 'question' : 'warning',
+            title: '¿Cerrar caja?',
+            html: `
+                <div class="text-center">
+                    <p class="mb-2">Revisa los importes antes de cerrar.</p>
+                    <div style="background:#f8fafc;border-radius:14px;padding:14px;border:1px solid #edf1f5;">
+                        <strong>Efectivo esperado:</strong> ${cajaFormatoMoneda(efectivoEsperado)}<br>
+                        <strong>Efectivo contado:</strong> ${cajaFormatoMoneda(contado)}<br>
+                        <strong>Diferencia:</strong> 
+                        <span style="color:${Math.abs(diferencia) <= 0.01 ? '#16a34a' : '#dc3545'};font-weight:800;">
+                            ${cajaFormatoMoneda(diferencia)}
+                        </span>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cerrar caja',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#111',
+            cancelButtonColor: '#6c757d'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                formCerrarCaja.submit();
+            }
+        });
+    });
+}
 
 <?php if ($mensaje): ?>
 document.addEventListener('DOMContentLoaded', function() {
-    cajaMostrarToast('Corte guardado correctamente');
+    cajaToast(<?= json_encode($mensaje) ?>);
 });
 <?php endif; ?>
 </script>
