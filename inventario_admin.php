@@ -77,6 +77,80 @@ function obtenerTodosInsumos($conn) {
     return $insumos;
 }
 
+
+function obtenerCodigosProductos($conn, $productoIds) {
+    $codigosPorProducto = [];
+
+    $ids = array_values(array_unique(array_filter(array_map('intval', $productoIds), function($id) {
+        return $id > 0;
+    })));
+
+    if (empty($ids)) {
+        return $codigosPorProducto;
+    }
+
+    $idsSql = implode(',', $ids);
+
+    /*
+        Se usa SELECT * para que funcione aunque tu columna se llame:
+        codigo, codigo_barra, codigo_barras, barcode, codigo_producto o clave.
+        El sistema toma automáticamente la primera que encuentre con valor.
+    */
+    $sql = "
+        SELECT *
+        FROM codigos_barras
+        WHERE producto_id IN ($idsSql)
+        AND disponible = 1
+        ORDER BY producto_id ASC, id ASC
+    ";
+
+    $result = $conn->query($sql);
+
+    if (!$result) {
+        return $codigosPorProducto;
+    }
+
+    while ($row = $result->fetch_assoc()) {
+        $productoId = (int)($row['producto_id'] ?? 0);
+        if ($productoId <= 0) {
+            continue;
+        }
+
+        $codigo = '';
+        foreach (['codigo', 'codigo_barra', 'codigo_barras', 'barcode', 'codigo_producto', 'clave'] as $campo) {
+            if (isset($row[$campo]) && trim((string)$row[$campo]) !== '') {
+                $codigo = trim((string)$row[$campo]);
+                break;
+            }
+        }
+
+        if ($codigo === '') {
+            continue;
+        }
+
+        if (!isset($codigosPorProducto[$productoId])) {
+            $codigosPorProducto[$productoId] = [];
+        }
+
+        $codigosPorProducto[$productoId][] = [
+            'id' => (int)($row['id'] ?? 0),
+            'codigo' => $codigo,
+            'disponible' => isset($row['disponible']) ? (int)$row['disponible'] : 1,
+            'fecha' => $row['created_at'] ?? $row['fecha_creacion'] ?? $row['fecha_registro'] ?? ''
+        ];
+    }
+
+    return $codigosPorProducto;
+}
+
+function jsonSeguro($data) {
+    return htmlspecialchars(
+        json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
+
 function obtenerEstadisticas($conn) {
     $stats = [];
     
@@ -103,9 +177,318 @@ $todosProductos = obtenerTodosProductos($conn);
 $todosInsumos = obtenerTodosInsumos($conn);
 $categorias = obtenerCategorias($conn);
 $proveedores = obtenerProveedores($conn);
+
+$idsInventario = array_merge(
+    array_column($todosProductos, 'id'),
+    array_column($todosInsumos, 'id')
+);
+$codigosPorProducto = obtenerCodigosProductos($conn, $idsInventario);
+
+foreach ($todosProductos as &$productoTmp) {
+    $productoTmp['codigos_array'] = $codigosPorProducto[(int)$productoTmp['id']] ?? [];
+    $productoTmp['codigos_disponibles'] = count($productoTmp['codigos_array']);
+}
+unset($productoTmp);
+
+foreach ($todosInsumos as &$insumoTmp) {
+    $insumoTmp['codigos_array'] = $codigosPorProducto[(int)$insumoTmp['id']] ?? [];
+    $insumoTmp['codigos_disponibles'] = count($insumoTmp['codigos_array']);
+}
+unset($insumoTmp);
 ?>
 
 <link rel="stylesheet" href="css/inventario.css?v=<?= time() ?>">
+
+<style>
+    .producto-item .product-card,
+    .insumo-item .product-card {
+        cursor: pointer;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .producto-item .product-card:hover,
+    .insumo-item .product-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, .12);
+    }
+
+    .barcode-open-hint {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px dashed rgba(249, 115, 22, .35);
+        background: linear-gradient(135deg, rgba(255, 247, 237, .9), rgba(255, 255, 255, .92));
+        color: #c2410c;
+        font-size: .76rem;
+        font-weight: 800;
+        border-radius: 12px;
+        padding: 7px 9px;
+    }
+
+    .barcode-open-hint.empty {
+        border-color: rgba(148, 163, 184, .45);
+        background: #f8fafc;
+        color: #64748b;
+    }
+
+    .barcode-modal .modal-content {
+        border: 0;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: 0 22px 60px rgba(15, 23, 42, .22);
+    }
+
+    .barcode-modal .modal-header {
+        border: 0;
+        color: white;
+        background:
+            radial-gradient(circle at top right, rgba(255,255,255,.22), transparent 34%),
+            linear-gradient(135deg, #f97316, #ea580c);
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+    .barcode-modal .modal-title {
+        font-weight: 900;
+        letter-spacing: -.02em;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        line-height: 1.2;
+    }
+
+    .barcode-close-btn {
+        width: 42px;
+        height: 42px;
+        border: 0;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #c2410c;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.08rem;
+        box-shadow: 0 12px 24px rgba(124, 45, 18, .22);
+        transition: transform .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+        flex: 0 0 auto;
+    }
+
+    .barcode-close-btn:hover {
+        transform: translateY(-1px);
+        background: #fff7ed;
+        color: #9a3412;
+        box-shadow: 0 16px 28px rgba(124, 45, 18, .28);
+    }
+
+    .barcode-close-btn:focus {
+        outline: 3px solid rgba(255, 237, 213, .95);
+        outline-offset: 2px;
+    }
+
+    .barcode-summary {
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid #fed7aa;
+        border-radius: 16px;
+        background: #fff7ed;
+        margin-bottom: 14px;
+    }
+
+    .barcode-summary-icon {
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border-radius: 15px;
+        background: white;
+        color: #f97316;
+        font-size: 1.35rem;
+        box-shadow: 0 8px 18px rgba(249, 115, 22, .16);
+    }
+
+    .barcode-summary h6 {
+        margin: 0;
+        font-size: .95rem;
+        font-weight: 900;
+        color: #111827;
+    }
+
+    .barcode-summary p {
+        margin: 2px 0 0;
+        color: #64748b;
+        font-size: .82rem;
+        font-weight: 600;
+    }
+
+    .barcode-list {
+        display: grid;
+        gap: 12px;
+        max-height: 58vh;
+        overflow: auto;
+        padding-right: 3px;
+    }
+
+    .barcode-item-card {
+        border: 1px solid #fed7aa;
+        border-radius: 18px;
+        background:
+            linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+        padding: 14px;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, .08);
+    }
+
+    .barcode-item-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+    .barcode-item-head span {
+        color: #475569;
+        font-size: .78rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .barcode-copy-btn {
+        border: 0;
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #c2410c;
+        font-size: .78rem;
+        font-weight: 900;
+        padding: 7px 12px;
+        transition: transform .16s ease, background .16s ease;
+        white-space: nowrap;
+    }
+
+    .barcode-copy-btn:hover {
+        background: #ffedd5;
+        transform: translateY(-1px);
+    }
+
+    .barcode-code-hero {
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        border-radius: 15px;
+        border: 1px solid #fdba74;
+        background: linear-gradient(135deg, #fff7ed, #ffffff);
+    }
+
+    .barcode-code-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: #ffedd5;
+        color: #c2410c;
+        font-size: 1rem;
+    }
+
+    .barcode-code-label {
+        margin: 0 0 3px;
+        color: #9a3412;
+        font-size: .68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+
+    .barcode-code-value {
+        margin: 0;
+        color: #111827;
+        font-family: Consolas, Monaco, 'Courier New', monospace;
+        font-size: clamp(1.08rem, 2.8vw, 1.65rem);
+        font-weight: 950;
+        letter-spacing: .08em;
+        line-height: 1.1;
+        word-break: break-word;
+    }
+
+    .barcode-svg-wrap {
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        padding: 12px 10px;
+        text-align: center;
+        overflow-x: auto;
+    }
+
+    .barcode-svg {
+        width: 100%;
+        max-width: 430px;
+        min-height: 98px;
+    }
+    .barcode-help-text {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    @media (max-width: 575.98px) {
+        .barcode-modal .modal-dialog {
+            margin: .75rem;
+        }
+
+        .barcode-modal .modal-header {
+            padding: 14px;
+        }
+
+        .barcode-close-btn {
+            width: 38px;
+            height: 38px;
+        }
+
+        .barcode-code-hero {
+            grid-template-columns: 1fr;
+            text-align: center;
+        }
+
+        .barcode-code-icon {
+            margin: 0 auto;
+        }
+    }
+
+    .barcode-empty-state {
+        text-align: center;
+        padding: 22px 12px;
+        border-radius: 16px;
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        color: #64748b;
+    }
+
+    .barcode-empty-state i {
+        font-size: 2.2rem;
+        color: #94a3b8;
+        margin-bottom: 10px;
+    }
+
+    .barcode-empty-state h6 {
+        font-weight: 900;
+        color: #334155;
+        margin-bottom: 5px;
+    }
+</style>
+
 
 <div class="content-wrapper">
     <div class="container-fluid">
@@ -294,6 +677,8 @@ $proveedores = obtenerProveedores($conn);
                     ?>
                     <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-3 producto-item"
                         data-id="<?= $producto['id'] ?>"
+                        data-articulo="<?= htmlspecialchars($producto['nombre'], ENT_QUOTES, 'UTF-8') ?>"
+                        data-codigos='<?= jsonSeguro($producto['codigos_array'] ?? []) ?>'
                         data-nombre="<?= strtolower(htmlspecialchars($producto['nombre'])) ?>"
                         data-categoria="<?= strtolower(htmlspecialchars($producto['categoria'] ?? '')) ?>"
                         data-proveedor="<?= strtolower(htmlspecialchars($producto['proveedor'] ?? '')) ?>"
@@ -470,6 +855,11 @@ $proveedores = obtenerProveedores($conn);
                                         <div class="progress-fill <?= $stockClass ?>" style="width: <?= $stockPercent ?>%"></div>
                                     </div>
                                 </div>
+
+                                <div class="barcode-open-hint <?= empty($producto['codigos_array']) ? 'empty' : '' ?>">
+                                    <i class="fas fa-barcode"></i>
+                                    <span><?= empty($producto['codigos_array']) ? 'Sin códigos registrados' : 'Clic para ver códigos' ?></span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -505,6 +895,8 @@ $proveedores = obtenerProveedores($conn);
                     ?>
                     <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-3 insumo-item"
                          data-id="<?= $insumo['id'] ?>"
+                         data-articulo="<?= htmlspecialchars($insumo['nombre'], ENT_QUOTES, 'UTF-8') ?>"
+                         data-codigos='<?= jsonSeguro($insumo['codigos_array'] ?? []) ?>'
                          data-nombre="<?= strtolower(htmlspecialchars($insumo['nombre'])) ?>"
                          data-categoria="<?= strtolower(htmlspecialchars($insumo['categoria'] ?? '')) ?>"
                          data-proveedor="<?= strtolower(htmlspecialchars($insumo['proveedor'] ?? '')) ?>"
@@ -572,6 +964,11 @@ $proveedores = obtenerProveedores($conn);
                                         <div class="progress-fill <?= $stockClass ?>" style="width: <?= $stockPercent ?>%"></div>
                                     </div>
                                 </div>
+
+                                <div class="barcode-open-hint <?= empty($insumo['codigos_array']) ? 'empty' : '' ?>">
+                                    <i class="fas fa-barcode"></i>
+                                    <span><?= empty($insumo['codigos_array']) ? 'Sin códigos registrados' : 'Clic para ver códigos' ?></span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -588,8 +985,43 @@ $proveedores = obtenerProveedores($conn);
     </div>
 </div>
 
+
+<!-- Modal códigos de barras -->
+<div class="modal fade barcode-modal" id="barcodeModal" tabindex="-1" aria-labelledby="barcodeModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="barcodeModalTitle">
+                    <i class="fas fa-barcode me-2"></i> Códigos de barras
+                </h5>
+                <button type="button" class="barcode-close-btn" data-bs-dismiss="modal" aria-label="Cerrar" title="Cerrar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="barcode-summary">
+                    <div class="barcode-summary-icon">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <div>
+                        <h6 id="barcodeArticuloNombre">Artículo</h6>
+                        <p id="barcodeArticuloInfo">Consulta los códigos disponibles de este artículo.</p>
+                    </div>
+                </div>
+                <div class="barcode-list" id="barcodeList"></div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -617,6 +1049,195 @@ document.addEventListener('DOMContentLoaded', function() {
     // Obtener todos los items
     const productos = document.querySelectorAll('.producto-item');
     const insumos = document.querySelectorAll('.insumo-item');
+    const inventarioItems = document.querySelectorAll('.producto-item, .insumo-item');
+
+    // Modal de códigos de barras
+    const barcodeModalEl = document.getElementById('barcodeModal');
+    const barcodeModal = barcodeModalEl && window.bootstrap ? new bootstrap.Modal(barcodeModalEl) : null;
+    const barcodeModalTitle = document.getElementById('barcodeModalTitle');
+    const barcodeArticuloNombre = document.getElementById('barcodeArticuloNombre');
+    const barcodeArticuloInfo = document.getElementById('barcodeArticuloInfo');
+    const barcodeList = document.getElementById('barcodeList');
+
+    function escapeHtml(texto) {
+        return String(texto ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function normalizarCodigos(raw) {
+        if (!raw) return [];
+
+        try {
+            const codigos = JSON.parse(raw);
+            if (!Array.isArray(codigos)) return [];
+
+            return codigos
+                .map((item) => {
+                    if (typeof item === 'string') {
+                        return { codigo: item };
+                    }
+                    return item || null;
+                })
+                .filter((item) => item && String(item.codigo || '').trim() !== '')
+                .map((item) => ({
+                    ...item,
+                    codigo: String(item.codigo).trim()
+                }));
+        } catch (error) {
+            console.error('No se pudieron leer los códigos de barras:', error);
+            return [];
+        }
+    }
+
+    function copiarCodigo(codigo, boton) {
+        const textoOriginal = boton.innerHTML;
+
+        const marcarCopiado = () => {
+            boton.innerHTML = '<i class="fas fa-check"></i> Copiado';
+            setTimeout(() => {
+                boton.innerHTML = textoOriginal;
+            }, 1400);
+        };
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(codigo).then(marcarCopiado).catch(() => {
+                fallbackCopiarCodigo(codigo);
+                marcarCopiado();
+            });
+        } else {
+            fallbackCopiarCodigo(codigo);
+            marcarCopiado();
+        }
+    }
+
+    function fallbackCopiarCodigo(codigo) {
+        const inputTemporal = document.createElement('textarea');
+        inputTemporal.value = codigo;
+        inputTemporal.style.position = 'fixed';
+        inputTemporal.style.left = '-9999px';
+        document.body.appendChild(inputTemporal);
+        inputTemporal.focus();
+        inputTemporal.select();
+        try {
+            document.execCommand('copy');
+        } catch (error) {
+            console.error('No se pudo copiar el código:', error);
+        }
+        document.body.removeChild(inputTemporal);
+    }
+
+    function renderizarBarras() {
+        if (!window.JsBarcode) return;
+
+        document.querySelectorAll('#barcodeList .barcode-svg').forEach((svg) => {
+            const codigo = svg.dataset.code || '';
+            if (!codigo) return;
+
+            try {
+                JsBarcode(svg, codigo, {
+                    format: 'CODE128',
+                    width: 2,
+                    height: 72,
+                    margin: 10,
+                    displayValue: true,
+                    text: codigo,
+                    font: 'monospace',
+                    fontSize: 18,
+                    fontOptions: 'bold',
+                    textMargin: 8,
+                    background: '#ffffff',
+                    lineColor: '#111827'
+                });
+            } catch (error) {
+                const contenedor = svg.closest('.barcode-svg-wrap');
+                if (contenedor) {
+                    contenedor.innerHTML = '<div class="text-muted small py-3">No se pudo dibujar este código, pero el valor está disponible abajo.</div>';
+                }
+            }
+        });
+    }
+
+    function abrirModalCodigos(item) {
+        if (!barcodeModal || !barcodeList) return;
+
+        const articulo = item.dataset.articulo || item.dataset.nombre || 'Artículo';
+        const tipo = item.dataset.tipo === 'insumo' ? 'Insumo' : 'Producto';
+        const codigos = normalizarCodigos(item.dataset.codigos || '[]');
+
+        if (barcodeModalTitle) {
+            barcodeModalTitle.innerHTML = '<i class="fas fa-barcode me-2"></i> Códigos de barras';
+        }
+        if (barcodeArticuloNombre) {
+            barcodeArticuloNombre.textContent = articulo;
+        }
+        if (barcodeArticuloInfo) {
+            barcodeArticuloInfo.textContent = `${tipo} seleccionado · ${codigos.length} código${codigos.length === 1 ? '' : 's'} disponible${codigos.length === 1 ? '' : 's'}`;
+        }
+
+        if (codigos.length === 0) {
+            barcodeList.innerHTML = `
+                <div class="barcode-empty-state">
+                    <i class="fas fa-barcode"></i>
+                    <h6>Este artículo no tiene códigos registrados</h6>
+                    <p class="mb-0">Cuando registres códigos de barras para este artículo, aparecerán aquí.</p>
+                </div>
+            `;
+        } else {
+            barcodeList.innerHTML = codigos.map((itemCodigo, index) => {
+                const codigo = String(itemCodigo.codigo || '').trim();
+                const codigoSeguro = escapeHtml(codigo);
+
+                return `
+                    <div class="barcode-item-card">
+                        <div class="barcode-item-head">
+                            <span><i class="fas fa-barcode"></i> Código ${index + 1}</span>
+                            <button type="button" class="barcode-copy-btn" data-code="${codigoSeguro}">
+                                <i class="fas fa-copy"></i> Copiar código
+                            </button>
+                        </div>
+                        <div class="barcode-code-hero">
+                            <div class="barcode-code-icon"><i class="fas fa-hashtag"></i></div>
+                            <div>
+                                <p class="barcode-code-label">Código del artículo</p>
+                                <p class="barcode-code-value">${codigoSeguro}</p>
+                            </div>
+                        </div>
+                        <div class="barcode-svg-wrap">
+                            <svg class="barcode-svg" data-code="${codigoSeguro}"></svg>
+                            <p class="barcode-help-text">Escanea este código o cópialo para usarlo manualmente.</p>
+                        </div>                    </div>
+                `;
+            }).join('');
+        }
+
+        barcodeList.querySelectorAll('.barcode-copy-btn').forEach((boton) => {
+            boton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                copiarCodigo(this.dataset.code || '', this);
+            });
+        });
+
+        barcodeModal.show();
+        setTimeout(renderizarBarras, 160);
+    }
+
+    inventarioItems.forEach((item) => {
+        const card = item.querySelector('.product-card');
+        if (!card) return;
+
+        card.setAttribute('title', 'Clic para ver códigos de barras');
+        card.addEventListener('click', function(event) {
+            if (event.target.closest('a, button, input, select, textarea')) {
+                return;
+            }
+            abrirModalCodigos(item);
+        });
+    });
     
     // Estado de filtros
     let filtros = {

@@ -145,6 +145,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       <div class="mobile-nav-links">
         <?php if ($rol === 'administrador'): ?>
           <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i> Inicio</a>
+          <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i> Corte de Caja</a>
           <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
           <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
@@ -204,6 +205,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
     <div class="nav-links">
       <?php if ($rol === 'administrador'): ?>
         <a href="dashboard_admin.php"><i class="fas fa-home"></i><span>Inicio</span></a>
+        <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i><span>Corte de Caja</span></a>
         <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
         <a href="dashboard_productos.php"><i class="fas fa-box"></i><span>Registrar Productos</span></a>

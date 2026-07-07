@@ -71,12 +71,7 @@ $query = "
     LEFT JOIN codigos_barras cb ON cb.producto_id = p.id
     WHERE p.tipo_inventario = 'producto' OR p.tipo_inventario IS NULL OR p.tipo_inventario = ''
     GROUP BY p.id
-    ORDER BY 
-        CASE 
-            WHEN p.imagen IS NOT NULL AND p.imagen != '' THEN 0 
-            ELSE 1 
-        END,
-        p.nombre ASC
+    ORDER BY p.nombre ASC
     LIMIT " . PRODUCTOS_POR_PAGINA . " OFFSET " . $offset;
 
 $result = $conn->query($query);
@@ -155,6 +150,19 @@ if (!$result) {
     height: 100%;
     object-fit: cover;
     transition: transform 0.5s ease;
+}
+
+.product-image-fallback {
+    width: 100%;
+    height: 100%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+}
+
+.product-image-fallback .product-icon {
+    font-size: 3.8rem;
 }
 
 .product-card-pro:hover .product-image {
@@ -237,53 +245,75 @@ if (!$result) {
 }
 
 .product-metrics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin: 12px 0;
-    background: #f8f9fa;
-    border-radius: 14px;
-    padding: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 88px;
+    gap: 8px;
+    margin: 12px 0 10px;
+    background: #f8fafc;
+    border: 1px solid #edf1f5;
+    border-radius: 16px;
+    padding: 8px;
 }
 
 .metric-item {
-    flex: 1 0 calc(50% - 6px);
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
+    background: #ffffff;
+    border: 1px solid #e8eef5;
+    border-radius: 14px;
+    padding: 8px 9px;
+    overflow: hidden;
+}
+
+.metric-item.metric-stock {
+    justify-content: flex-start;
 }
 
 .metric-icon {
-    width: 32px;
-    height: 32px;
-    background: white;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    background: #f9fbfd;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #495057;
-    font-size: 0.9rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    color: #34495e;
+    font-size: 0.78rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
 }
 
 .metric-content {
+    min-width: 0;
     flex: 1;
 }
 
 .metric-label {
-    font-size: 0.7rem;
-    color: #6c757d;
+    font-size: 0.64rem;
+    line-height: 1;
+    color: #69798b;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.25px;
+    font-weight: 700;
+    margin-bottom: 4px;
 }
 
 .metric-value {
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.05;
+    font-weight: 800;
     color: #212529;
+    white-space: nowrap;
+    letter-spacing: -0.35px;
 }
 
-.metric-value.text-success { color: #28a745; }
+.metric-stock .metric-value {
+    font-size: 0.98rem;
+}
+
+.metric-value.text-success { color: #16a34a; }
 .metric-value.text-danger { color: #dc3545; }
 .metric-value.text-primary { color: #007bff; }
 
@@ -299,17 +329,23 @@ if (!$result) {
 .codigo-label {
     font-size: 0.8rem;
     color: #6c757d;
+    white-space: nowrap;
 }
 
 .codigo-toggle {
     cursor: pointer;
     color: #007bff;
-    font-weight: 500;
-    font-size: 0.9rem;
-    padding: 4px 10px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 5px 10px;
     border-radius: 20px;
-    background: #f8f9fa;
+    background: #eef6ff;
+    border: 1px solid #d7eaff;
     transition: all 0.2s;
+    max-width: 142px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .codigo-toggle:hover {
@@ -470,6 +506,173 @@ if (!$result) {
     background: #28a745;
     color: white;
 }
+
+@media (max-width: 1399px) {
+    .product-metrics {
+        grid-template-columns: minmax(0, 1fr) 78px;
+        gap: 7px;
+        padding: 7px;
+    }
+
+    .metric-item {
+        padding: 7px 8px;
+        gap: 6px;
+    }
+
+    .metric-icon {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        font-size: 0.72rem;
+    }
+
+    .metric-value {
+        font-size: 0.94rem;
+    }
+
+    .metric-stock .metric-value {
+        font-size: 0.92rem;
+    }
+}
+
+@media (max-width: 575px) {
+    .product-metrics {
+        grid-template-columns: 1fr 82px;
+    }
+}
+
+
+
+/* ===== Ajuste final vendedor: Venta y Stock compactos, pero legibles ===== */
+.product-metrics {
+    grid-template-columns: minmax(0, 1fr) 70px !important;
+    gap: 7px !important;
+    margin: 10px 0 10px !important;
+    padding: 7px !important;
+    border-radius: 15px !important;
+}
+
+.metric-item {
+    gap: 6px !important;
+    padding: 7px 8px !important;
+    border-radius: 13px !important;
+    min-width: 0 !important;
+}
+
+.metric-icon {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    border-radius: 9px !important;
+    font-size: 0.7rem !important;
+}
+
+.metric-label {
+    font-size: 0.56rem !important;
+    line-height: 1 !important;
+    letter-spacing: 0.18px !important;
+    margin-bottom: 4px !important;
+}
+
+.metric-value {
+    font-size: 0.9rem !important;
+    line-height: 1 !important;
+    letter-spacing: -0.45px !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+.metric-venta {
+    overflow: visible !important;
+}
+
+.metric-venta .metric-content {
+    overflow: visible !important;
+    min-width: 0 !important;
+}
+
+.metric-venta .metric-value {
+    font-size: 0.92rem !important;
+    transform: scaleX(0.96);
+    transform-origin: left center;
+}
+
+.metric-stock {
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding: 7px 5px !important;
+    text-align: center !important;
+}
+
+.metric-stock .metric-icon {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    font-size: 0.66rem !important;
+}
+
+.metric-stock .metric-content {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+}
+
+.metric-stock .metric-label {
+    font-size: 0.52rem !important;
+    margin-bottom: 2px !important;
+}
+
+.metric-stock .metric-value {
+    font-size: 0.86rem !important;
+    letter-spacing: -0.25px !important;
+}
+
+@media (max-width: 1399px) {
+    .product-metrics {
+        grid-template-columns: minmax(0, 1fr) 66px !important;
+        gap: 6px !important;
+        padding: 6px !important;
+    }
+
+    .metric-item {
+        padding: 7px 7px !important;
+        gap: 5px !important;
+    }
+
+    .metric-icon {
+        width: 24px !important;
+        height: 24px !important;
+        min-width: 24px !important;
+        font-size: 0.66rem !important;
+    }
+
+    .metric-label {
+        font-size: 0.52rem !important;
+    }
+
+    .metric-venta .metric-value {
+        font-size: 0.86rem !important;
+        transform: scaleX(0.94);
+    }
+
+    .metric-stock .metric-value {
+        font-size: 0.8rem !important;
+    }
+}
+
+@media (max-width: 575px) {
+    .product-metrics {
+        grid-template-columns: minmax(0, 1fr) 64px !important;
+    }
+
+    .metric-venta .metric-value {
+        font-size: 0.82rem !important;
+    }
+}
+
 </style>
 
 <div class="content-wrapper">
@@ -535,7 +738,6 @@ if (!$result) {
                         $categoria = htmlspecialchars($row['categoria'] ?? 'Sin categoría');
                         $stock = (int)$row['cantidad'];
                         $precio = number_format($row['precio_venta'], 2);
-                        $precio_compra = number_format($row['precio_compra'], 2);
                         $codigo = $row['codigos_agrupados'] ?? '';
                         $tiene_imagen = !empty($row['imagen']);
                         $imagen = $tiene_imagen ? htmlspecialchars($row['imagen']) : IMAGEN_POR_DEFECTO_URL;
@@ -553,9 +755,6 @@ if (!$result) {
                             $badge_text = "$stock disponibles";
                             $badge_icon = 'fa-check-circle';
                         }
-                        
-                        $margen = (($row['precio_venta'] - $row['precio_compra']) / max(0.01, $row['precio_compra'])) * 100;
-                        $margen_class = $margen > 30 ? 'text-success' : ($margen > 15 ? 'text-warning' : 'text-danger');
                         $iconClass = getProductIcon($nombre, $categoria);
                         $iconColor = getIconColor($iconClass);
                     ?>
@@ -569,7 +768,10 @@ if (!$result) {
                             <?php if ($tiene_imagen): ?>
                                 <div class="product-image-wrapper">
                                     <img src="<?= $imagen ?>" class="product-image" loading="lazy" alt="<?= $nombre ?>"
-                                         onerror="this.src='<?= IMAGEN_POR_DEFECTO_URL ?>'">
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="product-image-fallback">
+                                        <i class="<?= $iconClass ?> product-icon icon-<?= $iconColor ?>"></i>
+                                    </div>
                                 </div>
                             <?php else: ?>
                                 <div class="product-icon-wrapper">
@@ -580,10 +782,20 @@ if (!$result) {
                                 <h5 class="product-title" title="<?= $nombre ?>"><?= $nombre ?></h5>
                                 <div class="product-categoria"><i class="fas fa-tag"></i> <?= $categoria ?></div>
                                 <div class="product-metrics">
-                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-tag"></i></div><div class="metric-content"><div class="metric-label">Venta</div><div class="metric-value text-primary">$<?= $precio ?></div></div></div>
-                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-cubes"></i></div><div class="metric-content"><div class="metric-label">Stock</div><div class="metric-value <?= $stock > 0 ? 'text-success' : 'text-danger' ?>"><?= $stock ?></div></div></div>
-                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-shopping-cart"></i></div><div class="metric-content"><div class="metric-label">Compra</div><div class="metric-value">$<?= $precio_compra ?></div></div></div>
-                                    <div class="metric-item"><div class="metric-icon"><i class="fas fa-chart-line"></i></div><div class="metric-content"><div class="metric-label">Margen</div><div class="metric-value <?= $margen_class ?>"><?= number_format($margen, 1) ?>%</div></div></div>
+                                    <div class="metric-item metric-venta">
+                                        <div class="metric-icon"><i class="fas fa-tag"></i></div>
+                                        <div class="metric-content">
+                                            <div class="metric-label">Venta</div>
+                                            <div class="metric-value text-primary">$<?= $precio ?></div>
+                                        </div>
+                                    </div>
+                                    <div class="metric-item metric-stock">
+                                        <div class="metric-icon"><i class="fas fa-cubes"></i></div>
+                                        <div class="metric-content">
+                                            <div class="metric-label">Stock</div>
+                                            <div class="metric-value <?= $stock > 0 ? 'text-success' : 'text-danger' ?>"><?= $stock ?></div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <?php if (!empty($codigo)): ?>
                                     <?php $codigosArray = array_map('trim', explode(',', $codigo)); $codigoPrincipal = $codigosArray[0]; $tieneMultiples = count($codigosArray) > 1; ?>
@@ -743,14 +955,14 @@ function actualizarProductos(productos) {
         return;
     }
     document.getElementById('sinResultados').style.display = 'none';
+
+    productos.sort((a, b) => (a.nombre || '').localeCompare((b.nombre || ''), 'es', { sensitivity: 'base' }));
     
     productos.forEach(p => {
         const stock = parseInt(p.cantidad);
         let badgeClass = stock === 0 ? 'badge-danger' : (stock <= 5 ? 'badge-warning' : 'badge-success');
         let badgeText = stock === 0 ? 'Sin stock' : (stock <= 5 ? `Stock bajo (${stock})` : `${stock} disponibles`);
         let badgeIcon = stock === 0 ? 'fa-times-circle' : (stock <= 5 ? 'fa-exclamation-circle' : 'fa-check-circle');
-        const margen = ((p.precio_venta - p.precio_compra) / Math.max(0.01, p.precio_compra)) * 100;
-        let margenClass = margen > 30 ? 'text-success' : (margen > 15 ? 'text-warning' : 'text-danger');
         const tieneImagen = p.imagen && p.imagen !== '';
         const imagenUrl = tieneImagen ? p.imagen : '<?= IMAGEN_POR_DEFECTO_URL ?>';
         
@@ -779,17 +991,30 @@ function actualizarProductos(productos) {
                 <div class="product-card-pro position-relative">
                     <span class="badge ${badgeClass} badge-stock"><i class="fas ${badgeIcon} mr-1"></i> ${badgeText}</span>
                     ${tieneImagen ? 
-                        `<div class="product-image-wrapper"><img src="${imagenUrl}" class="product-image" loading="lazy" alt="${escapeHtml(p.nombre)}" onerror="this.src='<?= IMAGEN_POR_DEFECTO_URL ?>'"></div>` : 
-                        `<div class="product-icon-wrapper"><i class="${iconoClases} product-icon" style="font-size: 4.5rem;"></i></div>`
+                        `<div class="product-image-wrapper">
+                            <img src="${imagenUrl}" class="product-image" loading="lazy" alt="${escapeHtml(p.nombre)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="product-image-fallback"><i class="${iconoClases} product-icon"></i></div>
+                        </div>` : 
+                        `<div class="product-icon-wrapper"><i class="${iconoClases} product-icon"></i></div>`
                     }
                     <div class="card-content">
                         <h5 class="product-title" title="${escapeHtml(p.nombre)}">${escapeHtml(p.nombre)}</h5>
                         <div class="product-categoria"><i class="fas fa-tag"></i> ${escapeHtml(p.categoria || 'Sin categoría')}</div>
                         <div class="product-metrics">
-                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-tag"></i></div><div class="metric-content"><div class="metric-label">Venta</div><div class="metric-value text-primary">$${parseFloat(p.precio_venta).toFixed(2)}</div></div></div>
-                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-cubes"></i></div><div class="metric-content"><div class="metric-label">Stock</div><div class="metric-value ${stock > 0 ? 'text-success' : 'text-danger'}">${stock}</div></div></div>
-                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-shopping-cart"></i></div><div class="metric-content"><div class="metric-label">Compra</div><div class="metric-value">$${parseFloat(p.precio_compra).toFixed(2)}</div></div></div>
-                            <div class="metric-item"><div class="metric-icon"><i class="fas fa-chart-line"></i></div><div class="metric-content"><div class="metric-label">Margen</div><div class="metric-value ${margenClass}">${margen.toFixed(1)}%</div></div></div>
+                            <div class="metric-item metric-venta">
+                                <div class="metric-icon"><i class="fas fa-tag"></i></div>
+                                <div class="metric-content">
+                                    <div class="metric-label">Venta</div>
+                                    <div class="metric-value text-primary">$${parseFloat(p.precio_venta || 0).toFixed(2)}</div>
+                                </div>
+                            </div>
+                            <div class="metric-item metric-stock">
+                                <div class="metric-icon"><i class="fas fa-cubes"></i></div>
+                                <div class="metric-content">
+                                    <div class="metric-label">Stock</div>
+                                    <div class="metric-value ${stock > 0 ? 'text-success' : 'text-danger'}">${stock}</div>
+                                </div>
+                            </div>
                         </div>
                         ${codigosHtml}
                     </div>

@@ -1,0 +1,15 @@
+[2026-07-03 20:04:31] Error al abrir caj贸n por COM3: Excepci al llamar a "Open" con los argumentos "0": "El puerto 'COM3' no existe."
+[2026-07-03 20:04:31] Venta registrada pero el caj贸n no abri贸. Folio: Venta_codigo_6 | No se pudo abrir el caj贸n por COM3. Detalle: Excepci al llamar a "Open" con los argumentos "0": "El puerto 'COM3' no existe."
+[2026-07-03 20:05:12] Error al abrir caj贸n por COM3: Excepci al llamar a "Open" con los argumentos "0": "El puerto 'COM3' no existe."
+[2026-07-03 20:05:12] Venta registrada pero el caj贸n no abri贸. Folio: Venta_codigo_5 | No se pudo abrir el caj贸n por COM3. Detalle: Excepci al llamar a "Open" con los argumentos "0": "El puerto 'COM3' no existe."
+[2026-07-03 20:11:01] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-03 20:12:35] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-03 20:13:33] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-03 20:15:49] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-03 20:16:37] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-03 20:19:31] Caj贸n abierto correctamente por puerto COM5 a 9600 baudios.
+[2026-07-05 17:05:47] Venta registrada. Folio: Venta_codigo_12 | Apertura de caj贸n delegada al servicio local del navegador.
+[2026-07-05 22:53:14] Venta registrada. Folio: Venta_codigo_11 | Apertura de caj贸n delegada al servicio local del navegador.
+[2026-07-05 23:02:00] Venta registrada. Folio: Venta_codigo_12 | Apertura de caj贸n delegada al servicio local del navegador.
+[2026-07-05 23:04:57] Venta registrada. Folio: Venta_codigo_13 | Apertura de caj贸n delegada al servicio local del navegador.
+[2026-07-06 19:17:28] Venta registrada. Folio: Venta_codigo_14 | Apertura de caj贸n delegada al servicio local del navegador.

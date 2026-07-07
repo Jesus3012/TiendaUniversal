@@ -8,6 +8,153 @@ require_once('includes/csrf.php');
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+
+// ==========================================================
+// INTEGRACIÓN CAJÓN DE EFECTIVO USB/RJ11 POR PUERTO COM
+// Confirmado: abre con PowerShell usando COM3 y escribiendo "1".
+// Flujo: confirmar venta -> guardar venta -> commit -> abrir cajón.
+// ==========================================================
+if (!defined('CAJON_ENABLED')) {
+    define('CAJON_ENABLED', true);
+}
+
+// Opciones: "all" para abrir en cualquier venta, "efectivo" para abrir solo en efectivo.
+if (!defined('CAJON_OPEN_MODE')) {
+    define('CAJON_OPEN_MODE', 'all');
+}
+
+// Puerto confirmado por prueba en PowerShell.
+if (!defined('CAJON_COM_PORT')) {
+    define('CAJON_COM_PORT', 'COM3');
+}
+
+if (!defined('CAJON_COM_BAUD')) {
+    define('CAJON_COM_BAUD', 9600);
+}
+
+if (!defined('CAJON_LOG_FILE')) {
+    define('CAJON_LOG_FILE', __DIR__ . '/logs/cajon_dinero.log');
+}
+
+function cajon_log(string $mensaje): void
+{
+    $dir = dirname(CAJON_LOG_FILE);
+
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+
+    @file_put_contents(
+        CAJON_LOG_FILE,
+        '[' . date('Y-m-d H:i:s') . '] ' . $mensaje . PHP_EOL,
+        FILE_APPEND
+    );
+}
+
+function debe_abrir_cajon(?string $metodoPago): bool
+{
+    if (!CAJON_ENABLED) {
+        return false;
+    }
+
+    $modo = strtolower((string) CAJON_OPEN_MODE);
+    $metodo = strtolower((string) $metodoPago);
+
+    if ($modo === 'all') {
+        return true;
+    }
+
+    if ($modo === 'efectivo') {
+        return $metodo === 'efectivo';
+    }
+
+    return false;
+}
+
+function abrir_cajon_dinero(): array
+{
+    if (PHP_OS_FAMILY !== 'Windows') {
+        $mensaje = 'La apertura por COM está configurada para Windows. Sistema actual: ' . PHP_OS_FAMILY;
+        cajon_log($mensaje);
+
+        return [
+            'ok' => false,
+            'message' => $mensaje
+        ];
+    }
+
+    $com = CAJON_COM_PORT;
+    $baud = (int) CAJON_COM_BAUD;
+
+    /**
+     * Script basado en la prueba confirmada:
+     * $port = New-Object System.IO.Ports.SerialPort "COM3",9600,None,8,one
+     * $port.Open()
+     * $port.Write("1")
+     * Start-Sleep -Milliseconds 300
+     * $port.Close()
+     */
+    $script = '$ErrorActionPreference = "Stop"' . PHP_EOL
+        . '$port = $null' . PHP_EOL
+        . 'try {' . PHP_EOL
+        . '    $port = New-Object System.IO.Ports.SerialPort "' . addslashes($com) . '",' . $baud . ',None,8,one' . PHP_EOL
+        . '    $port.Open()' . PHP_EOL
+        . '    $port.Write("1")' . PHP_EOL
+        . '    Start-Sleep -Milliseconds 300' . PHP_EOL
+        . '    $port.Close()' . PHP_EOL
+        . '    exit 0' . PHP_EOL
+        . '} catch {' . PHP_EOL
+        . '    if ($port -ne $null -and $port.IsOpen) { $port.Close() }' . PHP_EOL
+        . '    Write-Output $_.Exception.Message' . PHP_EOL
+        . '    exit 1' . PHP_EOL
+        . '}';
+
+    $archivoTemporalBase = tempnam(sys_get_temp_dir(), 'cajon_com_');
+
+    if (!$archivoTemporalBase) {
+        return [
+            'ok' => false,
+            'message' => 'No se pudo crear el archivo temporal para abrir el cajón.'
+        ];
+    }
+
+    $archivoTemporal = $archivoTemporalBase . '.ps1';
+    @rename($archivoTemporalBase, $archivoTemporal);
+    file_put_contents($archivoTemporal, $script);
+
+    $cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '
+        . escapeshellarg($archivoTemporal)
+        . ' 2>&1';
+
+    $salida = [];
+    $codigo = 1;
+
+    exec($cmd, $salida, $codigo);
+
+    @unlink($archivoTemporal);
+
+    if ($codigo === 0) {
+        cajon_log('Cajón abierto correctamente por puerto ' . $com . ' a ' . $baud . ' baudios.');
+
+        return [
+            'ok' => true,
+            'message' => 'Cajón abierto correctamente.'
+        ];
+    }
+
+    $error = trim(implode(' | ', $salida));
+    if ($error === '') {
+        $error = 'PowerShell terminó con código ' . $codigo . ' sin devolver detalle.';
+    }
+
+    cajon_log('Error al abrir cajón por ' . $com . ': ' . $error);
+
+    return [
+        'ok' => false,
+        'message' => 'No se pudo abrir el cajón por ' . $com . '. Detalle: ' . $error
+    ];
+}
+
 if ($_SESSION['rol'] !== 'administrador' && $_SESSION['rol'] !== 'vendedor') {
     header("Location: index.php");
     exit;
@@ -283,17 +430,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                     }
                     
                     $conn->commit();
+
+                    /**
+                     * Hostinger corre en Linux y NO tiene acceso al COM3 de la PC del cajero.
+                     * Por eso aquí ya no intentamos abrir el cajón desde PHP.
+                     * Enviamos una bandera a JavaScript para que el navegador llame al servicio local:
+                     * http://127.0.0.1:8787/abrir-cajon
+                     */
+                    $abrirCajonLocal = debe_abrir_cajon($metodo_pago);
                     
                     $_SESSION['carrito'] = [];
                     
-                    $mensaje = "Venta registrada correctamente.\nCambio: $" . number_format($cambio, 2);
-                    if ($ticketEnviado) $mensaje .= "\nTicket enviado a $correo_cliente";
+                    $mensaje = "Venta registrada correctamente.
+Cambio: $" . number_format($cambio, 2);
+                    if ($ticketEnviado) $mensaje .= "
+Ticket enviado a $correo_cliente";
+
+                    if ($abrirCajonLocal) {
+                        $mensaje .= "
+El sistema intentará abrir el cajón en la PC del cajero.";
+                        cajon_log('Venta registrada. Folio: ' . $folio . ' | Apertura de cajón delegada al servicio local del navegador.');
+                    }
                     
                     $_SESSION['alerta'] = [
                         'tipo' => 'success', 
                         'titulo' => 'Venta exitosa', 
                         'mensaje' => $mensaje,
-                        'folio' => $folio
+                        'folio' => $folio,
+                        'cajon_abierto' => false,
+                        'cajon_mensaje' => $abrirCajonLocal ? 'Apertura delegada al servicio local.' : 'No requerido.',
+                        'abrir_cajon_local' => $abrirCajonLocal
                     ];
                     
                     header("Location: " . strtok($_SERVER["REQUEST_URI"], '?') . "?venta_exitosa=1");
@@ -624,6 +790,7 @@ const VENTA_EXITOSA = <?= $venta_exitosa ? 'true' : 'false' ?>;
 const ALERTA_SESION = <?= json_encode($alerta ?? null, JSON_UNESCAPED_UNICODE) ?>;
 const POS_STORAGE_ACTIVA = 'pos_venta_activa';
 const POS_STORAGE_PENDIENTES = 'pos_ventas_pendientes';
+const CAJON_LOCAL_URL = 'http://127.0.0.1:8787/abrir-cajon';
 let ventaEnProceso = false;
 let buscandoProducto = false;
 let timerCodigo = null;
@@ -2399,12 +2566,68 @@ function actualizarDespuesDeFiltrar() {
     setTimeout(ajustarUnaFilaMas, 50);
 }
 
+
+// ============ CAJÓN LOCAL ============
+async function abrirCajonLocalEnSegundoPlano() {
+    try {
+        const res = await fetch(CAJON_LOCAL_URL, {
+            method: 'POST',
+            mode: 'cors',
+            cache: 'no-store'
+        });
+
+        let data = null;
+        try {
+            data = await res.json();
+        } catch (e) {
+            data = null;
+        }
+
+        if (!res.ok || !data || data.ok !== true) {
+            const detalle = data?.message || `HTTP ${res.status}`;
+            console.warn('No se pudo abrir el cajón local:', detalle);
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Venta registrada',
+                text: 'La venta se guardó, pero no se pudo abrir el cajón local. Revisa que el servicio local esté abierto y que el puerto sea COM3.',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        console.log('Cajón abierto:', data.message || 'OK');
+    } catch (error) {
+        console.error('Servicio local del cajón no disponible:', error);
+
+        Swal.fire({
+            icon: 'warning',
+            title: 'Venta registrada',
+            html: `
+                <div style="text-align:left; line-height:1.5;">
+                    La venta se guardó correctamente, pero no encontré el servicio local del cajón.<br><br>
+                    Verifica que en la PC del cajero esté abierto el archivo:<br>
+                    <b>iniciar-cajon.bat</b><br><br>
+                    Servicio esperado:<br>
+                    <code>http://127.0.0.1:8787/abrir-cajon</code>
+                </div>
+            `,
+            confirmButtonColor: '#f97316'
+        });
+    }
+}
+
 // ============ EVENTOS ============
 document.addEventListener('DOMContentLoaded', function() {
     if (ALERTA_SESION) {
         const mensaje = ALERTA_SESION.mensaje || '';
         const folio = ALERTA_SESION.folio || '';
         const esSuccess = (ALERTA_SESION.tipo || 'success') === 'success';
+        const abrirCajonLocal = ALERTA_SESION.abrir_cajon_local === true;
+
+        if (esSuccess && abrirCajonLocal) {
+            abrirCajonLocalEnSegundoPlano();
+        }
 
         const ticketEnviado = mensaje.toLowerCase().includes('ticket enviado');
         const cambioMatch = mensaje.match(/Cambio:\s*\$?([\d.,]+)/i);
