@@ -62,21 +62,19 @@ while($row = $productosResult->fetch_assoc()) {
             </div>
 
             <!-- Título y botones -->
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+            <div class="pedidos-page-top d-flex flex-wrap justify-content-between align-items-center mb-3">
                 <h3 class="mb-2 mb-md-0" style="color: #2c3e50;">Pedidos / Reabastecimiento</h3>
-                    <div class="d-flex justify-content-end align-items-center" style="gap: 130px;">
-                        <button class="btn-ayuda" onclick="mostrarAyuda()">
-                            <i class="fas fa-question-circle"></i> Ayuda
-                        </button>
-                    <div class="border-start border-secondary" style="height: 30px;"></div>
-                    <div style="margin-left: 20px;">
-                        <button class="btn btn-sm btn-success" style="margin-right: 10px;" onclick="exportarExcel()">
-                            <i class="fas fa-file-excel me-1"></i> Excel
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="exportarPDF()">
-                            <i class="fas fa-file-pdf me-1"></i> PDF
-                        </button>
-                    </div>
+                <div class="pedidos-top-actions">
+                    <button type="button" class="btn-ayuda" onclick="mostrarAyuda()">
+                        <i class="fas fa-question-circle"></i> Ayuda
+                    </button>
+                    <span class="pedidos-actions-separator"></span>
+                    <button type="button" class="btn-excel" onclick="exportarExcel()">
+                        <i class="fas fa-file-excel me-1"></i> Excel
+                    </button>
+                    <button type="button" class="btn-pdf" onclick="exportarPDF()">
+                        <i class="fas fa-file-pdf me-1"></i> PDF
+                    </button>
                 </div>
             </div>
 
@@ -202,8 +200,8 @@ while($row = $productosResult->fetch_assoc()) {
                 </div>
             </div>
 
-            <div class="text-end mb-3">
-                <button class="btn btn-sm btn-success" onclick="abrirModalSolicitante()">
+            <div class="pedido-save-actions mb-3">
+                <button type="button" class="btn-guardar-pedido-main" onclick="abrirModalSolicitante()">
                     <i class="fas fa-save"></i> Guardar Pedido
                 </button>
             </div>
@@ -524,29 +522,43 @@ $foliosCancelados = $conn->query("
 </div>
 
 <!-- MODALES -->
-<div class="modal fade" id="modalSolicitante" tabindex="-1">
-    <div class="modal-dialog">
+<div class="modal fade" id="modalSolicitante" tabindex="-1" role="dialog" aria-labelledby="modalSolicitanteTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-solicitante-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">¿Para quién es el pedido?</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                <h5 class="modal-title" id="modalSolicitanteTitulo">
+                    <i class="fas fa-user-edit"></i> ¿Para quién es el pedido?
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body">
-                <input type="text" id="nombreSolicitante" class="form-control" placeholder="Ej: Juan Pérez">
+                <div class="pedido-resumen-modal" id="resumenPedidoModal">
+                    <i class="fas fa-boxes"></i>
+                    <span>0 productos seleccionados</span>
+                </div>
+                <label for="nombreSolicitante">Nombre del solicitante</label>
+                <input type="text" id="nombreSolicitante" class="form-control" placeholder="Ej: Juan Pérez" autocomplete="off">
+                <small class="text-muted d-block mt-2">Este nombre se guardará en el folio del pedido.</small>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-success" onclick="confirmarGuardado()">Guardar</button>
+                <button type="button" id="btnGuardarPedido" class="btn btn-success btn-guardar-pedido" onclick="confirmarGuardado()">
+                    <i class="fas fa-save"></i> Guardar pedido
+                </button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="modalHistorial" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="modalHistorial" tabindex="-1" role="dialog" aria-labelledby="modalHistorialTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-historial-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title"><i class="fas fa-history"></i> Historial del pedido</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                <h5 class="modal-title" id="modalHistorialTitulo"><i class="fas fa-history"></i> Historial del pedido</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body" id="contenidoHistorial">Cargando...</div>
         </div>
@@ -561,13 +573,22 @@ $foliosCancelados = $conn->query("
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
 <script>
-let productosData = <?= json_encode($productosData) ?>;
+let productosData = <?= json_encode($productosData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 let pedidosTemp = [];
+let pedidosSeleccionados = {};
 let currentPage = 1;
 let rowsPerPage = 10;
 let currentFilter = '';
 
 $(document).ready(function() {
+    $('#modalSolicitante, #modalHistorial').on('hidden.bs.modal', function() {
+        limpiarEstadoModalBootstrap();
+    });
+
+    $('#modalSolicitante, #modalHistorial').on('shown.bs.modal', function() {
+        $(this).modal('handleUpdate');
+    });
+
     $('#filtroSolicitante, #filtroOrden').select2({ width: '100%' });
     
     $('#tipoReporte').change(function() {
@@ -690,104 +711,233 @@ function aplicarBusquedaPedidos() {
     });
 });
 
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(text) {
+    return escapeHtml(text).replace(/`/g, '&#096;');
+}
+
+function obtenerProductoPorId(id) {
+    id = parseInt(id);
+    return productosData.find(p => parseInt(p.id) === id) || null;
+}
+
+function actualizarResumenPedidoModal() {
+    const totalProductos = Object.keys(pedidosSeleccionados).length;
+    const totalPiezas = Object.values(pedidosSeleccionados).reduce((acc, item) => acc + (parseInt(item.pedido) || 0), 0);
+
+    const textoProductos = totalProductos === 1 ? '1 producto seleccionado' : `${totalProductos} productos seleccionados`;
+    const textoPiezas = totalPiezas === 1 ? '1 pieza' : `${totalPiezas} piezas`;
+
+    $('#resumenPedidoModal span').text(`${textoProductos} · ${textoPiezas}`);
+}
+
+function actualizarPedidoTemporal(input) {
+    const $row = $(input).closest('tr');
+    const id = parseInt($row.data('id'));
+    const producto = obtenerProductoPorId(id);
+    const pedido = parseInt(input.value) || 0;
+
+    if (!producto || !id) {
+        return;
+    }
+
+    if (pedido > 0) {
+        const stock = parseInt(producto.cantidad) || 0;
+        const faltante = Math.max(0, pedido - stock);
+
+        pedidosSeleccionados[id] = {
+            id: id,
+            nombre: producto.nombre,
+            stock: stock,
+            pedido: pedido,
+            faltante: faltante
+        };
+    } else {
+        delete pedidosSeleccionados[id];
+    }
+
+    actualizarResumenPedidoModal();
+}
+
 function calcular(input) {
     let tr = $(input).closest('tr');
-    let stock = parseInt(tr.data('stock'));
+    let stock = parseInt(tr.data('stock')) || 0;
     let pedido = parseInt(input.value) || 0;
+
+    if (pedido < 0) {
+        pedido = 0;
+        input.value = '';
+    }
+
     let nuevoStock = Math.max(0, stock - pedido);
     let faltante = Math.max(0, pedido - stock);
-    
+
     tr.find('.stock').text(nuevoStock);
     tr.find('.faltante').text(faltante);
-    
+
     let estadoSpan = tr.find('.estado span');
     tr.removeClass('table-warning table-danger table-success');
-    
-    if (pedido === 0) estadoSpan.html('Sin pedido').attr('class', 'badge badge-secondary');
-    else if (faltante === 0) estadoSpan.html('Stock suficiente').attr('class', 'badge badge-success');
-    else if (stock === 0) estadoSpan.html('Sin stock').attr('class', 'badge badge-danger');
-    else estadoSpan.html('Faltante parcial').attr('class', 'badge badge-warning');
+
+    if (pedido === 0) {
+        estadoSpan.html('Sin pedido').attr('class', 'badge badge-secondary');
+    } else if (faltante === 0) {
+        tr.addClass('table-success');
+        estadoSpan.html('Stock suficiente').attr('class', 'badge badge-success');
+    } else if (stock === 0) {
+        tr.addClass('table-danger');
+        estadoSpan.html('Sin stock').attr('class', 'badge badge-danger');
+    } else {
+        tr.addClass('table-warning');
+        estadoSpan.html('Faltante parcial').attr('class', 'badge badge-warning');
+    }
+
+    actualizarPedidoTemporal(input);
 }
 
 function renderTable() {
-    let filtrados = productosData.filter(p => p.nombre.toLowerCase().includes(currentFilter));
+    let filtrados = productosData.filter(p => String(p.nombre || '').toLowerCase().includes(currentFilter));
     let totalPages = Math.ceil(filtrados.length / rowsPerPage);
     let start = (currentPage - 1) * rowsPerPage;
     let productosPagina = filtrados.slice(start, start + rowsPerPage);
-    
+
     $('#contadorProductos').text(filtrados.length);
     let tbody = $('#tablaProductosBody');
-    
+
     if (filtrados.length === 0) {
         tbody.html('<tr><td colspan="5" class="text-center"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-box-open"></i></div><div class="empty-state-title">No hay productos</div><div class="empty-state-text">No se encontraron productos</div></div></td></tr>');
         $('#paginationControls').html('');
         return;
     }
-    
+
     let html = '';
     productosPagina.forEach(p => {
-        html += `<tr data-id="${p.id}" data-nombre="${p.nombre}" data-stock="${p.cantidad}">
-                    <td data-label="Producto">${p.nombre}</td>
-                    <td class="text-center" data-label="Stock"><span class="badge badge-info stock">${p.cantidad}</span></td>
-                    <td class="text-center" data-label="Pedir"><input type="number" min="0" class="form-control form-control-sm pedir" style="width:80px;margin:0 auto;" oninput="calcular(this)"></td>
-                    <td class="text-center faltante fw-bold" data-label="Faltante">0</span></td>
-                    <td class="text-center estado" data-label="Estado"><span class="badge badge-secondary">Sin pedido</span></td>
+        const id = parseInt(p.id);
+        const stockOriginal = parseInt(p.cantidad) || 0;
+        const seleccionado = pedidosSeleccionados[id] || null;
+        const pedidoGuardado = seleccionado ? parseInt(seleccionado.pedido) || 0 : 0;
+        const nuevoStock = Math.max(0, stockOriginal - pedidoGuardado);
+        const faltante = Math.max(0, pedidoGuardado - stockOriginal);
+
+        let badgeClase = 'badge badge-secondary';
+        let badgeTexto = 'Sin pedido';
+        let rowClass = '';
+
+        if (pedidoGuardado > 0 && faltante === 0) {
+            badgeClase = 'badge badge-success';
+            badgeTexto = 'Stock suficiente';
+            rowClass = 'table-success';
+        } else if (pedidoGuardado > 0 && stockOriginal === 0) {
+            badgeClase = 'badge badge-danger';
+            badgeTexto = 'Sin stock';
+            rowClass = 'table-danger';
+        } else if (pedidoGuardado > 0) {
+            badgeClase = 'badge badge-warning';
+            badgeTexto = 'Faltante parcial';
+            rowClass = 'table-warning';
+        }
+
+        html += `<tr class="${rowClass}" data-id="${id}" data-stock="${stockOriginal}">
+                    <td data-label="Producto">${escapeHtml(p.nombre)}</td>
+                    <td class="text-center" data-label="Stock"><span class="badge badge-info stock">${nuevoStock}</span></td>
+                    <td class="text-center" data-label="Pedir">
+                        <input type="number"
+                               min="0"
+                               class="form-control form-control-sm pedir"
+                               style="width:80px;margin:0 auto;"
+                               value="${pedidoGuardado > 0 ? pedidoGuardado : ''}"
+                               oninput="calcular(this)">
+                    </td>
+                    <td class="text-center faltante fw-bold" data-label="Faltante">${faltante}</td>
+                    <td class="text-center estado" data-label="Estado"><span class="${badgeClase}">${badgeTexto}</span></td>
                 </tr>`;
     });
+
     tbody.html(html);
-    
+
     if (totalPages > 1) {
         let pagHtml = '';
         pagHtml += `<button onclick="changePage(1)" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-angle-double-left"></i></button>`;
         pagHtml += `<button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-angle-left"></i></button>`;
+
         for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
             pagHtml += `<button onclick="changePage(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
         }
+
         pagHtml += `<button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-angle-right"></i></button>`;
         pagHtml += `<button onclick="changePage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-angle-double-right"></i></button>`;
         $('#paginationControls').html(pagHtml);
     } else {
         $('#paginationControls').html('');
     }
+
+    actualizarResumenPedidoModal();
 }
 
-function changePage(page) { currentPage = page; renderTable(); }
+function changePage(page) {
+    let filtrados = productosData.filter(p => String(p.nombre || '').toLowerCase().includes(currentFilter));
+    let totalPages = Math.max(1, Math.ceil(filtrados.length / rowsPerPage));
+
+    currentPage = Math.min(Math.max(parseInt(page) || 1, 1), totalPages);
+    renderTable();
+}
+
 
 $('#buscadorProductos').on('keyup', function() { currentFilter = $(this).val().toLowerCase(); currentPage = 1; renderTable(); });
 
+
+function limpiarEstadoModalBootstrap() {
+    $('.modal-backdrop').remove();
+    $('body')
+        .removeClass('modal-open')
+        .css({
+            paddingRight: '',
+            overflow: ''
+        });
+}
+
+function ejecutarDespuesDeCerrarModal(modalSelector, callback) {
+    const $modal = $(modalSelector);
+
+    if ($modal.length && $modal.hasClass('show')) {
+        $modal.one('hidden.bs.modal', function() {
+            limpiarEstadoModalBootstrap();
+            setTimeout(callback, 80);
+        });
+        $modal.modal('hide');
+        return;
+    }
+
+    limpiarEstadoModalBootstrap();
+    setTimeout(callback, 40);
+}
+
+function mostrarSwalSeguro(options) {
+    limpiarEstadoModalBootstrap();
+    return Swal.fire(options);
+}
+
 function abrirModalSolicitante() {
-    pedidosTemp = [];
-    
-    // Recorrer todas las filas de la tabla de productos
-    $('#tablaProductosBody tr').each(function() {
-        const $row = $(this);
-        const pedidoInput = $row.find('.pedir');
-        
-        if (pedidoInput.length) {
-            const pedido = parseInt(pedidoInput.val()) || 0;
-            
-            if (pedido > 0) {
-                // Obtener datos desde los atributos data o desde las celdas
-                const id = $row.data('id');
-                const nombre = $row.data('nombre');
-                const stock = $row.data('stock');
-                const faltante = $row.find('.faltante').text();
-                
-                if (id && nombre) {
-                    pedidosTemp.push({
-                        id: id,
-                        nombre: nombre,
-                        stock: stock,
-                        pedido: pedido,
-                        faltante: faltante
-                    });
-                }
-            }
-        }
-    });
-    
-    console.log('Pedidos a guardar:', pedidosTemp); // Para depuración
-    
+    pedidosTemp = Object.values(pedidosSeleccionados)
+        .map(item => ({
+            id: parseInt(item.id),
+            nombre: item.nombre,
+            stock: parseInt(item.stock) || 0,
+            pedido: parseInt(item.pedido) || 0,
+            faltante: parseInt(item.faltante) || 0
+        }))
+        .filter(item => item.id && item.pedido > 0);
+
+    console.log('Pedidos a guardar:', pedidosTemp);
+
     if (pedidosTemp.length === 0) {
         Swal.fire({
             icon: 'info',
@@ -797,56 +947,122 @@ function abrirModalSolicitante() {
         });
         return;
     }
-    
-    $('#modalSolicitante').modal('show');
+
+    actualizarResumenPedidoModal();
+
+    $('#modalSolicitante').modal({
+        backdrop: 'static',
+        keyboard: false,
+        show: true
+    });
+
+    setTimeout(() => {
+        $('#nombreSolicitante').trigger('focus');
+    }, 350);
 }
 
 function confirmarGuardado() {
     const nombre = $('#nombreSolicitante').val().trim();
-    
-    if (nombre === '') {
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'Escribe para quién es el pedido',
-            confirmButtonColor: '#f97316'
+
+    pedidosTemp = Object.values(pedidosSeleccionados)
+        .map(item => ({
+            id: parseInt(item.id),
+            nombre: item.nombre,
+            stock: parseInt(item.stock) || 0,
+            pedido: parseInt(item.pedido) || 0,
+            faltante: parseInt(item.faltante) || 0
+        }))
+        .filter(item => item.id && item.pedido > 0);
+
+    if (pedidosTemp.length === 0) {
+        ejecutarDespuesDeCerrarModal('#modalSolicitante', function() {
+            mostrarSwalSeguro({
+                icon: 'info',
+                title: 'Sin pedidos',
+                text: 'No hay productos seleccionados para guardar.',
+                confirmButtonColor: '#f97316'
+            });
         });
         return;
     }
-    
-    // Mostrar loading
-    Swal.fire({
+
+    if (nombre === '') {
+        Swal.fire({
+            icon: 'error',
+            title: 'Falta el solicitante',
+            text: 'Escribe para quién es el pedido',
+            confirmButtonColor: '#f97316'
+        }).then(() => {
+            setTimeout(() => $('#nombreSolicitante').trigger('focus'), 150);
+        });
+        return;
+    }
+
+    $('#btnGuardarPedido')
+        .prop('disabled', true)
+        .html('<i class="fas fa-spinner fa-spin"></i> Guardando...');
+
+    const payload = {
+        solicitado_por: nombre,
+        pedidos: pedidosTemp
+    };
+
+    ejecutarDespuesDeCerrarModal('#modalSolicitante', function() {
+        guardarPedidoEnServidor(payload);
+    });
+}
+
+function guardarPedidoEnServidor(payload) {
+    mostrarSwalSeguro({
         title: 'Guardando pedido...',
+        text: 'Por favor espera',
         allowOutsideClick: false,
+        showConfirmButton: false,
         didOpen: () => {
             Swal.showLoading();
         }
     });
-    
+
     fetch('guardar_pedido.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            solicitado_por: nombre, 
-            pedidos: pedidosTemp 
-        })
+        body: JSON.stringify(payload)
     })
-    .then(response => response.json())
+    .then(async response => {
+        const raw = await response.text();
+
+        let data = null;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            throw new Error(raw ? raw.substring(0, 400) : 'El servidor no devolvió JSON válido.');
+        }
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Error HTTP ' + response.status);
+        }
+
+        return data;
+    })
     .then(data => {
         Swal.close();
-        
+        limpiarEstadoModalBootstrap();
+
         if (data.success) {
-            Swal.fire({
+            pedidosSeleccionados = {};
+            pedidosTemp = [];
+
+            mostrarSwalSeguro({
                 icon: 'success',
                 title: '¡Pedido guardado!',
-                text: 'El pedido se ha registrado correctamente',
+                text: data.message || 'El pedido se ha registrado correctamente',
                 confirmButtonColor: '#f97316',
                 timer: 2000
             }).then(() => {
                 location.reload();
             });
         } else {
-            Swal.fire({
+            mostrarSwalSeguro({
                 icon: 'error',
                 title: 'Error',
                 text: data.message || 'No se pudo guardar el pedido',
@@ -856,236 +1072,301 @@ function confirmarGuardado() {
     })
     .catch(error => {
         Swal.close();
+        limpiarEstadoModalBootstrap();
         console.error('Error:', error);
-        Swal.fire({
+        mostrarSwalSeguro({
             icon: 'error',
-            title: 'Error de conexión',
-            text: 'No se pudo conectar con el servidor',
+            title: 'Error al guardar pedido',
+            text: error.message || 'No se pudo conectar con el servidor',
             confirmButtonColor: '#f97316'
         });
+    })
+    .finally(() => {
+        $('#btnGuardarPedido')
+            .prop('disabled', false)
+            .html('<i class="fas fa-save"></i> Guardar pedido');
     });
 }
 
-function exportarExcel() {
-    // Contar pedidos visibles según el filtro activo
-    const estadoActivo = $('.filtro-estado.active').data('estado');
-    let totalPedidos = 0;
-    
-    if (estadoActivo === 'pendiente') {
-        totalPedidos = $('#pendientesContainer .pedido-card:visible').length;
-    } else if (estadoActivo === 'completado') {
-        totalPedidos = $('#completadosContainer .pedido-card:visible').length;
-    } else if (estadoActivo === 'cancelado') {
-        totalPedidos = $('#canceladosContainer .pedido-card:visible').length;
-    } else {
-        totalPedidos = $('#pendientesContainer .pedido-card:visible').length + 
-                       $('#completadosContainer .pedido-card:visible').length +
-                       $('#canceladosContainer .pedido-card:visible').length;
-    }
-    
-    if (totalPedidos === 0) {
-        let titulo = '';
-        let mensaje = '';
-        
-        if (estadoActivo === 'pendiente') {
-            titulo = 'No hay pedidos pendientes';
-            mensaje = 'No existen pedidos pendientes para generar el reporte.';
-        } else if (estadoActivo === 'completado') {
-            titulo = 'No hay pedidos completados';
-            mensaje = 'No existen pedidos completados para generar el reporte.';
-        } else if (estadoActivo === 'cancelado') {
-            titulo = 'No hay pedidos cancelados';
-            mensaje = 'No existen pedidos cancelados para generar el reporte.';
-        } else {
-            titulo = 'No hay pedidos registrados';
-            mensaje = 'No existen pedidos registrados para generar el reporte.';
-        }
-        
-        Swal.fire({
-            icon: 'info',
-            title: titulo,
-            text: mensaje,
-            confirmButtonColor: '#f97316',
-            confirmButtonText: 'Entendido'
-        });
-        return;
-    }
-    
-    const tipo = $('#tipoReporte').val();
-    let url = 'exportar_excel_pedidos.php';
-    
-    if (tipo === 'solicitante') {
-        const solicitante = $('#filtroSolicitante').val();
-        if (!solicitante) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Selecciona un solicitante',
-                text: 'Para exportar por solicitante, primero elige uno de la lista',
-                confirmButtonColor: '#f97316'
-            });
-            return;
-        }
-        url += '?solicitado_por=' + encodeURIComponent(solicitante);
-    } else if (tipo === 'orden') {
-        const folio = $('#filtroOrden').val();
-        if (!folio) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Selecciona un folio',
-                text: 'Para exportar por folio, primero elige un número de folio',
-                confirmButtonColor: '#f97316'
-            });
-            return;
-        }
-        url += '?id_orden=' + folio;
-    }
-    
-    window.open(url, '_blank');
+function obtenerContenedoresReporte(estadoActivo) {
+    if (estadoActivo === 'pendiente') return ['#pendientesContainer'];
+    if (estadoActivo === 'completado') return ['#completadosContainer'];
+    if (estadoActivo === 'cancelado') return ['#canceladosContainer'];
+    return ['#pendientesContainer', '#completadosContainer', '#canceladosContainer'];
 }
 
-function exportarPDF() {
-    const estadoActivo = $('.filtro-estado.active').data('estado');
-    let totalPedidos = 0;
-    let containerVisible = '';
-    
-    // Identificar qué contenedor está visible según el estado
-    if (estadoActivo === 'pendiente') {
-        containerVisible = '#pendientesContainer';
-        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
-    } else if (estadoActivo === 'completado') {
-        containerVisible = '#completadosContainer';
-        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
-    } else if (estadoActivo === 'cancelado') {
-        containerVisible = '#canceladosContainer';
-        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
-    } else if (estadoActivo === 'todos') {
-        containerVisible = '#todosContainer';
-        totalPedidos = $(containerVisible + ' .pedido-card:visible').length;
-        
-        if (totalPedidos === 0) {
-            totalPedidos = $('#pendientesContainer .pedido-card').length + 
-                           $('#completadosContainer .pedido-card').length +
-                           $('#canceladosContainer .pedido-card').length;
-        }
+function obtenerFolioDesdeCard($card) {
+    const search = String($card.attr('data-search') || '').trim();
+    const matchSearch = search.match(/^(\d+)/);
+
+    if (matchSearch) {
+        return matchSearch[1];
     }
-    
-    console.log('Estado activo:', estadoActivo);
-    console.log('Total pedidos encontrados:', totalPedidos);
-    
-    if (totalPedidos === 0) {
-        let titulo = '';
-        let mensaje = '';
-        
-        if (estadoActivo === 'pendiente') {
-            titulo = 'No hay pedidos pendientes';
-            mensaje = 'No existen pedidos pendientes para generar el reporte.';
-        } else if (estadoActivo === 'completado') {
-            titulo = 'No hay pedidos completados';
-            mensaje = 'No existen pedidos completados para generar el reporte.';
-        } else if (estadoActivo === 'cancelado') {
-            titulo = 'No hay pedidos cancelados';
-            mensaje = 'No existen pedidos cancelados para generar el reporte.';
-        } else {
-            titulo = 'No hay pedidos registrados';
-            mensaje = 'No existen pedidos registrados para generar el reporte.';
-        }
-        
-        Swal.fire({
-            icon: 'info',
-            title: titulo,
-            text: mensaje,
-            confirmButtonColor: '#f97316',
-            confirmButtonText: 'Entendido'
-        });
-        return;
-    }
-    
+
+    const texto = String($card.text() || '');
+    const matchTexto = texto.match(/Folio\s*#\s*(\d+)/i);
+    return matchTexto ? matchTexto[1] : '';
+}
+
+function cardCoincideConFiltroReporte($card) {
     const tipo = $('#tipoReporte').val();
-    let url = 'exportar_pdf_pedidos.php?estado=' + encodeURIComponent(estadoActivo);
-    
+    const search = String($card.attr('data-search') || '').toLowerCase();
+
+    if (tipo === 'solicitante') {
+        const solicitante = String($('#filtroSolicitante').val() || '').trim().toLowerCase();
+        return solicitante !== '' && search.includes(solicitante);
+    }
+
+    if (tipo === 'orden') {
+        const folio = String($('#filtroOrden').val() || '').trim();
+        return folio !== '' && obtenerFolioDesdeCard($card) === folio;
+    }
+
+    return true;
+}
+
+function contarPedidosParaReporte(estadoActivo) {
+    let total = 0;
+    const contenedores = obtenerContenedoresReporte(estadoActivo);
+
+    contenedores.forEach(selector => {
+        $(selector).find('.pedido-card').each(function() {
+            const $card = $(this);
+            if (cardCoincideConFiltroReporte($card)) {
+                total++;
+            }
+        });
+    });
+
+    return total;
+}
+
+function tituloEstadoReporte(estadoActivo) {
+    if (estadoActivo === 'pendiente') return 'pedidos pendientes';
+    if (estadoActivo === 'completado') return 'pedidos completados';
+    if (estadoActivo === 'cancelado') return 'pedidos cancelados';
+    return 'pedidos registrados';
+}
+
+function validarFiltrosReporte() {
+    const tipo = $('#tipoReporte').val();
+
     if (tipo === 'solicitante') {
         const solicitante = $('#filtroSolicitante').val();
         if (!solicitante) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Selecciona un solicitante',
-                text: 'Para exportar por solicitante, primero elige uno de la lista',
+                text: 'Para generar el reporte por solicitante, primero elige uno de la lista.',
                 confirmButtonColor: '#f97316'
             });
-            return;
+            return false;
         }
-        url += '&solicitado_por=' + encodeURIComponent(solicitante);
-    } else if (tipo === 'orden') {
+    }
+
+    if (tipo === 'orden') {
         const folio = $('#filtroOrden').val();
         if (!folio) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Selecciona un folio',
-                text: 'Para exportar por folio, primero elige un número de folio',
+                text: 'Para generar el reporte por folio, primero elige un número de folio.',
                 confirmButtonColor: '#f97316'
             });
-            return;
+            return false;
         }
-        url += '&id_orden=' + folio;
     }
-    
-    // Mostrar loading antes de abrir
+
+    return true;
+}
+
+function validarDatosReporte(estadoActivo) {
+    if (!validarFiltrosReporte()) {
+        return false;
+    }
+
+    const totalPedidos = contarPedidosParaReporte(estadoActivo);
+
+    if (totalPedidos <= 0) {
+        const tipo = $('#tipoReporte').val();
+        let detalleFiltro = '';
+
+        if (tipo === 'solicitante') {
+            detalleFiltro = ` para el solicitante "${$('#filtroSolicitante').val()}"`;
+        } else if (tipo === 'orden') {
+            detalleFiltro = ` para el folio #${$('#filtroOrden').val()}`;
+        }
+
+        Swal.fire({
+            icon: 'info',
+            title: 'No hay pedidos para reportar',
+            text: `No existen ${tituloEstadoReporte(estadoActivo)}${detalleFiltro}. No se descargó ningún archivo.`,
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Entendido'
+        });
+        return false;
+    }
+
+    return true;
+}
+
+function agregarParametroUrl(url, nombre, valor) {
+    const separador = url.includes('?') ? '&' : '?';
+    return `${url}${separador}${encodeURIComponent(nombre)}=${encodeURIComponent(valor)}`;
+}
+
+function construirUrlReporte(formato) {
+    const estadoActivo = $('.filtro-estado.active').data('estado') || 'pendiente';
+    const tipo = $('#tipoReporte').val();
+    let url = formato === 'pdf'
+        ? 'exportar_pdf_pedidos.php'
+        : 'exportar_excel_pedidos.php';
+
+    url = agregarParametroUrl(url, 'estado', estadoActivo);
+
+    if (tipo === 'solicitante') {
+        url = agregarParametroUrl(url, 'solicitado_por', $('#filtroSolicitante').val());
+    } else if (tipo === 'orden') {
+        url = agregarParametroUrl(url, 'id_orden', $('#filtroOrden').val());
+    }
+
+    return url;
+}
+
+function limpiarTextoServidor(texto) {
+    if (!texto) return '';
+
+    try {
+        const data = JSON.parse(texto);
+        return data.message || data.error || data.mensaje || 'No hay datos para generar el reporte.';
+    } catch (e) {}
+
+    const div = document.createElement('div');
+    div.innerHTML = texto;
+    const limpio = (div.textContent || div.innerText || '').trim();
+
+    if (!limpio) return 'No se pudo generar el reporte.';
+    return limpio.substring(0, 350);
+}
+
+function obtenerNombreArchivoReporte(response, fallback) {
+    const disposition = response.headers.get('content-disposition') || '';
+    const matchUtf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const matchNormal = disposition.match(/filename="?([^";]+)"?/i);
+
+    if (matchUtf8 && matchUtf8[1]) {
+        return decodeURIComponent(matchUtf8[1]);
+    }
+
+    if (matchNormal && matchNormal[1]) {
+        return matchNormal[1];
+    }
+
+    return fallback;
+}
+
+async function descargarReporteSeguro(url, opciones) {
+    const extension = opciones.extension;
+    const abrir = opciones.abrir || false;
+    const estadoActivo = $('.filtro-estado.active').data('estado') || 'todos';
+    const fecha = new Date().toISOString().slice(0, 10);
+    const fallback = `Reporte_Pedidos_${estadoActivo}_${fecha}.${extension}`;
+
     Swal.fire({
         title: 'Generando reporte...',
         text: 'Por favor espera',
         allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
     });
-    
-    // Hacer una petición fetch para obtener el PDF y descargarlo
-    fetch(url)
-        .then(response => response.blob())
-        .then(blob => {
-            // Crear URL del blob
-            const blobUrl = URL.createObjectURL(blob);
-            
-            // 1. DESCARGAR automáticamente
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            const fecha = new Date().toISOString().slice(0, 10);
-            const nombreArchivo = `Reporte_Pedidos_${estadoActivo}_${fecha}.pdf`;
-            link.download = nombreArchivo;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // 2. ABRIR en nueva ventana
-            window.open(blobUrl, '_blank');
-            
-            // 3. Limpiar la URL después de un tiempo
-            setTimeout(() => {
-                URL.revokeObjectURL(blobUrl);
-            }, 3000);
-            
-            // Cerrar loading
-            Swal.close();
-            Swal.fire({
-                icon: 'success',
-                title: 'Reporte generado',
-                text: 'El archivo se ha descargado y se ha abierto en una nueva ventana',
-                timer: 2000,
-                showConfirmButton: false,
-                toast: true,
-                position: 'top-end'
-            });
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            Swal.close();
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'No se pudo generar el reporte',
-                confirmButtonColor: '#f97316'
-            });
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         });
+
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+        if (!response.ok || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('text/html')) {
+            const texto = await response.text();
+            throw new Error(limpiarTextoServidor(texto));
+        }
+
+        const blob = await response.blob();
+
+        if (!blob || blob.size === 0) {
+            throw new Error('El reporte se generó vacío. No se descargó ningún archivo.');
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = obtenerNombreArchivoReporte(response, fallback);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        if (abrir) {
+            window.open(blobUrl, '_blank');
+        }
+
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+
+        Swal.close();
+        Swal.fire({
+            icon: 'success',
+            title: 'Reporte generado',
+            text: abrir ? 'El archivo se descargó y se abrió en una nueva ventana.' : 'El archivo se descargó correctamente.',
+            timer: 1800,
+            showConfirmButton: false,
+            toast: true,
+            position: 'top-end'
+        });
+    } catch (error) {
+        Swal.close();
+        console.error('Error reporte:', error);
+        Swal.fire({
+            icon: 'info',
+            title: 'No se generó el reporte',
+            text: error.message || 'No hay datos para generar el reporte. No se descargó ningún archivo.',
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Entendido'
+        });
+    }
+}
+
+function exportarExcel() {
+    const estadoActivo = $('.filtro-estado.active').data('estado') || 'pendiente';
+
+    if (!validarDatosReporte(estadoActivo)) {
+        return;
+    }
+
+    const url = construirUrlReporte('excel');
+
+    descargarReporteSeguro(url, {
+        extension: 'xls',
+        abrir: false
+    });
+}
+
+function exportarPDF() {
+    const estadoActivo = $('.filtro-estado.active').data('estado') || 'pendiente';
+
+    if (!validarDatosReporte(estadoActivo)) {
+        return;
+    }
+
+    const url = construirUrlReporte('pdf');
+
+    descargarReporteSeguro(url, {
+        extension: 'pdf',
+        abrir: true
+    });
 }
 
 function cerrarAyuda() {
@@ -1095,23 +1376,88 @@ function cerrarAyuda() {
 
 function mostrarAyuda() { $('#ayudaReporte').fadeIn(); }
 
+
+async function leerRespuestaJson(response) {
+    const raw = await response.text();
+
+    let data = null;
+
+    try {
+        data = JSON.parse(raw);
+    } catch (e) {
+        throw new Error(raw ? raw.substring(0, 450) : 'El servidor no devolvió JSON válido.');
+    }
+
+    if (!response.ok || !data.success) {
+        throw new Error(data.message || 'No se pudo completar la operación.');
+    }
+
+    return data;
+}
+
+function mostrarCargandoPedido(titulo) {
+    Swal.fire({
+        title: titulo,
+        text: 'Por favor espera',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+}
+
 function completarPedido(folio) {
     Swal.fire({
         title: '¿Completar pedido?',
-        text: 'Se marcarán todos los productos',
+        text: 'Se marcarán todos los productos pendientes y se guardará el historial del pedido.',
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#dc3545',
-        confirmButtonText: '¡Sí!',
+        confirmButtonText: 'Sí, completar',
         cancelButtonText: 'No'
-    }).then(result => {
-        if (result.isConfirmed) {
-            fetch('completar_pedido.php', {
+    }).then(async result => {
+        if (!result.isConfirmed) return;
+
+        mostrarCargandoPedido('Completando pedido...');
+
+        try {
+            const response = await fetch('completar_pedido.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folio: folio })
-            }).then(() => location.reload());
+                body: JSON.stringify({
+                    folio: folio,
+                    id_orden: folio
+                })
+            });
+
+            const data = await leerRespuestaJson(response);
+            Swal.close();
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Pedido completado',
+                html: `
+                    <div style="text-align:center;">
+                        <p style="margin-bottom:8px;">${escapeHtml(data.message || 'El pedido fue completado correctamente.')}</p>
+                    </div>
+                `,
+                confirmButtonColor: '#28a745',
+                timer: 2200
+            }).then(() => {
+                location.reload();
+            });
+        } catch (error) {
+            Swal.close();
+            console.error('Error completarPedido:', error);
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al completar pedido',
+                text: error.message || 'No se pudo completar el pedido.',
+                confirmButtonColor: '#f97316'
+            });
         }
     });
 }
@@ -1119,51 +1465,141 @@ function completarPedido(folio) {
 function completarProducto(id) {
     Swal.fire({
         title: '¿Completar producto?',
-        text: 'Este producto se marcará como completado',
+        text: 'Este producto se marcará como completado y se guardará en el historial.',
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#dc3545',
-        confirmButtonText: '¡Sí!',
+        confirmButtonText: 'Sí, completar',
         cancelButtonText: 'No'
-    }).then(result => {
-        if (result.isConfirmed) {
-            fetch('completar_producto.php', {
+    }).then(async result => {
+        if (!result.isConfirmed) return;
+
+        mostrarCargandoPedido('Completando producto...');
+
+        try {
+            const response = await fetch('completar_producto.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            }).then(() => location.reload());
+                body: JSON.stringify({
+                    id: id,
+                    id_pedido: id
+                })
+            });
+
+            const data = await leerRespuestaJson(response);
+            Swal.close();
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Producto completado',
+                html: `
+                    <div style="text-align:center;">
+                        <p style="margin-bottom:8px;">${escapeHtml(data.message || 'El producto fue completado correctamente.')}</p>
+                    </div>
+                `,
+                confirmButtonColor: '#28a745',
+                timer: 2200
+            }).then(() => {
+                location.reload();
+            });
+        } catch (error) {
+            Swal.close();
+            console.error('Error completarProducto:', error);
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al completar producto',
+                text: error.message || 'No se pudo completar el producto.',
+                confirmButtonColor: '#f97316'
+            });
         }
     });
 }
 
 function verHistorial(idOrden) {
     $('#modalHistorial').modal('show');
-    fetch('ver_historial_pedido.php?id_orden=' + idOrden).then(res => res.json()).then(data => {
-        let html = '<div class="timeline">';
-        if (data && data.length > 0) {
-            data.forEach(l => {
-                let icono = l.accion.includes('CREADO') ? 'fa-plus-circle' : (l.accion.includes('completado') ? 'fa-check-circle' : 'fa-file-alt');
-                let color = l.accion.includes('CREADO') ? '#0d6efd' : (l.accion.includes('completado') ? '#28a745' : '#6c757d');
-                html += `<div class="timeline-item">
-                            <div class="timeline-icon" style="background: ${color};"><i class="fas ${icono}"></i></div>
-                            <div class="timeline-content">
-                                <strong>${l.accion}</strong>
-                                <div class="small text-muted">${l.fecha} · ${l.usuario}</div>
-                                <div>${l.descripcion}</div>
-                            </div>
-                        </div>`;
-            });
-        } else {
-            html = '<div class="text-center p-4">No hay historial registrado</div>';
-        }
-        html += '</div>';
-        $('#contenidoHistorial').html(html);
-    });
+    fetch('ver_historial_pedido.php?id_orden=' + idOrden)
+        .then(res => res.json())
+        .then(data => {
+            let html = '<div class="timeline">';
+
+            if (data && data.length > 0) {
+                data.forEach(l => {
+                    const accionTexto = String(l.accion || '');
+                    const accionLower = accionTexto.toLowerCase();
+
+                    let icono = 'fa-file-alt';
+                    let color = '#6c757d';
+
+                    if (accionLower.includes('creado')) {
+                        icono = 'fa-plus-circle';
+                        color = '#0d6efd';
+                    } else if (accionLower.includes('completado')) {
+                        icono = 'fa-check-circle';
+                        color = '#28a745';
+                    } else if (accionLower.includes('cancelado')) {
+                        icono = 'fa-ban';
+                        color = '#dc3545';
+                    }
+
+                    html += `<div class="timeline-item">
+                                <div class="timeline-icon" style="background: ${color};"><i class="fas ${icono}"></i></div>
+                                <div class="timeline-content">
+                                    <strong>${escapeHtml(accionTexto)}</strong>
+                                    <div class="small text-muted">${escapeHtml(l.fecha || '')} · ${escapeHtml(l.usuario || 'Sistema')}</div>
+                                    <div>${escapeHtml(l.descripcion || l.detalle || '')}</div>
+                                </div>
+                            </div>`;
+                });
+            } else {
+                html = '<div class="text-center p-4">No hay historial registrado</div>';
+            }
+
+            html += '</div>';
+            $('#contenidoHistorial').html(html);
+        })
+        .catch(error => {
+            $('#contenidoHistorial').html(`
+                <div class="text-center p-4 text-danger">
+                    <i class="fas fa-exclamation-triangle"></i><br>
+                    No se pudo cargar el historial.
+                </div>
+            `);
+            console.error('Error historial:', error);
+        });
 }
 
-// ALERTA DE STOCK BAJO - EN ROJO
-let tiempoUltimaAlerta = 0;
+
+// ALERTA DE STOCK BAJO - UNA SOLA VEZ POR ENTRADA AL MÓDULO
+// - Si recargas por guardar/completar pedido, NO vuelve a salir.
+// - Si sales del módulo y vuelves a entrar, SÍ vuelve a salir.
+const STOCK_ALERT_KEY = 'pedidos_stock_critico_mostrado_en_entrada';
+
+function obtenerTipoNavegacion() {
+    const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+
+    if (navEntries && navEntries.length > 0) {
+        return navEntries[0].type || 'navigate';
+    }
+
+    if (performance.navigation && performance.navigation.type === 1) {
+        return 'reload';
+    }
+
+    return 'navigate';
+}
+
+function prepararAlertaStockPorEntrada() {
+    const tipoNavegacion = obtenerTipoNavegacion();
+
+    // Si no es recarga, significa que el usuario está entrando al módulo desde otra pantalla,
+    // desde el menú, desde el historial o abriendo la ruta de nuevo. En ese caso permitimos
+    // mostrar la alerta otra vez.
+    if (tipoNavegacion !== 'reload') {
+        sessionStorage.removeItem(STOCK_ALERT_KEY);
+    }
+}
 
 toastr.options = {
     closeButton: true,
@@ -1176,27 +1612,38 @@ toastr.options = {
 };
 
 function verificarStockCritico() {
+    // Si ya se mostró en esta entrada al módulo, no volvemos a molestar.
+    if (sessionStorage.getItem(STOCK_ALERT_KEY) === 'true') {
+        return;
+    }
+
     fetch('ajax_stock_critico.php')
     .then(res => res.json())
     .then(data => {
         if (data.error || !data.length) return;
-        const ahora = Date.now();
-        if (ahora - tiempoUltimaAlerta > 300000) {
-            let mensaje = '';
-            const productosMostrar = data.slice(0, 3);
-            productosMostrar.forEach(p => { mensaje += `<strong>${p.nombre}</strong> — Stock: ${p.cantidad}<br>`; });
-            if (data.length > 3) mensaje += `<br><span class="small">...y ${data.length - 3} productos más</span>`;
-            
-            // Usar toastr.error para color ROJO
-            toastr.error(mensaje, "⚠ Stock crítico detectado");
-            tiempoUltimaAlerta = ahora;
+
+        let mensaje = '';
+        const productosMostrar = data.slice(0, 3);
+
+        productosMostrar.forEach(p => {
+            mensaje += `<strong>${escapeHtml(p.nombre)}</strong> — Stock: ${escapeHtml(p.cantidad)}<br>`;
+        });
+
+        if (data.length > 3) {
+            mensaje += `<br><span class="small">...y ${data.length - 3} productos más</span>`;
         }
+
+        toastr.error(mensaje, "⚠ Stock crítico detectado");
+
+        // Guardamos que ya se mostró durante esta entrada al módulo.
+        // Si la página se recarga por completar/guardar, esta marca se conserva.
+        sessionStorage.setItem(STOCK_ALERT_KEY, 'true');
     })
     .catch(err => console.log("Error:", err));
 }
 
+prepararAlertaStockPorEntrada();
 verificarStockCritico();
-setInterval(verificarStockCritico, 60000);
 
 document.addEventListener('click', function(e) {
     let header = e.target.closest('[data-toggle="collapse"]');

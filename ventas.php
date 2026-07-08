@@ -438,6 +438,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                      * http://127.0.0.1:8787/abrir-cajon
                      */
                     $abrirCajonLocal = debe_abrir_cajon($metodo_pago);
+
+                    $productosAlerta = [];
+                    foreach ($carrito as $itemAlerta) {
+                        $cantidadAlerta = (int) ($itemAlerta['cantidad'] ?? 0);
+                        $precioAlerta = (float) ($itemAlerta['precio'] ?? 0);
+                        $productosAlerta[] = [
+                            'id' => (int) ($itemAlerta['id'] ?? 0),
+                            'nombre' => (string) ($itemAlerta['nombre'] ?? ''),
+                            'cantidad' => $cantidadAlerta,
+                            'precio' => $precioAlerta,
+                            'importe' => $precioAlerta * $cantidadAlerta
+                        ];
+                    }
                     
                     $_SESSION['carrito'] = [];
                     
@@ -453,10 +466,18 @@ El sistema intentará abrir el cajón en la PC del cajero.";
                     }
                     
                     $_SESSION['alerta'] = [
-                        'tipo' => 'success', 
-                        'titulo' => 'Venta exitosa', 
+                        'tipo' => 'success',
+                        'titulo' => 'Venta exitosa',
                         'mensaje' => $mensaje,
                         'folio' => $folio,
+                        'fecha' => date('d/m/Y H:i:s'),
+                        'productos' => $productosAlerta,
+                        'total' => (float) $total,
+                        'monto_pagado' => (float) $monto_pagado,
+                        'cambio' => (float) $cambio,
+                        'metodo_pago' => (string) $metodo_pago,
+                        'correo_cliente' => $correo_cliente,
+                        'ticket_enviado' => $ticketEnviado,
                         'cajon_abierto' => false,
                         'cajon_mensaje' => $abrirCajonLocal ? 'Apertura delegada al servicio local.' : 'No requerido.',
                         'abrir_cajon_local' => $abrirCajonLocal
@@ -465,7 +486,7 @@ El sistema intentará abrir el cajón en la PC del cajero.";
                     header("Location: " . strtok($_SERVER["REQUEST_URI"], '?') . "?venta_exitosa=1");
                     exit;
                     
-                } catch (Exception $e) {
+                } catch (Throwable $e) {
                     $conn->rollback();
                     $_SESSION['alerta'] = ['tipo' => 'error', 'titulo' => 'Error', 'mensaje' => 'Error al registrar la venta: ' . $e->getMessage()];
                     header("Location: " . $_SERVER['PHP_SELF']);
@@ -693,7 +714,7 @@ if ($productos_result) {
                     <div class="col-md-4 col-6">
                         <div class="form-group">
                             <label class="small-label"><i class="fas fa-money-bill me-1"></i> Pagado</label>
-                            <input type="number" class="form-control form-control-sm pago-numero" name="monto_pagado" id="monto_pagado" step="0.01" min="0" placeholder="0.00" oninput="calcularCambio()">
+                            <input type="number" class="form-control form-control-sm pago-numero" name="monto_pagado" id="monto_pagado" step="0.50" min="0" placeholder="0.00" oninput="calcularCambio()">
                         </div>
                     </div>
                     <div class="col-md-4 col-12">
@@ -2060,8 +2081,129 @@ async function procesarPagoMercadoPago(total, metodo) {
 }
 
 
+// ============ TICKET / MENSAJE FINAL DE VENTA ============
+function formatearDinero(valor) {
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero.toFixed(2) : '0.00';
+}
+
+function obtenerMetodoPagoTexto(metodo) {
+    switch (metodo) {
+        case 'efectivo':
+            return 'EFECTIVO';
+        case 'transferencia':
+            return 'TRANSFERENCIA';
+        case 'tarjeta_debito':
+            return 'TARJETA DÉBITO';
+        case 'tarjeta_credito':
+            return 'TARJETA CRÉDITO';
+        default:
+            return metodo ? String(metodo).toUpperCase() : 'NO CAPTURADO';
+    }
+}
+
+function construirHtmlVentaRegistrada(data) {
+    const productos = Array.isArray(data?.productos) ? data.productos : [];
+    const total = Number(data?.total || 0);
+    const pago = Number(data?.monto_pagado || 0);
+    const cambio = Number(data?.cambio || 0);
+    const metodo = data?.metodo_pago || '';
+    const metodoTexto = obtenerMetodoPagoTexto(metodo);
+    const fecha = data?.fecha || new Date().toLocaleString();
+    const folio = data?.folio || 'Sin folio';
+    const correoCliente = data?.correo_cliente || '';
+    const ticketEnviado = data?.ticket_enviado === true;
+
+    const ticketItems = productos.length > 0
+        ? productos.map(item => {
+            const cantidad = Number(item?.cantidad || 0);
+            const precio = Number(item?.precio || 0);
+            const importe = Number(item?.importe ?? (precio * cantidad));
+            const nombre = item?.nombre || 'Producto';
+
+            return `
+                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; gap:12px;">
+                    <span style="color:#334155; text-align:left;">${escapeHtml(nombre)} x${cantidad}</span>
+                    <span style="font-weight:700; color:#f97316; white-space:nowrap;">$${formatearDinero(importe)}</span>
+                </div>
+            `;
+        }).join('')
+        : `
+            <div style="text-align:center; color:#64748b; font-size:13px; padding:8px 0;">
+                Venta registrada correctamente.
+            </div>
+        `;
+
+    return `
+        <div style="background:#ffffff; border-radius:20px; padding:20px; max-width:420px; margin:0 auto;">
+            <div style="text-align:center; border-bottom:2px solid #e5e7eb; padding-bottom:12px; margin-bottom:16px;">
+                <div style="width:74px; height:74px; border-radius:50%; border:4px solid #dcfce7; display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+                    <i class="fas fa-check" style="font-size:34px; color:#16a34a;"></i>
+                </div>
+                <div style="font-size:23px; font-weight:900; color:#3f3f46; margin-bottom:12px;">Venta registrada</div>
+                <div style="font-size:16px; font-weight:900; color:#1e293b;">TIENDA PESCADORES</div>
+                <div style="font-size:10px; color:#6b7280;">${escapeHtml(fecha)}</div>
+                <div style="font-size:10px; color:#94a3b8; margin-top:4px;">Folio: <strong style="color:#334155;">${escapeHtml(folio)}</strong></div>
+            </div>
+
+            <div style="margin-bottom:16px; max-height:200px; overflow-y:auto;">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#9ca3af; border-bottom:1px solid #e5e7eb; padding-bottom:6px; margin-bottom:8px;">
+                    <span>PRODUCTO</span>
+                    <span>IMPORTE</span>
+                </div>
+                ${ticketItems}
+            </div>
+
+            <div style="background:#f8fafc; border-radius:12px; padding:12px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                    <span style="color:#475569;">TOTAL</span>
+                    <span style="font-weight:800;">$${formatearDinero(total)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px;">
+                    <span style="color:#475569;">PAGO CON</span>
+                    <span style="font-weight:800;">$${formatearDinero(pago)}</span>
+                </div>
+            </div>
+
+            ${
+                metodo === 'efectivo'
+                    ? `
+                        <div style="background:#16a34a; border-radius:16px; padding:20px; text-align:center; margin-bottom:16px; box-shadow:0 12px 28px rgba(22,163,74,.20);">
+                            <div style="font-size:14px; color:white; opacity:0.92; margin-bottom:8px;">SU CAMBIO</div>
+                            <div style="font-size:42px; font-weight:900; color:white;">$${formatearDinero(cambio)}</div>
+                            <div style="font-size:11px; color:white; opacity:0.78; margin-top:8px;">Entregue esta cantidad al cliente</div>
+                        </div>
+                    `
+                    : ''
+            }
+
+            <div style="display:flex; justify-content:space-between; background:#f1f5f9; border-radius:10px; padding:10px 12px; margin-bottom:10px;">
+                <span style="color:#475569;">MÉTODO DE PAGO</span>
+                <span style="font-weight:800;">${escapeHtml(metodoTexto)}</span>
+            </div>
+
+            ${
+                correoCliente
+                    ? `
+                        <div style="background:${ticketEnviado ? '#ecfdf5' : '#fff7ed'}; border:1px solid ${ticketEnviado ? '#bbf7d0' : '#fed7aa'}; color:${ticketEnviado ? '#15803d' : '#9a3412'}; border-radius:10px; padding:10px; font-size:13px; font-weight:700; line-height:1.45;">
+                            ${ticketEnviado
+                                ? `Ticket enviado correctamente<br><span style="font-weight:600;">${escapeHtml(correoCliente)}</span>`
+                                : `Venta registrada, pero no se pudo enviar el ticket al correo capturado.`}
+                        </div>
+                    `
+                    : `
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; border-radius:10px; padding:10px; font-size:13px;">
+                            No se capturó correo. Solo se registró la venta.
+                        </div>
+                    `
+            }
+        </div>
+    `;
+}
+
+
 // ============ CONFIRMAR VENTA ============
-function confirmarVenta() {
+async function confirmarVenta() {
     if (ventaEnProceso) {
         Swal.fire({
             icon: 'info',
@@ -2075,7 +2217,7 @@ function confirmarVenta() {
         return;
     }
 
-    if (carrito.length === 0) {
+    if (!Array.isArray(carrito) || carrito.length === 0) {
         Swal.fire({
             icon: 'warning',
             title: 'Carrito vacío',
@@ -2086,9 +2228,10 @@ function confirmarVenta() {
         return;
     }
 
-    const total = parseFloat(document.getElementById('total').value) || 0;
-    const pago = parseFloat(document.getElementById('monto_pagado').value) || 0;
+    const total = parseFloat(document.getElementById('total')?.value) || 0;
+    const pago = parseFloat(document.getElementById('monto_pagado')?.value) || 0;
     const metodo = document.querySelector('input[name="metodo_pago"]:checked')?.value;
+    const correoCliente = document.getElementById('correo_cliente')?.value.trim() || '';
 
     if (!metodo) {
         Swal.fire({
@@ -2108,9 +2251,9 @@ function confirmarVenta() {
             text: 'Ingresa un monto válido',
             confirmButtonColor: '#f97316',
             confirmButtonText: 'Corregir'
+        }).then(() => {
+            document.getElementById('monto_pagado')?.focus();
         });
-
-        document.getElementById('monto_pagado').focus();
         return;
     }
 
@@ -2121,9 +2264,9 @@ function confirmarVenta() {
             text: `Faltan $${(total - pago).toFixed(2)} para completar la venta`,
             confirmButtonColor: '#f97316',
             confirmButtonText: 'Aumentar pago'
+        }).then(() => {
+            document.getElementById('monto_pagado')?.focus();
         });
-
-        document.getElementById('monto_pagado').focus();
         return;
     }
 
@@ -2137,195 +2280,54 @@ function confirmarVenta() {
                 text: 'Ingresa el folio de la transferencia',
                 confirmButtonColor: '#f97316',
                 confirmButtonText: 'Completar'
+            }).then(() => {
+                document.getElementById('folio_transferencia')?.focus();
             });
             return;
         }
     }
 
-    let ticketItems = '';
+    ventaEnProceso = true;
 
-    carrito.forEach(item => {
-        const subtotal = item.precio * item.cantidad;
+    const btn = document.getElementById('btnConfirmar');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Procesando...';
+    }
 
-        ticketItems += `
-            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; gap:12px;">
-                <span style="color:#334155; text-align:left;">${escapeHtml(item.nombre)} x${item.cantidad}</span>
-                <span style="font-weight:600; color:#f97316; white-space:nowrap;">$${subtotal.toFixed(2)}</span>
-            </div>
-        `;
-    });
+    try {
+        guardarCarrito();
 
-    const cambio = pago - total;
-    const fecha = new Date().toLocaleString();
-    const correoCliente = document.getElementById('correo_cliente')?.value.trim() || '';
-
-    const metodoTexto =
-        metodo === 'efectivo'
-            ? 'EFECTIVO'
-            : metodo === 'transferencia'
-                ? 'TRANSFERENCIA'
-                : metodo === 'tarjeta_debito'
-                    ? 'TARJETA DÉBITO'
-                    : 'TARJETA CRÉDITO';
-
-    Swal.fire({
-        title: 'Confirmar venta',
-        html: `
-            <div style="background:#ffffff; border-radius:20px; padding:20px; max-width:400px; margin:0 auto;">
-                <div style="text-align:center; border-bottom:2px solid #e5e7eb; padding-bottom:12px; margin-bottom:16px;">
-                    <div style="font-size:16px; font-weight:800; color:#1e293b;">TIENDA PESCADORES</div>
-                    <div style="font-size:10px; color:#6b7280;">${fecha}</div>
-                </div>
-
-                <div style="margin-bottom:16px; max-height:200px; overflow-y:auto;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#9ca3af; border-bottom:1px solid #e5e7eb; padding-bottom:6px; margin-bottom:8px;">
-                        <span>PRODUCTO</span>
-                        <span>IMPORTE</span>
-                    </div>
-                    ${ticketItems}
-                </div>
-
-                <div style="background:#f8fafc; border-radius:12px; padding:12px; margin-bottom:16px;">
-                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
-                        <span style="color:#475569;">TOTAL</span>
-                        <span style="font-weight:700;">$${total.toFixed(2)}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
-                        <span style="color:#475569;">PAGO CON</span>
-                        <span style="font-weight:700;">$${pago.toFixed(2)}</span>
-                    </div>
-                </div>
-
-                ${
-                    metodo === 'efectivo'
-                        ? `
-                            <div style="background:#16a34a; border-radius:16px; padding:20px; text-align:center; margin-bottom:16px;">
-                                <div style="font-size:14px; color:white; opacity:0.9; margin-bottom:8px;">SU CAMBIO</div>
-                                <div style="font-size:42px; font-weight:800; color:white;">$${cambio.toFixed(2)}</div>
-                                <div style="font-size:11px; color:white; opacity:0.7; margin-top:8px;">Entregue esta cantidad al cliente</div>
-                            </div>
-                        `
-                        : ''
-                }
-
-                <div style="display:flex; justify-content:space-between; background:#f1f5f9; border-radius:10px; padding:10px 12px; margin-bottom:10px;">
-                    <span style="color:#475569;">MÉTODO DE PAGO</span>
-                    <span style="font-weight:700;">${metodoTexto}</span>
-                </div>
-
-                ${
-                    correoCliente
-                        ? `
-                            <div style="background:#ecfdf5; border:1px solid #bbf7d0; color:#15803d; border-radius:10px; padding:10px; font-size:13px; font-weight:600;">
-                                El ticket se enviará al correo del cliente al registrar la venta.
-                            </div>
-                        `
-                        : `
-                            <div style="background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; border-radius:10px; padding:10px; font-size:13px;">
-                                No se capturó correo. Solo se registrará la venta.
-                            </div>
-                        `
-                }
-            </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Registrar venta',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#f97316',
-        cancelButtonColor: '#94a3b8',
-        allowOutsideClick: false,
-        allowEscapeKey: false
-    }).then(async result => {
-        if (!result.isConfirmed) {
-            ventaEnProceso = false;
-            resetBotonVenta();
-            enfocarCodigo();
-            return;
+        if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
+            await procesarPagoMercadoPago(total, metodo);
+        } else {
+            limpiarDatosMercadoPago();
         }
 
-        ventaEnProceso = true;
-
-        const btn = document.getElementById('btnConfirmar');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Procesando...';
+        const carritoJson = document.getElementById('carrito_json');
+        if (carritoJson) {
+            carritoJson.value = JSON.stringify(carrito);
         }
+
+        const audio = document.getElementById('sonidoCaja');
+        if (audio) {
+            audio.play().catch(e => console.log('Audio error:', e));
+        }
+
+        limpiarVentaActivaLocal();
+        document.getElementById('ventaForm')?.submit();
+    } catch (error) {
+        Swal.close();
+        ventaEnProceso = false;
+        resetBotonVenta();
 
         Swal.fire({
-            title: metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito'
-                ? 'Procesando pago'
-                : 'Registrando venta',
-            html: `
-                <div style="text-align:center;">
-                    <p style="color:#64748b; font-size:14px; margin-bottom:8px;">
-                        ${metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito'
-                            ? 'Primero se validará el cobro en la terminal Mercado Pago.'
-                            : 'Guardando venta, generando ticket y actualizando inventario.'}
-                    </p>
-                    ${correoCliente
-                        ? '<p style="color:#16a34a; font-size:13px; font-weight:600;">También se enviará el ticket al correo del cliente.</p>'
-                        : '<p style="color:#64748b; font-size:13px;">No se capturó correo, solo se registrará la venta.</p>'}
-                </div>
-            `,
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            didOpen: () => Swal.showLoading()
+            icon: 'error',
+            title: 'Error al procesar',
+            text: error.message || 'Ocurrió un error inesperado',
+            confirmButtonColor: '#f97316'
         });
-
-        try {
-            guardarCarrito();
-
-            if (metodo === 'tarjeta_debito' || metodo === 'tarjeta_credito') {
-                await procesarPagoMercadoPago(total, metodo);
-            } else {
-                limpiarDatosMercadoPago();
-            }
-
-            document.getElementById('carrito_json').value = JSON.stringify(carrito);
-
-            const audio = document.getElementById('sonidoCaja');
-            if (audio) {
-                audio.play().catch(e => console.log('Audio error:', e));
-            }
-
-            Swal.fire({
-                title: 'Registrando venta',
-                html: `
-                    <div style="text-align:center;">
-                        <p style="color:#64748b; font-size:14px; margin-bottom:8px;">
-                            Guardando la venta en el sistema.
-                        </p>
-                        ${correoCliente
-                            ? '<p style="color:#16a34a; font-size:13px; font-weight:600;">Enviando ticket al correo del cliente.</p>'
-                            : '<p style="color:#64748b; font-size:13px;">Finalizando registro de venta.</p>'}
-                    </div>
-                `,
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                showConfirmButton: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                    setTimeout(() => {
-                        document.getElementById('ventaForm').submit();
-                    }, 250);
-                }
-            });
-
-        } catch (error) {
-            Swal.close();
-            ventaEnProceso = false;
-            resetBotonVenta();
-
-            Swal.fire({
-                icon: 'error',
-                title: 'Error al procesar',
-                text: error.message || 'Ocurrió un error inesperado',
-                confirmButtonColor: '#f97316'
-            });
-        }
-    });
+    }
 }
 
 // ============ DATOS BANCARIOS ============
@@ -2568,7 +2570,26 @@ function actualizarDespuesDeFiltrar() {
 
 
 // ============ CAJÓN LOCAL ============
-async function abrirCajonLocalEnSegundoPlano() {
+function mostrarAlertaCajonError(mensaje) {
+    Swal.fire({
+        icon: 'warning',
+        title: 'Cajón no abierto',
+        html: `
+            <div style="text-align:left; line-height:1.5;">
+                La venta sí se guardó correctamente, pero no se pudo abrir el cajón local.<br><br>
+                ${escapeHtml(mensaje || 'Revisa que el servicio local esté abierto y que el puerto sea COM3.')}<br><br>
+                Verifica que en la PC del cajero esté abierto el archivo:<br>
+                <b>iniciar-cajon.bat</b><br><br>
+                Servicio esperado:<br>
+                <code>http://127.0.0.1:8787/abrir-cajon</code>
+            </div>
+        `,
+        confirmButtonColor: '#f97316',
+        confirmButtonText: 'Entendido'
+    });
+}
+
+async function abrirCajonLocalEnSegundoPlano(mostrarAlerta = true) {
     try {
         const res = await fetch(CAJON_LOCAL_URL, {
             method: 'POST',
@@ -2587,33 +2608,86 @@ async function abrirCajonLocalEnSegundoPlano() {
             const detalle = data?.message || `HTTP ${res.status}`;
             console.warn('No se pudo abrir el cajón local:', detalle);
 
-            Swal.fire({
-                icon: 'warning',
-                title: 'Venta registrada',
-                text: 'La venta se guardó, pero no se pudo abrir el cajón local. Revisa que el servicio local esté abierto y que el puerto sea COM3.',
-                confirmButtonColor: '#f97316'
-            });
-            return;
+            if (mostrarAlerta) {
+                mostrarAlertaCajonError(detalle);
+            }
+
+            return {
+                ok: false,
+                message: detalle
+            };
         }
 
         console.log('Cajón abierto:', data.message || 'OK');
+        return {
+            ok: true,
+            message: data.message || 'Cajón abierto correctamente.'
+        };
     } catch (error) {
         console.error('Servicio local del cajón no disponible:', error);
 
-        Swal.fire({
-            icon: 'warning',
-            title: 'Venta registrada',
-            html: `
-                <div style="text-align:left; line-height:1.5;">
-                    La venta se guardó correctamente, pero no encontré el servicio local del cajón.<br><br>
-                    Verifica que en la PC del cajero esté abierto el archivo:<br>
-                    <b>iniciar-cajon.bat</b><br><br>
-                    Servicio esperado:<br>
-                    <code>http://127.0.0.1:8787/abrir-cajon</code>
-                </div>
-            `,
-            confirmButtonColor: '#f97316'
-        });
+        const mensaje = error?.message || 'No se encontró el servicio local del cajón.';
+
+        if (mostrarAlerta) {
+            mostrarAlertaCajonError(mensaje);
+        }
+
+        return {
+            ok: false,
+            message: mensaje
+        };
+    }
+}
+
+
+function manejarEnterConfirmarVenta(e) {
+    if (e.key !== 'Enter') return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (ventaEnProceso || buscandoProducto) return;
+    if (estaDentroDeSweetAlert(e.target)) return;
+    if (document.getElementById('modalFlotante')?.classList.contains('active')) return;
+
+    const target = e.target;
+    const tag = (target?.tagName || '').toLowerCase();
+    const id = target?.id || '';
+
+    if (tag === 'textarea') return;
+
+    if (tag === 'button') {
+        if (id === 'btnConfirmar') {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmarVenta();
+        }
+        return;
+    }
+
+    if (id === 'buscadorProductos' || id === 'buscadorModal') {
+        return;
+    }
+
+    if (target?.classList?.contains('cantidad-input')) {
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (id === 'codigo') {
+        const codigo = target.value.trim();
+        if (codigo !== '') return;
+
+        if (Array.isArray(carrito) && carrito.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmarVenta();
+        }
+        return;
+    }
+
+    if ((target?.closest && target.closest('#ventaForm')) || !esElementoEditable(target)) {
+        if (Array.isArray(carrito) && carrito.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmarVenta();
+        }
     }
 }
 
@@ -2621,140 +2695,50 @@ async function abrirCajonLocalEnSegundoPlano() {
 document.addEventListener('DOMContentLoaded', function() {
     if (ALERTA_SESION) {
         const mensaje = ALERTA_SESION.mensaje || '';
-        const folio = ALERTA_SESION.folio || '';
         const esSuccess = (ALERTA_SESION.tipo || 'success') === 'success';
         const abrirCajonLocal = ALERTA_SESION.abrir_cajon_local === true;
+        let cajonPromise = null;
 
         if (esSuccess && abrirCajonLocal) {
-            abrirCajonLocalEnSegundoPlano();
+            cajonPromise = abrirCajonLocalEnSegundoPlano(false);
         }
 
-        const ticketEnviado = mensaje.toLowerCase().includes('ticket enviado');
-        const cambioMatch = mensaje.match(/Cambio:\s*\$?([\d.,]+)/i);
-        const cambioTexto = cambioMatch ? `$${cambioMatch[1]}` : '$0.00';
+        if (esSuccess) {
+            limpiarVentaActivaLocal();
 
-        let correoTicket = '';
-        const correoMatch = mensaje.match(/Ticket enviado a\s+([^\n]+)/i);
-        if (correoMatch && correoMatch[1]) {
-            correoTicket = correoMatch[1].trim();
+            Swal.fire({
+                html: construirHtmlVentaRegistrada(ALERTA_SESION),
+                width: '520px',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#16a34a',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then(async () => {
+                if (cajonPromise) {
+                    const resultadoCajon = await cajonPromise;
+                    if (!resultadoCajon.ok) {
+                        mostrarAlertaCajonError(resultadoCajon.message);
+                    }
+                }
+            });
+        } else {
+            Swal.fire({
+                icon: ALERTA_SESION.tipo || 'error',
+                title: ALERTA_SESION.titulo || 'Aviso',
+                html: `
+                    <div style="text-align:center; padding:4px 8px;">
+                        <div style="font-size:14px; color:#475569; line-height:1.6; white-space:pre-line;">
+                            ${escapeHtml(mensaje)}
+                        </div>
+                    </div>
+                `,
+                width: '440px',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#f97316',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
         }
-
-        Swal.fire({
-            icon: ALERTA_SESION.tipo || 'success',
-            title: esSuccess ? 'Venta completada' : (ALERTA_SESION.titulo || 'Aviso'),
-            html: esSuccess ? `
-                <div style="text-align:center; padding:4px 8px;">
-
-                    <div style="
-                        margin:6px auto 16px;
-                        width:76px;
-                        height:76px;
-                        border-radius:24px;
-                        background:linear-gradient(135deg,#16a34a,#22c55e);
-                        display:flex;
-                        align-items:center;
-                        justify-content:center;
-                        box-shadow:0 12px 26px rgba(22,163,74,.28);
-                    ">
-                        <i class="fas fa-receipt" style="font-size:32px; color:white;"></i>
-                    </div>
-
-                    <div style="
-                        font-size:14px;
-                        color:#64748b;
-                        margin-bottom:16px;
-                        line-height:1.5;
-                    ">
-                        La venta fue registrada correctamente en el sistema.
-                    </div>
-
-                    <div style="
-                        display:grid;
-                        grid-template-columns:1fr 1fr;
-                        gap:10px;
-                        margin-bottom:12px;
-                    ">
-                        <div style="
-                            background:#f8fafc;
-                            border:1px solid #e2e8f0;
-                            border-radius:14px;
-                            padding:12px;
-                        ">
-                            <div style="
-                                font-size:10px;
-                                color:#94a3b8;
-                                text-transform:uppercase;
-                                letter-spacing:.5px;
-                                margin-bottom:5px;
-                            ">
-                                Cambio
-                            </div>
-                            <div style="
-                                font-size:18px;
-                                font-weight:900;
-                                color:#16a34a;
-                            ">
-                                ${escapeHtml(cambioTexto)}
-                            </div>
-                        </div>
-
-                        <div style="
-                            background:#f8fafc;
-                            border:1px solid #e2e8f0;
-                            border-radius:14px;
-                            padding:12px;
-                        ">
-                            <div style="
-                                font-size:10px;
-                                color:#94a3b8;
-                                text-transform:uppercase;
-                                letter-spacing:.5px;
-                                margin-bottom:5px;
-                            ">
-                                Folio
-                            </div>
-                            <div style="
-                                font-size:13px;
-                                font-weight:800;
-                                color:#0f172a;
-                                word-break:break-word;
-                            ">
-                                ${escapeHtml(folio || 'Sin folio')}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="
-                        background:${ticketEnviado ? '#ecfdf5' : '#fff7ed'};
-                        border:1px solid ${ticketEnviado ? '#bbf7d0' : '#fed7aa'};
-                        color:${ticketEnviado ? '#15803d' : '#9a3412'};
-                        border-radius:14px;
-                        padding:12px;
-                        font-size:13px;
-                        font-weight:700;
-                        line-height:1.5;
-                    ">
-                        ${
-                            ticketEnviado
-                                ? `Ticket enviado correctamente${correoTicket ? `<br><span style="font-weight:600;">${escapeHtml(correoTicket)}</span>` : ''}`
-                                : 'Venta registrada sin envío de ticket por correo.'
-                        }
-                    </div>
-
-                </div>
-            ` : `
-                <div style="text-align:center; padding:4px 8px;">
-                    <div style="font-size:14px; color:#475569; line-height:1.6; white-space:pre-line;">
-                        ${escapeHtml(mensaje)}
-                    </div>
-                </div>
-            `,
-            width: '440px',
-            confirmButtonText: 'Entendido',
-            confirmButtonColor: '#16a34a',
-            allowOutsideClick: false,
-            allowEscapeKey: false
-        });
     }
 
     renderCarrito();
@@ -2762,6 +2746,7 @@ document.addEventListener('DOMContentLoaded', function() {
     restaurarVentaActivaLocal();
     enfocarCodigo();
     document.addEventListener('keydown', manejarTeclaGlobalScanner, true);
+    document.addEventListener('keydown', manejarEnterConfirmarVenta, true);
 
     const modalFlotante = document.getElementById('modalFlotante');
 
@@ -2795,8 +2780,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 clearTimeout(timerCodigo);
 
-                if (this.value.trim() !== '') {
+                const codigoActual = this.value.trim();
+
+                if (codigoActual !== '') {
                     agregarProducto();
+                    return;
+                }
+
+                if (Array.isArray(carrito) && carrito.length > 0) {
+                    confirmarVenta();
                 }
             }
         });

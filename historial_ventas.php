@@ -178,6 +178,79 @@ table.dataTable tbody td:first-child {
     background: #ea580c;
 }
 
+/* Acciones bloqueadas por lógica de venta */
+.acciones-venta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+
+.acciones-venta a,
+.acciones-venta span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* Mantener los colores originales de cada acción */
+.acciones-venta .text-success:not(.accion-deshabilitada),
+.acciones-venta a.text-success:not(.accion-deshabilitada) {
+    color: #28a745 !important;
+}
+
+.acciones-venta .reenvio-ticket:not(.accion-deshabilitada) {
+    color: #f97316 !important;
+}
+
+.acciones-venta .cancelar-articulo:not(.accion-deshabilitada) {
+    color: #ffc107 !important;
+}
+
+.acciones-venta .devolucion-parcial:not(.accion-deshabilitada) {
+    color: #7a68b1 !important;
+}
+
+.acciones-venta .cancelar-venta:not(.accion-deshabilitada) {
+    color: #dc3545 !important;
+}
+
+.acciones-venta .text-success:not(.accion-deshabilitada) i,
+.acciones-venta .reenvio-ticket:not(.accion-deshabilitada) i,
+.acciones-venta .cancelar-articulo:not(.accion-deshabilitada) i,
+.acciones-venta .devolucion-parcial:not(.accion-deshabilitada) i,
+.acciones-venta .cancelar-venta:not(.accion-deshabilitada) i {
+    color: inherit !important;
+}
+
+.accion-deshabilitada {
+    color: #cbd5e1 !important;
+    cursor: not-allowed !important;
+    opacity: 0.75;
+    text-decoration: none !important;
+    pointer-events: auto;
+}
+
+.accion-deshabilitada i {
+    color: #cbd5e1 !important;
+}
+
+.accion-cargando {
+    color: #94a3b8 !important;
+    cursor: wait !important;
+}
+
+.accion-cargando i {
+    color: #94a3b8 !important;
+}
+
+.accion-separador {
+    color: #d1d5db;
+    font-size: 11px;
+    user-select: none;
+}
+
 /* Paginación */
 .dataTables_paginate .paginate_button {
     padding: 6px 12px !important;
@@ -555,8 +628,8 @@ table.dataTable tbody td:first-child {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label><i class="fas fa-comment"></i> Motivo de cancelación:</label>
-                    <textarea id="ca_motivo" class="form-control" rows="3" placeholder="Ej: Cliente cambió de opinión, producto defectuoso, etc."></textarea>
+                    <label><i class="fas fa-comment"></i> Motivo de cancelación <small class="text-muted">(opcional)</small>:</label>
+                    <textarea id="ca_motivo" class="form-control" rows="3" placeholder="Puedes dejarlo vacío o escribir el motivo..."></textarea>
                 </div>
             </div>
             <div class="modal-footer modal-footer-custom">
@@ -594,8 +667,8 @@ table.dataTable tbody td:first-child {
                     <input type="number" id="dv_cantidad" class="form-control" min="1" placeholder="Ej: 2">
                 </div>
                 <div class="form-group">
-                    <label><i class="fas fa-comment"></i> Motivo de devolución:</label>
-                    <textarea id="dv_motivo" class="form-control" rows="3" placeholder="Ej: Producto defectuoso, no cumple expectativas, etc."></textarea>
+                    <label><i class="fas fa-comment"></i> Motivo de devolución <small class="text-muted">(opcional)</small>:</label>
+                    <textarea id="dv_motivo" class="form-control" rows="3" placeholder="Puedes dejarlo vacío o escribir el motivo..."></textarea>
                 </div>
             </div>
             <div class="modal-footer modal-footer-custom">
@@ -693,26 +766,23 @@ $(document).ready(function() {
     $('#btnConfirmarCancelarArticulo').on('click', function() {
         const folio = $('#ca_folio').val();
         const producto = $('#ca_producto').val();
-        const motivo = $('#ca_motivo').val();
-        
+        const motivo = ($('#ca_motivo').val() || '').trim();
+
         if (!producto) {
             Swal.fire('Error', 'Selecciona un producto', 'error');
             return;
         }
-        if (!motivo) {
-            Swal.fire('Error', 'Ingresa un motivo', 'error');
-            return;
-        }
-        
+
         confirmarCancelarArticulo(folio, producto, motivo);
     });
-    
+
     $('#btnConfirmarDevolucion').on('click', function() {
         const folio = $('#dv_folio').val();
         const producto = $('#dv_producto').val();
-        const cantidad = $('#dv_cantidad').val();
-        const motivo = $('#dv_motivo').val();
-        
+        const cantidad = parseInt($('#dv_cantidad').val(), 10);
+        const motivo = ($('#dv_motivo').val() || '').trim();
+        const maxPermitido = parseInt($('#dv_producto option:selected').data('max-devolucion') || 0, 10);
+
         if (!producto) {
             Swal.fire('Error', 'Selecciona un producto', 'error');
             return;
@@ -721,11 +791,11 @@ $(document).ready(function() {
             Swal.fire('Error', 'Ingresa una cantidad válida', 'error');
             return;
         }
-        if (!motivo) {
-            Swal.fire('Error', 'Ingresa un motivo', 'error');
+        if (maxPermitido > 0 && cantidad > maxPermitido) {
+            Swal.fire('Cantidad no permitida', `Puedes devolver máximo ${maxPermitido} pieza(s) de este producto.`, 'warning');
             return;
         }
-        
+
         confirmarDevolucion(folio, producto, cantidad, motivo);
     });
 });
@@ -801,35 +871,55 @@ function cargarVentas() {
                 orderable: false,
                 render: function(row) {
                     const folio = row.folio_ticket ? String(row.folio_ticket) : '';
+                    const folioEncoded = encodeURIComponent(folio);
                     const esPedido = folio.startsWith('PEDIDO-');
                     const pedidoCompletado = row.estado_pedido === 'completado';
+                    const correoCliente = row.correo_cliente ? String(row.correo_cliente).trim() : '';
+                    const puedeReenviar = tieneCorreoValido(correoCliente);
+
                     const ticketLink = row.ticket_pdf
                         ? `<a href="tickets/${row.ticket_pdf}" target="_blank" class="text-success" title="Ver PDF"><i class="fas fa-file-pdf"></i></a>`
                         : `<span class="text-muted" title="Sin ticket"><i class="fas fa-file-pdf"></i></span>`;
 
-                    return `
-                        <button class="btn-ver-ticket" data-folio="${encodeURIComponent(folio)}">
-                            <i class="fas fa-eye"></i> Ver
-                        </button>
-                        ${ticketLink}
-                        | <a href="#" class="reenvio-ticket" data-folio="${encodeURIComponent(folio)}" title="Reenviar" style="color: #f97316;">
-                            <i class="fas fa-paper-plane"></i>
-                        </a>
-                        | ${!esPedido || !pedidoCompletado ? 
-                            `<a href="#" class="cancelar-articulo" data-folio="${encodeURIComponent(folio)}" title="Cancelar artículo" style="color: #ffc107;">
+                    const reenvioLink = puedeReenviar
+                        ? `<a href="#" class="reenvio-ticket" data-folio="${folioEncoded}" data-correo="${escapeHtml(correoCliente)}" title="Reenviar ticket" style="color: #f97316;">
+                                <i class="fas fa-paper-plane"></i>
+                           </a>`
+                        : `<span class="reenvio-ticket accion-deshabilitada" data-disabled="1" data-folio="${folioEncoded}" title="No se puede reenviar: la venta no tiene correo registrado">
+                                <i class="fas fa-paper-plane"></i>
+                           </span>`;
+
+                    const accionesParcialesBloqueadasPorPedido = esPedido && pedidoCompletado;
+
+                    const cancelarArticuloLink = accionesParcialesBloqueadasPorPedido
+                        ? `<span class="accion-deshabilitada" title="No disponible para pedido completado"><i class="fas fa-times-circle"></i></span>`
+                        : `<a href="#" class="cancelar-articulo accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #ffc107;" data-folio="${folioEncoded}" title="Validando productos de la venta...">
                                 <i class="fas fa-times-circle"></i>
-                            </a>` : 
-                            `<span class="text-muted"><i class="fas fa-times-circle"></i></span>`
-                        }
-                        | ${!esPedido || !pedidoCompletado ? 
-                            `<a href="#" class="devolucion-parcial" data-folio="${encodeURIComponent(folio)}" title="Devolución" style="color: #7a68b1;">
+                           </a>`;
+
+                    const devolucionLink = accionesParcialesBloqueadasPorPedido
+                        ? `<span class="accion-deshabilitada" title="No disponible para pedido completado"><i class="fas fa-arrow-rotate-left"></i></span>`
+                        : `<a href="#" class="devolucion-parcial accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #7a68b1;" data-folio="${folioEncoded}" title="Validando productos de la venta...">
                                 <i class="fas fa-arrow-rotate-left"></i>
-                            </a>` : 
-                            `<span class="text-muted"><i class="fas fa-arrow-rotate-left"></i></span>`
-                        }
-                        | <a href="#" class="cancelar-venta" data-folio="${encodeURIComponent(folio)}" title="Cancelar venta" style="color: #dc3545;">
-                            <i class="fas fa-ban"></i>
-                        </a>
+                           </a>`;
+
+                    return `
+                        <span class="acciones-venta" data-folio="${folioEncoded}">
+                            <button class="btn-ver-ticket" data-folio="${folioEncoded}" title="Ver ticket">
+                                <i class="fas fa-eye"></i> Ver
+                            </button>
+                            ${ticketLink}
+                            <span class="accion-separador">|</span>
+                            ${reenvioLink}
+                            <span class="accion-separador">|</span>
+                            ${cancelarArticuloLink}
+                            <span class="accion-separador">|</span>
+                            ${devolucionLink}
+                            <span class="accion-separador">|</span>
+                            <a href="#" class="cancelar-venta" data-folio="${folioEncoded}" title="Cancelar venta completa" style="color: #dc3545;">
+                                <i class="fas fa-ban"></i>
+                            </a>
+                        </span>
                     `;
                 }
             }
@@ -869,6 +959,7 @@ function cargarVentas() {
             $('.dataTables_paginate .paginate_button').addClass('btn btn-sm');
             bindAcciones();
             agregarDataLabels();
+            prevalidarAccionesVisibles();
 
             var api = this.api();
             if (api.rows().count() === 0) {
@@ -908,39 +999,268 @@ $('#tablaVentas').on('draw.dt', function() {
     agregarDataLabels();
 });
 
+// ================================
+// VALIDACIONES DE ACCIONES POR FOLIO
+// ================================
+const resumenVentasCache = new Map();
+
+function safeDecodeURIComponent(valor) {
+    try {
+        return decodeURIComponent(valor || '');
+    } catch (e) {
+        return valor || '';
+    }
+}
+
+function tieneCorreoValido(correo) {
+    const valor = (correo || '').toString().trim();
+
+    if (!valor) return false;
+
+    const bloqueados = [
+        'null',
+        'cliente no registrado',
+        'venta en general',
+        'sin correo',
+        'no aplica',
+        'n/a'
+    ];
+
+    if (bloqueados.includes(valor.toLowerCase())) {
+        return false;
+    }
+
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
+}
+
+function obtenerCantidadItem(item) {
+    const cantidad = parseInt(
+        item?.cantidad ??
+        item?.cantidad_vendida ??
+        item?.cantidad_disponible ??
+        item?.qty ??
+        0,
+        10
+    );
+
+    return Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 0;
+}
+
+function obtenerClaveProducto(item) {
+    return String(
+        item?.id_producto ??
+        item?.producto_id ??
+        item?.id ??
+        item?.producto ??
+        item?.nombre ??
+        ''
+    );
+}
+
+function calcularResumenVenta(items) {
+    const lista = Array.isArray(items) ? items : [];
+    const productosValidos = lista.filter(item => obtenerCantidadItem(item) > 0);
+    const claves = new Set();
+
+    let cantidadTotal = 0;
+
+    productosValidos.forEach(item => {
+        cantidadTotal += obtenerCantidadItem(item);
+        const clave = obtenerClaveProducto(item);
+
+        if (clave !== '') {
+            claves.add(clave);
+        }
+    });
+
+    const articulosDiferentes = claves.size || productosValidos.length;
+
+    return {
+        items: productosValidos,
+        articulosDiferentes,
+        cantidadTotal,
+        puedeCancelarArticulo: articulosDiferentes >= 2,
+        puedeDevolucionParcial: articulosDiferentes >= 2 || cantidadTotal > 1
+    };
+}
+
+async function obtenerResumenVenta(folio, refrescar = false) {
+    const folioReal = (folio || '').toString();
+
+    if (!folioReal) {
+        throw new Error('Folio inválido');
+    }
+
+    if (!refrescar && resumenVentasCache.has(folioReal)) {
+        return resumenVentasCache.get(folioReal);
+    }
+
+    const response = await fetch(`api/obtener_detalles_venta.php?folio=${encodeURIComponent(folioReal)}`, {
+        method: 'GET',
+        cache: 'no-store'
+    });
+
+    const data = await response.json();
+
+    if (!data.success || !Array.isArray(data.data)) {
+        throw new Error(data.message || 'No se pudieron obtener los productos de la venta.');
+    }
+
+    const resumen = calcularResumenVenta(data.data);
+    resumenVentasCache.set(folioReal, resumen);
+
+    return resumen;
+}
+
+function aplicarEstadoAccion($accion, habilitada, tituloHabilitado, tituloBloqueado) {
+    $accion.removeClass('accion-cargando');
+
+    if (habilitada) {
+        $accion
+            .removeClass('accion-deshabilitada')
+            .attr('data-enabled', 'true')
+            .attr('title', tituloHabilitado);
+    } else {
+        $accion
+            .addClass('accion-deshabilitada')
+            .attr('data-enabled', 'false')
+            .attr('title', tituloBloqueado);
+    }
+}
+
+function actualizarAccionesPorFolio(folio, resumen) {
+    const folioEncoded = encodeURIComponent(folio);
+
+    $(`.cancelar-articulo[data-folio="${folioEncoded}"]`).each(function() {
+        aplicarEstadoAccion(
+            $(this),
+            resumen.puedeCancelarArticulo,
+            'Cancelar un artículo de la venta',
+            'Bloqueado: para cancelar artículo la venta debe tener al menos 2 artículos diferentes.'
+        );
+    });
+
+    $(`.devolucion-parcial[data-folio="${folioEncoded}"]`).each(function() {
+        aplicarEstadoAccion(
+            $(this),
+            resumen.puedeDevolucionParcial,
+            'Gestionar devolución parcial',
+            'Bloqueado: para devolución parcial debe haber 2 artículos o 1 artículo con más de 1 pieza.'
+        );
+    });
+}
+
+function bloquearAccionesPorError(folio, mensaje) {
+    const folioEncoded = encodeURIComponent(folio);
+
+    $(`.accion-validable[data-folio="${folioEncoded}"]`).each(function() {
+        aplicarEstadoAccion(
+            $(this),
+            false,
+            '',
+            mensaje || 'No se pudo validar la venta.'
+        );
+    });
+}
+
+function prevalidarAccionesVisibles() {
+    const folios = new Set();
+
+    $('#tablaVentas tbody .acciones-venta').each(function() {
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || '');
+        if (folio) {
+            folios.add(folio);
+        }
+    });
+
+    folios.forEach(async (folio) => {
+        try {
+            const resumen = await obtenerResumenVenta(folio);
+            actualizarAccionesPorFolio(folio, resumen);
+        } catch (error) {
+            console.error('No se pudieron validar acciones para folio:', folio, error);
+            bloquearAccionesPorError(folio, error.message);
+        }
+    });
+}
+
+function accionEstaBloqueada(elemento) {
+    const $el = $(elemento);
+    return $el.hasClass('accion-deshabilitada') || $el.attr('data-enabled') === 'false' || $el.attr('data-disabled') === '1';
+}
+
+function mostrarMotivoBloqueo(elemento, tituloDefault = 'Acción no disponible') {
+    const mensaje = $(elemento).attr('title') || tituloDefault;
+
+    Swal.fire({
+        icon: 'info',
+        title: tituloDefault,
+        text: mensaje,
+        confirmButtonColor: '#f97316'
+    });
+}
+
+function maxDevolucionPermitida(producto, resumen) {
+    const cantidad = obtenerCantidadItem(producto);
+
+    if (resumen.articulosDiferentes <= 1) {
+        return Math.max(cantidad - 1, 0);
+    }
+
+    return cantidad;
+}
+
 function bindAcciones() {
     // Botón Ver Ticket
     $('.btn-ver-ticket').off('click').on('click', function(e) {
         e.preventDefault();
-        const folio = decodeURIComponent($(this).data('folio'));
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
         verTicket(folio);
     });
-    
+
     // Reenvío de ticket
     $('.reenvio-ticket').off('click').on('click', function(e) {
         e.preventDefault();
-        const folio = decodeURIComponent($(this).data('folio'));
+
+        if (accionEstaBloqueada(this)) {
+            mostrarMotivoBloqueo(this, 'Reenvío bloqueado');
+            return;
+        }
+
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
         reenviarTicket(folio);
     });
-    
-    // Cancelar artículo - MODAL MEJORADO
-    $('.cancelar-articulo').off('click').on('click', function(e) {
+
+    // Cancelar artículo
+    $('.cancelar-articulo').off('click').on('click', async function(e) {
         e.preventDefault();
-        const folio = decodeURIComponent($(this).data('folio'));
+
+        if (accionEstaBloqueada(this)) {
+            mostrarMotivoBloqueo(this, 'Cancelación de artículo bloqueada');
+            return;
+        }
+
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
         cargarProductosParaCancelar(folio);
     });
-    
-    // Devolución parcial - MODAL MEJORADO
+
+    // Devolución parcial
     $('.devolucion-parcial').off('click').on('click', function(e) {
         e.preventDefault();
-        const folio = decodeURIComponent($(this).data('folio'));
+
+        if (accionEstaBloqueada(this)) {
+            mostrarMotivoBloqueo(this, 'Devolución parcial bloqueada');
+            return;
+        }
+
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
         cargarProductosParaDevolucion(folio);
     });
-    
+
     // Cancelar venta/pedido
     $('.cancelar-venta').off('click').on('click', function(e) {
         e.preventDefault();
-        const folio = decodeURIComponent($(this).data('folio'));
+        const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
         cancelarVenta(folio);
     });
 }
@@ -953,37 +1273,58 @@ function cargarProductosParaCancelar(folio) {
         allowOutsideClick: false,
         showConfirmButton: false
     });
-    
+
     $.ajax({
         url: 'api/obtener_detalles_venta.php',
         method: 'GET',
         data: { folio: folio },
         dataType: 'json',
+        cache: false,
         success: function(response) {
             Swal.close();
-            
+
             if (response.success && response.data && response.data.length > 0) {
                 productosVenta = response.data;
-                
-                // Limpiar y llenar select
+                const resumen = calcularResumenVenta(productosVenta);
+                resumenVentasCache.set(folio, resumen);
+                actualizarAccionesPorFolio(folio, resumen);
+
+                if (!resumen.puedeCancelarArticulo) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Cancelación de artículo bloqueada',
+                        text: 'Para cancelar un artículo, la venta debe tener al menos 2 artículos diferentes. Si solo tiene un artículo con varias piezas, usa devolución parcial.',
+                        confirmButtonColor: '#f97316'
+                    });
+                    return;
+                }
+
                 const select = $('#ca_producto');
                 select.empty();
                 select.append('<option value="">Seleccionar producto...</option>');
-                
-                productosVenta.forEach(producto => {
-                    select.append(`<option value="${producto.id_producto}">${producto.producto} (Cant: ${producto.cantidad})</option>`);
+
+                resumen.items.forEach(producto => {
+                    const cantidad = obtenerCantidadItem(producto);
+                    const idProducto = producto.id_producto ?? producto.producto_id ?? producto.id;
+                    const nombreProducto = producto.producto ?? producto.nombre ?? 'Producto';
+                    select.append(`<option value="${idProducto}">${escapeHtml(nombreProducto)} (Cant: ${cantidad})</option>`);
                 });
-                
+
                 $('#ca_folio').val(folio);
                 $('#ca_motivo').val('');
                 $('#modalCancelarArticulo').modal('show');
             } else {
-                Swal.fire('Error', 'No se pudieron cargar los productos', 'error');
+                Swal.fire('Error', response.message || 'No se pudieron cargar los productos', 'error');
             }
         },
-        error: function() {
+        error: function(xhr) {
             Swal.close();
-            Swal.fire('Error', 'Error de conexión', 'error');
+            let errorMsg = 'Error de conexión';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMsg = response.message || errorMsg;
+            } catch(e) {}
+            Swal.fire('Error', errorMsg, 'error');
         }
     });
 }
@@ -1013,13 +1354,14 @@ function confirmarCancelarArticulo(folio, idProducto, motivo) {
         data: JSON.stringify({
             folio: folio,
             producto: nombreProducto,  // 👈 Enviar nombre, no ID
-            motivo: motivo
+            motivo: motivo || ''
         }),
         contentType: 'application/json',
         dataType: 'json',
         success: function(response) {
             Swal.close();
             $('#modalCancelarArticulo').modal('hide');
+            resumenVentasCache.delete(folio);
             
             if (response.success) {
                 Swal.fire({
@@ -1055,74 +1397,132 @@ function cargarProductosParaDevolucion(folio) {
         allowOutsideClick: false,
         showConfirmButton: false
     });
-    
+
     $.ajax({
         url: 'api/obtener_detalles_venta.php',
         method: 'GET',
         data: { folio: folio },
         dataType: 'json',
+        cache: false,
         success: function(response) {
             Swal.close();
-            
+
             if (response.success && response.data && response.data.length > 0) {
                 productosVenta = response.data;
-                
-                // Limpiar y llenar select
+                const resumen = calcularResumenVenta(productosVenta);
+                resumenVentasCache.set(folio, resumen);
+                actualizarAccionesPorFolio(folio, resumen);
+
+                if (!resumen.puedeDevolucionParcial) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Devolución parcial bloqueada',
+                        text: 'Para gestionar una devolución parcial, la venta debe tener 2 artículos o un solo artículo con más de 1 pieza.',
+                        confirmButtonColor: '#f97316'
+                    });
+                    return;
+                }
+
                 const select = $('#dv_producto');
                 select.empty();
                 select.append('<option value="">Seleccionar producto...</option>');
-                
-                productosVenta.forEach(producto => {
-                    select.append(`<option value="${producto.id_producto}" data-max="${producto.cantidad}">${producto.producto} (Cantidad disponible: ${producto.cantidad})</option>`);
+
+                resumen.items.forEach(producto => {
+                    const cantidad = obtenerCantidadItem(producto);
+                    const maxPermitido = maxDevolucionPermitida(producto, resumen);
+                    const idProducto = producto.id_producto ?? producto.producto_id ?? producto.id;
+                    const nombreProducto = producto.producto ?? producto.nombre ?? 'Producto';
+
+                    if (maxPermitido > 0) {
+                        select.append(`
+                            <option
+                                value="${idProducto}"
+                                data-max="${cantidad}"
+                                data-max-devolucion="${maxPermitido}"
+                            >
+                                ${escapeHtml(nombreProducto)} (Disponible: ${cantidad}, máximo a devolver: ${maxPermitido})
+                            </option>
+                        `);
+                    }
                 });
-                
+
+                if (select.find('option').length <= 1) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Devolución parcial bloqueada',
+                        text: 'No hay productos con cantidad suficiente para realizar una devolución parcial.',
+                        confirmButtonColor: '#f97316'
+                    });
+                    return;
+                }
+
                 $('#dv_folio').val(folio);
                 $('#dv_cantidad').val('');
                 $('#dv_motivo').val('');
                 $('#modalDevolucion').modal('show');
-                
-                // Actualizar max cuando cambie el producto
+
                 $('#dv_producto').off('change').on('change', function() {
                     const selectedOption = $(this).find('option:selected');
-                    const maxCantidad = selectedOption.data('max') || 0;
-                    $('#dv_cantidad').attr('max', maxCantidad);
-                    $('#dv_cantidad').attr('placeholder', `Máximo: ${maxCantidad}`);
+                    const maxCantidad = selectedOption.data('max-devolucion') || 0;
+                    $('#dv_cantidad')
+                        .attr('max', maxCantidad)
+                        .attr('placeholder', `Máximo: ${maxCantidad}`)
+                        .val('');
                 });
             } else {
-                Swal.fire('Error', 'No se pudieron cargar los productos', 'error');
+                Swal.fire('Error', response.message || 'No se pudieron cargar los productos', 'error');
             }
         },
-        error: function() {
+        error: function(xhr) {
             Swal.close();
-            Swal.fire('Error', 'Error de conexión', 'error');
+            let errorMsg = 'Error de conexión';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMsg = response.message || errorMsg;
+            } catch(e) {}
+            Swal.fire('Error', errorMsg, 'error');
         }
     });
 }
 
 // Confirmar devolución
 function confirmarDevolucion(folio, idProducto, cantidad, motivo) {
+    const cantidadInt = parseInt(cantidad, 10);
+    const maxPermitido = parseInt($('#dv_producto option:selected').data('max-devolucion') || 0, 10);
+
+    if (!cantidadInt || cantidadInt <= 0) {
+        Swal.fire('Error', 'Ingresa una cantidad válida', 'error');
+        return;
+    }
+
+    if (maxPermitido > 0 && cantidadInt > maxPermitido) {
+        Swal.fire('Cantidad no permitida', `Puedes devolver máximo ${maxPermitido} pieza(s) de este producto.`, 'warning');
+        return;
+    }
+
     Swal.fire({
         title: 'Procesando...',
         didOpen: () => Swal.showLoading(),
         allowOutsideClick: false,
         showConfirmButton: false
     });
-    
+
     $.ajax({
         url: 'api/devolver_parcial.php',
         method: 'POST',
         data: JSON.stringify({
             folio: folio,
             id_producto: idProducto,
-            cantidad: parseInt(cantidad),
-            motivo: motivo
+            cantidad: cantidadInt,
+            motivo: motivo || ''
         }),
         contentType: 'application/json',
         dataType: 'json',
         success: function(response) {
             Swal.close();
             $('#modalDevolucion').modal('hide');
-            
+            resumenVentasCache.delete(folio);
+
             if (response.success) {
                 Swal.fire({
                     icon: 'success',
@@ -1137,9 +1537,14 @@ function confirmarDevolucion(folio, idProducto, cantidad, motivo) {
                 Swal.fire('Error', response.message, 'error');
             }
         },
-        error: function() {
+        error: function(xhr) {
             Swal.close();
-            Swal.fire('Error', 'Error de conexión', 'error');
+            let errorMsg = 'Error de conexión';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMsg = response.message || errorMsg;
+            } catch(e) {}
+            Swal.fire('Error', errorMsg, 'error');
         }
     });
 }
@@ -1381,6 +1786,11 @@ function escapeHtml(text) {
 }
 
 async function reenviarTicket(folio) {
+    if (!folio) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo obtener el folio', confirmButtonColor: '#f97316' });
+        return;
+    }
+
     try {
         Swal.fire({ title: 'Reenviando...', didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
         const res = await fetch(`enviar_ticket.php?folio=${encodeURIComponent(folio)}`);
@@ -1395,7 +1805,7 @@ async function reenviarTicket(folio) {
 
 function cancelarVenta(folio) {
     console.log("Cancelando con folio:", folio);
-    
+
     if (!folio) {
         Swal.fire({
             icon: 'error',
@@ -1404,30 +1814,52 @@ function cancelarVenta(folio) {
         });
         return;
     }
-    
+
     const esPedido = folio.toString().startsWith('PEDIDO-');
     const titulo = esPedido ? '¿Cancelar pedido?' : '¿Cancelar venta?';
-    const texto = esPedido 
-        ? '¿Estás seguro de que deseas cancelar este pedido? Esta acción no se puede deshacer y se restaurará el stock.'
-        : '¿Estás seguro de que deseas cancelar esta venta? Esta acción no se puede deshacer.';
-    
+    const texto = esPedido
+        ? 'Esta acción restaurará el stock y cancelará el pedido.'
+        : 'Esta acción restaurará el stock y cancelará la venta.';
+
     Swal.fire({
         title: titulo,
-        text: texto,
+        html: `
+            <div style="text-align:left;">
+                <p style="margin:0 0 12px; color:#475569; font-size:14px; line-height:1.45;">
+                    ${texto}
+                </p>
+                <label for="motivo_cancelacion_venta" style="display:block; font-weight:700; font-size:13px; color:#334155; margin-bottom:6px;">
+                    Motivo de cancelación <span style="font-weight:500; color:#94a3b8;">(opcional)</span>
+                </label>
+                <textarea
+                    id="motivo_cancelacion_venta"
+                    class="swal2-textarea"
+                    placeholder="Puedes dejarlo vacío o escribir el motivo..."
+                    style="width:100%; min-height:95px; margin:0; resize:vertical; border-radius:12px; font-size:14px;"
+                ></textarea>
+            </div>
+        `,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, cancelar',
         cancelButtonText: 'No, mantener',
         confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6'
+        cancelButtonColor: '#3085d6',
+        focusConfirm: false,
+        preConfirm: () => {
+            const motivo = document.getElementById('motivo_cancelacion_venta')?.value || '';
+            return {
+                motivo: motivo.trim()
+            };
+        }
     }).then((result) => {
         if (result.isConfirmed) {
-            procesarCancelacionVenta(folio, esPedido);
+            procesarCancelacionVenta(folio, esPedido, result.value?.motivo || '');
         }
     });
 }
 
-async function procesarCancelacionVenta(folio, esPedido) {
+async function procesarCancelacionVenta(folio, esPedido, motivo = '') {
     Swal.fire({
         title: 'Verificando...',
         allowOutsideClick: false,
@@ -1436,15 +1868,16 @@ async function procesarCancelacionVenta(folio, esPedido) {
             Swal.showLoading();
         }
     });
-    
+
     try {
         const requestBody = {
             folio: folio.toString(),
-            forzar: false
+            forzar: false,
+            motivo: motivo
         };
-        
+
         console.log("Enviando petición:", requestBody);
-        
+
         const response = await fetch('api/cancelar_venta.php', {
             method: 'POST',
             headers: {
@@ -1452,16 +1885,22 @@ async function procesarCancelacionVenta(folio, esPedido) {
             },
             body: JSON.stringify(requestBody)
         });
-        
+
         const data = await response.json();
         Swal.close();
-        
+        resumenVentasCache.delete(folio);
+
         console.log("Respuesta del servidor:", data);
-        
+
         if (data.pedido_completado === true) {
             Swal.fire({
                 title: 'Pedido completado',
-                text: data.message,
+                html: `
+                    <div style="text-align:left;">
+                        <p style="margin-bottom:10px;">${escapeHtml(data.message || 'Este pedido ya está completado. ¿Seguro que deseas cancelarlo?')}</p>
+                        ${motivo ? `<p style="margin:0; color:#64748b; font-size:13px;"><b>Motivo:</b> ${escapeHtml(motivo)}</p>` : `<p style="margin:0; color:#94a3b8; font-size:13px;">Sin motivo capturado.</p>`}
+                    </div>
+                `,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, cancelar',
@@ -1469,17 +1908,26 @@ async function procesarCancelacionVenta(folio, esPedido) {
                 confirmButtonColor: '#d33'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    cancelarPedidoCompletado(folio);
+                    cancelarPedidoCompletado(folio, motivo);
                 }
             });
         } else if (data.success) {
             const tituloExito = esPedido ? '¡Pedido cancelado!' : '¡Venta cancelada!';
+            const detalleLog = data.cantidad_total_cancelada
+                ? `Cantidad cancelada: ${data.cantidad_total_cancelada}`
+                : 'Log guardado correctamente.';
+
             Swal.fire({
                 icon: 'success',
                 title: tituloExito,
-                text: data.message,
+                html: `
+                    <div style="text-align:center;">
+                        <p style="margin-bottom:8px;">${escapeHtml(data.message || 'Cancelación realizada correctamente.')}</p>
+                        <p style="margin:0; color:#64748b; font-size:13px;">${escapeHtml(detalleLog)}</p>
+                    </div>
+                `,
                 confirmButtonColor: '#28a745',
-                timer: 2000
+                timer: 2200
             }).then(() => {
                 location.reload();
             });
@@ -1504,7 +1952,7 @@ async function procesarCancelacionVenta(folio, esPedido) {
     }
 }
 
-async function cancelarPedidoCompletado(folio) {
+async function cancelarPedidoCompletado(folio, motivo = '') {
     Swal.fire({
         title: 'Cancelando pedido completado...',
         allowOutsideClick: false,
@@ -1513,15 +1961,16 @@ async function cancelarPedidoCompletado(folio) {
             Swal.showLoading();
         }
     });
-    
+
     try {
         const requestBody = {
             folio: folio.toString(),
-            forzar: true
+            forzar: true,
+            motivo: motivo
         };
-        
+
         console.log("Enviando petición con forzar=true:", requestBody);
-        
+
         const response = await fetch('api/cancelar_venta.php', {
             method: 'POST',
             headers: {
@@ -1529,19 +1978,20 @@ async function cancelarPedidoCompletado(folio) {
             },
             body: JSON.stringify(requestBody)
         });
-        
+
         const data = await response.json();
         Swal.close();
-        
+        resumenVentasCache.delete(folio);
+
         console.log("Respuesta final:", data);
-        
+
         if (data.success) {
             Swal.fire({
                 icon: 'success',
                 title: '¡Pedido cancelado!',
                 text: data.message,
                 confirmButtonColor: '#28a745',
-                timer: 2000
+                timer: 2200
             }).then(() => {
                 location.reload();
             });
@@ -1564,6 +2014,7 @@ async function cancelarPedidoCompletado(folio) {
         });
     }
 }
+
 </script>
 
 <?php include 'includes/footer.php'; ?>
