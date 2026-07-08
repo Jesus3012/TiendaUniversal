@@ -1804,7 +1804,6 @@ async function reenviarTicket(folio) {
 }
 
 function cancelarVenta(folio) {
-    console.log("Cancelando con folio:", folio);
 
     if (!folio) {
         Swal.fire({
@@ -1876,7 +1875,7 @@ async function procesarCancelacionVenta(folio, esPedido, motivo = '') {
             motivo: motivo
         };
 
-        console.log("Enviando petición:", requestBody);
+        // console.log("Enviando petición:", requestBody);
 
         const response = await fetch('api/cancelar_venta.php', {
             method: 'POST',
@@ -1890,7 +1889,7 @@ async function procesarCancelacionVenta(folio, esPedido, motivo = '') {
         Swal.close();
         resumenVentasCache.delete(folio);
 
-        console.log("Respuesta del servidor:", data);
+        // console.log("Respuesta del servidor:", data);
 
         if (data.pedido_completado === true) {
             Swal.fire({
@@ -1969,8 +1968,6 @@ async function cancelarPedidoCompletado(folio, motivo = '') {
             motivo: motivo
         };
 
-        console.log("Enviando petición con forzar=true:", requestBody);
-
         const response = await fetch('api/cancelar_venta.php', {
             method: 'POST',
             headers: {
@@ -1983,7 +1980,7 @@ async function cancelarPedidoCompletado(folio, motivo = '') {
         Swal.close();
         resumenVentasCache.delete(folio);
 
-        console.log("Respuesta final:", data);
+        // console.log("Respuesta final:", data);
 
         if (data.success) {
             Swal.fire({

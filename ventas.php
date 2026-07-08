@@ -669,10 +669,15 @@ if ($productos_result) {
                 <div class="pos-buscador mb-3">
                     <div class="input-group">
                         <span class="input-group-text"><i class="fas fa-barcode"></i></span>
-                        <input type="text" class="form-control" id="codigo" 
-                               placeholder="Escanea o escribe el código" 
-                               autocomplete="off" autofocus>
-                        <button type="button" class="btn btn-agregar" onclick="agregarProducto()">
+                        <input type="text" class="form-control" id="codigo"
+                               placeholder="Escanea o escribe el código"
+                               autocomplete="off"
+                               inputmode="text"
+                               autocapitalize="off"
+                               spellcheck="false"
+                               enterkeyhint="done"
+                               autofocus>
+                        <button type="button" class="btn btn-agregar" onclick="agregarProducto('boton')">
                             <i class="fas fa-plus-circle me-2"></i> Agregar
                         </button>
                     </div>
@@ -814,7 +819,7 @@ const POS_STORAGE_PENDIENTES = 'pos_ventas_pendientes';
 const CAJON_LOCAL_URL = 'http://127.0.0.1:8787/abrir-cajon';
 let ventaEnProceso = false;
 let buscandoProducto = false;
-let timerCodigo = null;
+let timerCodigo = null; // conservado por compatibilidad; el auto-agregado ahora usa codigoScannerTimer.
 
 // ============ UTILIDADES ============
 function escapeHtml(text) { 
@@ -866,20 +871,38 @@ function enfocarCodigo() {
 
 
 // ============ MODO ESCÁNER INTELIGENTE ============
-// Objetivo:
-// 1) Después de usar buscadores, categorías o métodos de pago, regresar el foco al input #codigo.
-// 2) Si el lector dispara teclas mientras el foco quedó en otro campo, detectar la lectura rápida
-//    y moverla automáticamente al buscador de código de barras.
+// Cambios importantes:
+// 1) Ya NO se busca automáticamente solo por tener 4 caracteres.
+//    Así puedes escribir códigos manuales completos sin que el sistema los corte.
+// 2) Si el lector manda el código rápido, se detecta como escáner y se agrega casi al instante.
+// 3) Si el lector manda ENTER/TAB al final, se agrega inmediatamente.
+// 4) Si el foco se queda en otro campo, se intenta recuperar la lectura rápida y mandarla a #codigo.
 let scannerFocusTimer = null;
 let scannerBuffer = '';
 let scannerLastKeyTime = 0;
 let scannerStartTime = 0;
 let scannerFlushTimer = null;
 let scannerTargetElement = null;
-let scannerTargetInitialValue = '';
-const SCANNER_MIN_LENGTH = 4;
-const SCANNER_MAX_INTERVAL_MS = 80;
-const SCANNER_FLUSH_MS = 120;
+
+let codigoKeyTimes = [];
+let codigoScannerTimer = null;
+let ultimoCodigoProcesado = '';
+let ultimoCodigoProcesadoAt = 0;
+let productosCacheCodigo = new Map();
+
+const CODIGO_MIN_LENGTH = 4;
+const CODIGO_SCANNER_IDLE_MS = 85;
+const CODIGO_SCANNER_MAX_AVG_MS = 70;
+const CODIGO_SCANNER_MAX_TOTAL_MS = 1200;
+const CODIGO_FETCH_TIMEOUT_MS = 4500;
+const CODIGO_REPETIDO_BLOQUEO_MS = 350;
+
+// Un poco más tolerante para lectores que a veces envían teclas con pausas,
+// pero no tan agresivo para no robar escritura manual.
+const SCANNER_MIN_LENGTH = 5;
+const SCANNER_MAX_INTERVAL_MS = 95;
+const SCANNER_PROTECTED_MAX_INTERVAL_MS = 55;
+const SCANNER_FLUSH_MS = 95;
 
 function esElementoEditable(el) {
     if (!el) return false;
@@ -907,6 +930,24 @@ function esCampoManualProtegido(el) {
     ].includes(id) || name === 'referencia_pago';
 }
 
+function normalizarCodigoBarras(valor) {
+    return String(valor || '')
+        .replace(/[\r\n\t]/g, '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim();
+}
+
+function obtenerVariantesCodigo(codigo) {
+    const base = normalizarCodigoBarras(codigo);
+    const variantes = [
+        base,
+        base.toUpperCase(),
+        base.toLowerCase()
+    ];
+
+    return [...new Set(variantes.filter(Boolean))];
+}
+
 function programarEnfoqueEscaner(delay = 250, forzar = false) {
     clearTimeout(scannerFocusTimer);
     scannerFocusTimer = setTimeout(() => {
@@ -926,8 +967,61 @@ function limpiarBufferScanner() {
     scannerLastKeyTime = 0;
     scannerStartTime = 0;
     scannerTargetElement = null;
-    scannerTargetInitialValue = '';
     clearTimeout(scannerFlushTimer);
+}
+
+function limpiarEstadoScannerCodigo() {
+    codigoKeyTimes = [];
+    clearTimeout(codigoScannerTimer);
+}
+
+function registrarTeclaEnCodigo(e) {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (!e.key || e.key.length !== 1) return;
+
+    const ahora = performance.now();
+    const ultima = codigoKeyTimes.length ? codigoKeyTimes[codigoKeyTimes.length - 1] : 0;
+
+    // Si hubo una pausa clara, empieza una nueva posible lectura.
+    if (!ultima || (ahora - ultima) > 220) {
+        codigoKeyTimes = [];
+    }
+
+    codigoKeyTimes.push(ahora);
+
+    if (codigoKeyTimes.length > 48) {
+        codigoKeyTimes = codigoKeyTimes.slice(-48);
+    }
+}
+
+function pareceLecturaScannerCodigo(codigo) {
+    const limpio = normalizarCodigoBarras(codigo);
+
+    if (limpio.length < CODIGO_MIN_LENGTH) return false;
+    if (codigoKeyTimes.length < Math.min(limpio.length, CODIGO_MIN_LENGTH)) return false;
+
+    const tiempos = codigoKeyTimes.slice(-limpio.length);
+    if (tiempos.length < CODIGO_MIN_LENGTH) return false;
+
+    const duracion = tiempos[tiempos.length - 1] - tiempos[0];
+    const promedio = tiempos.length > 1 ? duracion / (tiempos.length - 1) : duracion;
+
+    return promedio <= CODIGO_SCANNER_MAX_AVG_MS && duracion <= CODIGO_SCANNER_MAX_TOTAL_MS;
+}
+
+function programarAutoLecturaCodigo() {
+    clearTimeout(codigoScannerTimer);
+
+    codigoScannerTimer = setTimeout(() => {
+        const inputCodigo = document.getElementById('codigo');
+        const codigo = normalizarCodigoBarras(inputCodigo?.value || '');
+
+        // Solo auto-agrega cuando la velocidad sí parece de lector.
+        // Escritura manual: se agrega con ENTER, TAB o botón Agregar.
+        if (codigo && !buscandoProducto && pareceLecturaScannerCodigo(codigo)) {
+            agregarProducto('scanner-input');
+        }
+    }, CODIGO_SCANNER_IDLE_MS);
 }
 
 function limpiarLecturaDeCampoOrigen(codigo) {
@@ -958,7 +1052,7 @@ function limpiarLecturaDeCampoOrigen(codigo) {
 }
 
 function enviarBufferAlCodigo() {
-    const codigo = scannerBuffer.trim();
+    const codigo = normalizarCodigoBarras(scannerBuffer);
 
     if (codigo.length < SCANNER_MIN_LENGTH) {
         limpiarBufferScanner();
@@ -976,6 +1070,7 @@ function enviarBufferAlCodigo() {
     const scrollActual = obtenerScrollActual();
     inputCodigo.value = codigo;
     limpiarBufferScanner();
+    limpiarEstadoScannerCodigo();
 
     try {
         inputCodigo.focus({ preventScroll: true });
@@ -986,7 +1081,7 @@ function enviarBufferAlCodigo() {
     restaurarScroll(scrollActual);
 
     if (!buscandoProducto) {
-        agregarProducto();
+        agregarProducto('scanner-global');
     }
 }
 
@@ -1003,10 +1098,14 @@ function manejarTeclaGlobalScanner(e) {
 
     const key = e.key;
     const ahora = Date.now();
+    const limiteIntervalo = esCampoManualProtegido(e.target)
+        ? SCANNER_PROTECTED_MAX_INTERVAL_MS
+        : SCANNER_MAX_INTERVAL_MS;
 
-    if (key === 'Enter') {
+    if (key === 'Enter' || key === 'Tab') {
         if (scannerBuffer.length >= SCANNER_MIN_LENGTH) {
             e.preventDefault();
+            e.stopPropagation();
             enviarBufferAlCodigo();
         } else {
             limpiarBufferScanner();
@@ -1019,11 +1118,10 @@ function manejarTeclaGlobalScanner(e) {
     const intervalo = scannerLastKeyTime ? (ahora - scannerLastKeyTime) : 0;
 
     // Si la escritura fue lenta, asumimos que es una persona escribiendo en buscador/folio.
-    if (!scannerLastKeyTime || intervalo > SCANNER_MAX_INTERVAL_MS) {
+    if (!scannerLastKeyTime || intervalo > limiteIntervalo) {
         scannerBuffer = key;
         scannerStartTime = ahora;
         scannerTargetElement = e.target;
-        scannerTargetInitialValue = (e.target && 'value' in e.target) ? String(e.target.value || '') : '';
     } else {
         scannerBuffer += key;
     }
@@ -1036,8 +1134,7 @@ function manejarTeclaGlobalScanner(e) {
         const promedio = scannerBuffer.length > 1 ? duracion / (scannerBuffer.length - 1) : duracion;
 
         // Un lector normalmente manda muchos caracteres muy rápido. Si cumple, movemos al input de código.
-        if (scannerBuffer.length >= SCANNER_MIN_LENGTH && promedio <= SCANNER_MAX_INTERVAL_MS) {
-            e.preventDefault?.();
+        if (scannerBuffer.length >= SCANNER_MIN_LENGTH && promedio <= limiteIntervalo) {
             enviarBufferAlCodigo();
         } else {
             limpiarBufferScanner();
@@ -1045,7 +1142,12 @@ function manejarTeclaGlobalScanner(e) {
     }, SCANNER_FLUSH_MS);
 
     // Si ya parece lectura de escáner, evitamos que siga llenando el buscador/filtro actual.
-    if (esElementoEditable(e.target) && scannerBuffer.length >= SCANNER_MIN_LENGTH && intervalo > 0 && intervalo <= SCANNER_MAX_INTERVAL_MS) {
+    if (
+        esElementoEditable(e.target) &&
+        scannerBuffer.length >= SCANNER_MIN_LENGTH &&
+        intervalo > 0 &&
+        intervalo <= limiteIntervalo
+    ) {
         e.preventDefault();
     }
 }
@@ -1637,41 +1739,105 @@ function agregarAlCarrito(producto) {
 }
 
 // ============ AGREGAR POR CÓDIGO DE BARRAS ============
-async function agregarProducto() {
+async function fetchJsonConTimeout(url, timeoutMs = CODIGO_FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const res = await fetch(url, {
+            signal: controller.signal,
+            cache: 'no-store',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            throw new Error(data.message || 'Error HTTP: ' + res.status);
+        }
+
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function buscarProductoPorCodigo(codigo) {
+    const variantes = obtenerVariantesCodigo(codigo);
+    let ultimaRespuesta = null;
+
+    for (const variante of variantes) {
+        const cacheKey = variante.toLowerCase();
+        const cache = productosCacheCodigo.get(cacheKey);
+
+        // Caché corto para que el lector se sienta más rápido al escanear productos repetidos,
+        // sin dejar información vieja durante demasiado tiempo.
+        if (cache && (Date.now() - cache.time) < 30000) {
+            return cache.data;
+        }
+
+        const data = await fetchJsonConTimeout(`buscar_producto.php?codigo=${encodeURIComponent(variante)}`);
+        ultimaRespuesta = data;
+
+        if (data && data.success) {
+            const normalizado = normalizarCodigoBarras(codigo).toLowerCase();
+            productosCacheCodigo.set(cacheKey, { time: Date.now(), data });
+            productosCacheCodigo.set(normalizado, { time: Date.now(), data });
+            return data;
+        }
+    }
+
+    return ultimaRespuesta || {
+        success: false,
+        message: 'Producto no encontrado'
+    };
+}
+
+async function agregarProducto(origen = 'manual') {
     if (buscandoProducto) return;
 
     const inputCodigo = document.getElementById('codigo');
-    const codigo = inputCodigo ? inputCodigo.value.trim() : '';
+    const codigo = normalizarCodigoBarras(inputCodigo ? inputCodigo.value : '');
 
     if (!codigo) {
         enfocarCodigo();
         return;
     }
 
+    const ahora = Date.now();
+
+    // Evita doble agregado cuando el lector dispara input + Enter casi al mismo tiempo.
+    if (codigo === ultimoCodigoProcesado && (ahora - ultimoCodigoProcesadoAt) < CODIGO_REPETIDO_BLOQUEO_MS) {
+        if (inputCodigo) inputCodigo.value = '';
+        limpiarEstadoScannerCodigo();
+        enfocarCodigo();
+        return;
+    }
+
+    ultimoCodigoProcesado = codigo;
+    ultimoCodigoProcesadoAt = ahora;
     buscandoProducto = true;
 
+    if (inputCodigo) {
+        inputCodigo.value = codigo;
+    }
+
     try {
-        const res = await fetch(`buscar_producto.php?codigo=${encodeURIComponent(codigo)}`);
-
-        if (!res.ok) {
-            throw new Error('Error HTTP: ' + res.status);
-        }
-
-        const data = await res.json();
+        const data = await buscarProductoPorCodigo(codigo);
 
         if (!data.success) {
             Swal.fire({
                 icon: 'error',
                 title: 'No encontrado',
-                text: data.message || 'Producto no encontrado',
+                text: data.message || `No encontré el producto con código: ${codigo}`,
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
                 timer: 1800
             });
 
-            if (inputCodigo) inputCodigo.value = '';
-            enfocarCodigo();
             return;
         }
 
@@ -1694,19 +1860,25 @@ async function agregarProducto() {
     } catch (error) {
         console.error('Error al buscar producto:', error);
 
+        const mensaje = error?.name === 'AbortError'
+            ? 'La búsqueda tardó demasiado. Revisa la conexión o buscar_producto.php.'
+            : 'Error al buscar el producto. Revisa buscar_producto.php.';
+
         Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: 'Error al buscar el producto. Revisa buscar_producto.php.',
+            text: mensaje,
             confirmButtonColor: '#f97316'
         });
     } finally {
         buscandoProducto = false;
+        limpiarEstadoScannerCodigo();
 
         if (inputCodigo) inputCodigo.value = '';
         enfocarCodigo();
     }
 }
+
 
 // ============ CARRITO ============
 function renderCarrito() {
@@ -2776,14 +2948,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (inputCodigo) {
         inputCodigo.addEventListener('keydown', function(e) {
+            registrarTeclaEnCodigo(e);
+
             if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
+                e.stopPropagation();
                 clearTimeout(timerCodigo);
+                clearTimeout(codigoScannerTimer);
 
-                const codigoActual = this.value.trim();
+                const codigoActual = normalizarCodigoBarras(this.value);
 
                 if (codigoActual !== '') {
-                    agregarProducto();
+                    this.value = codigoActual;
+                    agregarProducto('enter');
                     return;
                 }
 
@@ -2795,14 +2972,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
         inputCodigo.addEventListener('input', function() {
             clearTimeout(timerCodigo);
+            clearTimeout(codigoScannerTimer);
 
-            timerCodigo = setTimeout(() => {
-                const codigo = inputCodigo.value.trim();
+            const codigoLimpio = normalizarCodigoBarras(this.value);
 
-                if (codigo.length >= 4 && !buscandoProducto) {
-                    agregarProducto();
-                }
-            }, 500);
+            // Si el lector mandó salto de línea/tab oculto, limpiamos sin romper la escritura manual.
+            if (this.value !== codigoLimpio && /[\r\n\t\u200B-\u200D\uFEFF]/.test(this.value)) {
+                this.value = codigoLimpio;
+            }
+
+            // Ya no se agrega por simple longitud. Solo si la velocidad parece de lector.
+            if (codigoLimpio.length >= CODIGO_MIN_LENGTH) {
+                programarAutoLecturaCodigo();
+            }
+        });
+
+        inputCodigo.addEventListener('paste', function() {
+            // Pegar un código se considera manual: no auto-agrega.
+            // Presiona Enter o el botón Agregar para buscarlo.
+            limpiarEstadoScannerCodigo();
+        });
+
+        inputCodigo.addEventListener('blur', () => {
+            clearTimeout(codigoScannerTimer);
         });
     }
 
