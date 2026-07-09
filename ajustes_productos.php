@@ -10,6 +10,12 @@ if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
     exit;
 }
 
+// Evita que Hostinger/LiteSpeed/navegador sirvan una versión vieja del modal o del POST.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
+
 include 'includes/header.php';
 include 'includes/navbar.php';
 require_once 'includes/fpdf.php';
@@ -18,6 +24,24 @@ require_once __DIR__.'/vendor/autoload.php';
 use Picqer\Barcode\BarcodeGeneratorPNG;
 
 $errors = [];
+
+function debugTipoCodigoHostinger($mensaje, array $data = []) {
+    $dir = __DIR__ . '/logs';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+
+    $linea = '[' . date('Y-m-d H:i:s') . '] ' . $mensaje;
+    if (!empty($data)) {
+        $linea .= ' | ' . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    @file_put_contents($dir . '/tipo_codigo_hostinger.log', $linea . PHP_EOL, FILE_APPEND);
+}
+
+function valorTipoCodigoValido($valor) {
+    $valor = strtolower(trim((string)$valor));
+    return in_array($valor, ['unico', 'multiple'], true) ? $valor : null;
+}
 
 // ======================= FUNCIONES AUXILIARES =======================
 function obtenerCategorias($conn) {
@@ -74,7 +98,30 @@ function codigoUnicoProducto($producto_id) {
 }
 
 function codigoMultipleProducto($producto_id, $consecutivo) {
-    return (string)(int)$producto_id . str_pad((string)(int)$consecutivo, 5, '0', STR_PAD_LEFT);
+    // Formato único y consistente para TODOS los códigos del sistema:
+    // - Código único:   P00000048
+    // - Código múltiple: P000048001, P000048002, etc.
+    // Así todos conservan la letra P y evitamos mezclas con códigos solo numéricos.
+    return 'P' . str_pad((string)(int)$producto_id, 6, '0', STR_PAD_LEFT) . str_pad((string)(int)$consecutivo, 3, '0', STR_PAD_LEFT);
+}
+
+function productoActivoParaCodigos($conn, $producto_id) {
+    $producto_id = (int)$producto_id;
+    if ($producto_id <= 0) {
+        return false;
+    }
+
+    $stmt = $conn->prepare("SELECT activo, tipo_inventario FROM productos WHERE id = ? LIMIT 1");
+    if (!$stmt) {
+        throw new Exception('Error validando producto activo: ' . $conn->error);
+    }
+    $stmt->bind_param('i', $producto_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $producto = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+
+    return $producto && (int)$producto['activo'] === 1 && ($producto['tipo_inventario'] ?? '') === 'producto';
 }
 
 function eliminarCodigosProducto($conn, $producto_id) {
@@ -155,9 +202,11 @@ function reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo,
     $producto_id = (int)$producto_id;
     $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo);
 
+    // Primero se limpian los códigos anteriores. Si el producto está inactivo,
+    // ya no se vuelven a crear códigos ni PNG porque no tiene caso imprimirlos.
     eliminarCodigosProducto($conn, $producto_id);
 
-    if ($tipo_inventario !== 'producto') {
+    if ($tipo_inventario !== 'producto' || !productoActivoParaCodigos($conn, $producto_id)) {
         return;
     }
 
@@ -445,25 +494,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $producto_actual['tipo_codigo'] ?? 'multiple'
         );
 
-        $tipo_codigo_enviado = isset($_POST['tipo_codigo'])
-            ? strtolower(trim((string)$_POST['tipo_codigo']))
-            : '';
+        // En Hostinger puede quedar cacheado el JS o pueden viajar ocultos con valor viejo.
+        // Por eso SOLO se toma el select principal si llegó válido.
+        // Si no llegó, se conserva lo que ya tenía la BD; no se fuerza a multiple.
+        $tipo_codigo_enviado = isset($_POST['tipo_codigo']) ? valorTipoCodigoValido($_POST['tipo_codigo']) : null;
+        $tipo_codigo_respaldo = isset($_POST['tipo_codigo_respaldo']) ? valorTipoCodigoValido($_POST['tipo_codigo_respaldo']) : null;
+        $tipo_codigo_forzado = isset($_POST['tipo_codigo_forzado']) ? valorTipoCodigoValido($_POST['tipo_codigo_forzado']) : null;
+        $tipo_codigo_tocado = isset($_POST['tipo_codigo_tocado']) ? trim((string)$_POST['tipo_codigo_tocado']) : '0';
+
+        $tipo_codigo = $tipo_codigo_actual;
 
         if ($tipo_inventario === 'producto') {
-            if (in_array($tipo_codigo_enviado, ['unico', 'multiple'], true)) {
+            if ($tipo_codigo_enviado !== null) {
                 $tipo_codigo = $tipo_codigo_enviado;
-            } else {
-                // Fallback seguro: conservar lo que ya tenía en BD, no forzar múltiple.
-                $tipo_codigo = $tipo_codigo_actual;
+            } elseif ($tipo_codigo_tocado === '1' && $tipo_codigo_forzado !== null) {
+                $tipo_codigo = $tipo_codigo_forzado;
+            } elseif ($tipo_codigo_tocado === '1' && $tipo_codigo_respaldo !== null) {
+                $tipo_codigo = $tipo_codigo_respaldo;
             }
         } else {
             $tipo_codigo = 'multiple';
         }
 
-        error_log("=== UPDATE PRODUCTO ID: $id ===");
-        error_log("tipo_codigo_actual_bd: '" . $tipo_codigo_actual . "'");
-        error_log("tipo_codigo_enviado_post: '" . $tipo_codigo_enviado . "'");
-        error_log("tipo_codigo_final: '" . $tipo_codigo . "'");
+        debugTipoCodigoHostinger('POST update producto', [
+            'id' => $id,
+            'tipo_codigo_actual_bd' => $tipo_codigo_actual,
+            'post_tipo_codigo' => $_POST['tipo_codigo'] ?? null,
+            'post_tipo_codigo_respaldo' => $_POST['tipo_codigo_respaldo'] ?? null,
+            'post_tipo_codigo_forzado' => $_POST['tipo_codigo_forzado'] ?? null,
+            'post_tipo_codigo_tocado' => $_POST['tipo_codigo_tocado'] ?? null,
+            'tipo_codigo_decidido' => $tipo_codigo,
+        ]);
         
         $atributos = [];
         $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
@@ -540,8 +601,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
                 throw new Exception('Error preparando actualización: ' . $conn->error);
             }
 
+            // Tipos correctos:
+            // s nombre, s categoria, s atributos, s proveedor, i proveedor_id, s imagen,
+            // d precio_compra, d precio_venta, s tipo_codigo, s tipo_inventario, s tipo_adquisicion, i id.
+            // OJO: antes tipo_codigo se estaba mandando como double por un bind_param incorrecto,
+            // y eso hacía que MySQL ENUM guardara vacío o perdiera el valor.
             $stmt->bind_param(
-                "ssssissddssi",
+                "ssssisddsssi",
                 $nombre,
                 $categoria,
                 $atributos_json,
@@ -560,6 +626,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
                 throw new Exception('Error al actualizar producto: ' . $stmt->error);
             }
             $stmt->close();
+
+            // Re-guardado directo y separado para Hostinger.
+            // Aunque el UPDATE grande se ejecute bien, este UPDATE deja tipo_codigo explícito
+            // como texto válido del ENUM y evita pérdidas por bind/caché/formularios ocultos.
+            if ($tipo_inventario === 'producto') {
+                $stmtHostingerTipo = $conn->prepare("UPDATE productos SET tipo_codigo = ? WHERE id = ? AND activo = 1 LIMIT 1");
+                if (!$stmtHostingerTipo) {
+                    throw new Exception('Error preparando guardado directo de tipo_codigo: ' . $conn->error);
+                }
+                $stmtHostingerTipo->bind_param('si', $tipo_codigo_final, $id);
+                if (!$stmtHostingerTipo->execute()) {
+                    throw new Exception('Error guardando directo tipo_codigo: ' . $stmtHostingerTipo->error);
+                }
+                $stmtHostingerTipo->close();
+            }
+
+            // Verificación real: confirmar que el ENUM quedó guardado como texto correcto.
+            $stmtCheckTipo = $conn->prepare("SELECT tipo_codigo FROM productos WHERE id = ? LIMIT 1");
+            if (!$stmtCheckTipo) {
+                throw new Exception('Error verificando tipo de código: ' . $conn->error);
+            }
+            $stmtCheckTipo->bind_param('i', $id);
+            $stmtCheckTipo->execute();
+            $resCheckTipo = $stmtCheckTipo->get_result();
+            $rowCheckTipo = $resCheckTipo ? $resCheckTipo->fetch_assoc() : null;
+            $stmtCheckTipo->close();
+
+            $tipoCodigoGuardado = strtolower(trim((string)($rowCheckTipo['tipo_codigo'] ?? '')));
+            if ($tipo_inventario === 'producto' && $tipoCodigoGuardado !== $tipo_codigo_final) {
+                // Reintento directo por si algún modo de MySQL/ENUM dejó el valor vacío.
+                $stmtFixTipo = $conn->prepare("UPDATE productos SET tipo_codigo = ? WHERE id = ?");
+                if (!$stmtFixTipo) {
+                    throw new Exception('Error preparando corrección de tipo de código: ' . $conn->error);
+                }
+                $stmtFixTipo->bind_param('si', $tipo_codigo_final, $id);
+                if (!$stmtFixTipo->execute()) {
+                    throw new Exception('No se pudo corregir tipo_codigo: ' . $stmtFixTipo->error);
+                }
+                $stmtFixTipo->close();
+
+                $stmtRecheckTipo = $conn->prepare("SELECT tipo_codigo FROM productos WHERE id = ? LIMIT 1");
+                $stmtRecheckTipo->bind_param('i', $id);
+                $stmtRecheckTipo->execute();
+                $resRecheckTipo = $stmtRecheckTipo->get_result();
+                $rowRecheckTipo = $resRecheckTipo ? $resRecheckTipo->fetch_assoc() : null;
+                $stmtRecheckTipo->close();
+                $tipoCodigoRevisado = strtolower(trim((string)($rowRecheckTipo['tipo_codigo'] ?? '')));
+                if ($tipoCodigoRevisado !== $tipo_codigo_final) {
+                    throw new Exception('Hostinger no permitió guardar tipo_codigo. Esperado: ' . $tipo_codigo_final . ', guardado: ' . $tipoCodigoRevisado);
+                }
+            }
+
+            debugTipoCodigoHostinger('BD despues de update', [
+                'id' => $id,
+                'tipo_codigo_final' => $tipo_codigo_final,
+                'tipo_codigo_guardado' => $tipoCodigoGuardado,
+            ]);
 
             // Punto clave:
             // No se agregan códigos encima de los anteriores.
@@ -622,7 +745,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         unlink($producto['imagen']);
     }
 
-    limpiarArchivosCodigosProducto($id);
+    // Al desactivar un producto también eliminamos sus códigos y PNG.
+    // Así ya no aparecen en descargas ni se regeneran etiquetas de productos inactivos.
+    eliminarCodigosProducto($conn, $id);
 
     $stmt = $conn->prepare("UPDATE productos SET activo = 0 WHERE id = ?");
     $stmt->bind_param("i", $id);
@@ -838,6 +963,11 @@ function partirTextoEtiqueta($texto, $font, $size, $maxWidth, $maxLines = 2) {
 }
 
 function convertirBlancoATransparente($src, $tolerancia = 245) {
+    // FIX HOSTINGER/GD:
+    // En algunos servidores, Picqer genera el fondo del barcode como transparente,
+    // pero con RGB negro. Si solo se revisa RGB, el fondo transparente se convierte
+    // en negro y el código queda como un rectángulo sólido.
+    // Para etiquetas de la Nimbot es más seguro dejar fondo blanco real.
     if (!$src) {
         return null;
     }
@@ -849,20 +979,27 @@ function convertirBlancoATransparente($src, $tolerancia = 245) {
     }
 
     $dst = imagecreatetruecolor($w, $h);
-    imagealphablending($dst, false);
-    imagesavealpha($dst, true);
+    imagealphablending($dst, true);
+    imagesavealpha($dst, false);
 
-    $transparent = imagecolorallocatealpha($dst, 255, 255, 255, 127);
-    $black = imagecolorallocatealpha($dst, 0, 0, 0, 0);
-    imagefilledrectangle($dst, 0, 0, $w, $h, $transparent);
+    $white = imagecolorallocate($dst, 255, 255, 255);
+    $black = imagecolorallocate($dst, 0, 0, 0);
+    imagefilledrectangle($dst, 0, 0, $w, $h, $white);
 
     for ($y = 0; $y < $h; $y++) {
         for ($x = 0; $x < $w; $x++) {
             $rgba = imagecolorat($src, $x, $y);
             $c = imagecolorsforindex($src, $rgba);
+            $alpha = isset($c['alpha']) ? (int)$c['alpha'] : 0;
 
-            if ($c['red'] >= $tolerancia && $c['green'] >= $tolerancia && $c['blue'] >= $tolerancia) {
-                imagesetpixel($dst, $x, $y, $transparent);
+            // Alpha alto = transparente => blanco.
+            // Blanco/casi blanco => blanco.
+            // Todo lo demás son barras => negro.
+            if (
+                $alpha >= 120 ||
+                ($c['red'] >= $tolerancia && $c['green'] >= $tolerancia && $c['blue'] >= $tolerancia)
+            ) {
+                imagesetpixel($dst, $x, $y, $white);
             } else {
                 imagesetpixel($dst, $x, $y, $black);
             }
@@ -957,6 +1094,30 @@ function dibujarEtiquetaCodigoEnCanvas($img, $item, $topY, $generator, $fontRegu
     }
 }
 
+function limpiarNombreArchivo($texto, $fallback = 'producto') {
+    $texto = trim((string)$texto);
+    if ($texto === '') {
+        return $fallback;
+    }
+
+    if (function_exists('iconv')) {
+        $convertido = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $texto);
+        if ($convertido !== false) {
+            $texto = $convertido;
+        }
+    }
+
+    $texto = preg_replace('/[^A-Za-z0-9]+/', '_', $texto);
+    $texto = trim($texto, '_');
+    $texto = preg_replace('/_+/', '_', $texto);
+
+    if ($texto === '') {
+        return $fallback;
+    }
+
+    return substr($texto, 0, 80);
+}
+
 function completarGrupoTresCodigos($grupo) {
     if (empty($grupo)) {
         return $grupo;
@@ -1041,6 +1202,10 @@ function generarPNGCodigosProducto($conn, $producto_id) {
 
     limpiarArchivosCodigosProducto($producto_id);
 
+    if (!productoActivoParaCodigos($conn, $producto_id)) {
+        return;
+    }
+
     $items = obtenerCodigosProductoParaPNG($conn, $producto_id);
     if (empty($items)) {
         return;
@@ -1115,8 +1280,18 @@ function generarZIPTodosCodigosPNG($conn) {
 
     $grupos = [];
     foreach ($porProducto as $productoId => $codigosProducto) {
-        foreach (array_chunk($codigosProducto, 3) as $grupoProducto) {
-            $grupos[] = completarGrupoTresCodigos($grupoProducto);
+        $nombreProducto = $codigosProducto[0]['nombre'] ?? ('producto_' . $productoId);
+        $chunksProducto = array_chunk($codigosProducto, 3);
+        $totalPartesProducto = count($chunksProducto);
+
+        foreach ($chunksProducto as $indiceParte => $grupoProducto) {
+            $grupos[] = [
+                'producto_id' => (int)$productoId,
+                'nombre_producto' => $nombreProducto,
+                'parte' => $indiceParte + 1,
+                'total_partes' => $totalPartesProducto,
+                'items' => completarGrupoTresCodigos($grupoProducto)
+            ];
         }
     }
 
@@ -1130,11 +1305,22 @@ function generarZIPTodosCodigosPNG($conn) {
     }
 
     $archivosTemporales = [];
-    foreach ($grupos as $index => $grupo) {
+    foreach ($grupos as $index => $grupoInfo) {
         $numero = str_pad($index + 1, 4, '0', STR_PAD_LEFT);
-        $pngPath = $codigos_dir . 'todos_codigos_' . $numero . '.png';
-        crearPNGTripleCodigos($grupo, $pngPath);
-        $zip->addFile($pngPath, basename($pngPath));
+        $nombreSeguro = limpiarNombreArchivo($grupoInfo['nombre_producto'] ?? 'producto');
+        $productoId = (int)($grupoInfo['producto_id'] ?? 0);
+        $parte = (int)($grupoInfo['parte'] ?? 1);
+        $totalPartes = (int)($grupoInfo['total_partes'] ?? 1);
+
+        $nombreArchivoZip = $numero . '_' . $nombreSeguro;
+        if ($totalPartes > 1) {
+            $nombreArchivoZip .= '_parte_' . $parte;
+        }
+        $nombreArchivoZip .= '.png';
+
+        $pngPath = $codigos_dir . 'tmp_' . $nombreArchivoZip;
+        crearPNGTripleCodigos($grupoInfo['items'], $pngPath);
+        $zip->addFile($pngPath, $nombreArchivoZip);
         $archivosTemporales[] = $pngPath;
     }
 
@@ -1799,6 +1985,9 @@ if (!empty($errors)) {
         <option value="unico">Código único (un código para todo el producto)</option>
         <option value="multiple">Múltiple (un código por unidad)</option>
     </select>
+    <input type="hidden" id="edit_tipo_codigo_respaldo" name="tipo_codigo_respaldo" value="">
+    <input type="hidden" id="edit_tipo_codigo_forzado" name="tipo_codigo_forzado" value="">
+    <input type="hidden" id="edit_tipo_codigo_tocado" name="tipo_codigo_tocado" value="0">
 </div>
 
                                     <div class="form-group" id="edit_adquisicion_group">
@@ -2233,14 +2422,35 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const tipoCodigoSelectModal = document.getElementById('edit_tipo_codigo');
+    if (tipoCodigoSelectModal) {
+        tipoCodigoSelectModal.addEventListener('change', function() {
+            const valorSeguro = normalizarTipoCodigoJS(this.value, 'multiple');
+            this.value = valorSeguro;
+            const respaldo = document.getElementById('edit_tipo_codigo_respaldo');
+            const forzado = document.getElementById('edit_tipo_codigo_forzado');
+            if (respaldo) respaldo.value = valorSeguro;
+            if (forzado) forzado.value = valorSeguro;
+            const tocado = document.getElementById('edit_tipo_codigo_tocado');
+            if (tocado) tocado.value = '1';
+        });
+    }
+
     const formEditar = document.getElementById('formEditarProducto');
     if (formEditar) {
         formEditar.addEventListener('submit', function() {
             guardarPaginaActualEnStorage();
 
             const tipoCodigoSelect = document.getElementById('edit_tipo_codigo');
-            if (tipoCodigoSelect && !['unico', 'multiple'].includes(tipoCodigoSelect.value)) {
-                tipoCodigoSelect.value = 'multiple';
+            const tipoCodigoRespaldo = document.getElementById('edit_tipo_codigo_respaldo');
+            const tipoCodigoForzado = document.getElementById('edit_tipo_codigo_forzado');
+            if (tipoCodigoSelect) {
+                const valorSeguro = normalizarTipoCodigoJS(tipoCodigoSelect.value, 'multiple');
+                tipoCodigoSelect.value = valorSeguro;
+                if (tipoCodigoRespaldo) tipoCodigoRespaldo.value = valorSeguro;
+                if (tipoCodigoForzado) tipoCodigoForzado.value = valorSeguro;
+                const tipoCodigoTocado = document.getElementById('edit_tipo_codigo_tocado');
+                if (tipoCodigoTocado) tipoCodigoTocado.value = '1';
             }
 
             const categoriaSelect = document.getElementById('edit_categoria');
@@ -2286,7 +2496,7 @@ function obtenerTipoCodigoDesdeFila(id) {
 function editarProducto(id, tipoCodigoActual = null) {
     guardarPaginaActualEnStorage();
 
-    fetch(`get_producto.php?id=${id}`)
+    fetch(`get_producto.php?id=${id}&t=${Date.now()}`, { cache: 'no-store' })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2319,7 +2529,14 @@ function editarProducto(id, tipoCodigoActual = null) {
                     );
                     const valorTipoCodigo = normalizarTipoCodigoJS(p.tipo_codigo, fallbackTipoCodigo);
                     tipoCodigoSelect.value = valorTipoCodigo;
+                    const tipoCodigoRespaldo = document.getElementById('edit_tipo_codigo_respaldo');
+                    const tipoCodigoForzado = document.getElementById('edit_tipo_codigo_forzado');
+                    if (tipoCodigoRespaldo) tipoCodigoRespaldo.value = valorTipoCodigo;
+                    if (tipoCodigoForzado) tipoCodigoForzado.value = valorTipoCodigo;
+                    const tipoCodigoTocado = document.getElementById('edit_tipo_codigo_tocado');
+                    if (tipoCodigoTocado) tipoCodigoTocado.value = '0';
                     tipoCodigoSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (tipoCodigoTocado) tipoCodigoTocado.value = '0';
                 }
                 
                 document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;

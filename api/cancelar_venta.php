@@ -22,7 +22,12 @@ function responder_json(bool $success, string $message, array $extra = []): void
 
 function tabla_existe(mysqli $conn, string $tabla): bool
 {
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+    ");
 
     if (!$stmt) {
         return false;
@@ -38,7 +43,13 @@ function tabla_existe(mysqli $conn, string $tabla): bool
 
 function columna_existe(mysqli $conn, string $tabla, string $columna): bool
 {
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+    ");
 
     if (!$stmt) {
         return false;
@@ -54,7 +65,14 @@ function columna_existe(mysqli $conn, string $tabla, string $columna): bool
 
 function columna_auto_increment(mysqli $conn, string $tabla, string $columna): bool
 {
-    $stmt = $conn->prepare("SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1");
+    $stmt = $conn->prepare("
+        SELECT EXTRA
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        LIMIT 1
+    ");
 
     if (!$stmt) {
         throw new Exception("No se pudo revisar AUTO_INCREMENT de $tabla.$columna: " . $conn->error);
@@ -91,6 +109,7 @@ function siguiente_id_tabla(mysqli $conn, string $tabla, string $columna = 'id')
     }
 
     $row = $res->fetch_assoc();
+
     return intval($row['siguiente'] ?? 1);
 }
 
@@ -113,7 +132,22 @@ function existe_fk_canceladas_hacia_ventas(mysqli $conn): bool
     }
 
     $row = $res->fetch_assoc();
+
     return intval($row['total'] ?? 0) > 0;
+}
+
+function generar_cancelacion_uid(string $folio): string
+{
+    try {
+        $random = bin2hex(random_bytes(8));
+    } catch (Throwable $e) {
+        $random = str_replace('.', '', uniqid('', true));
+    }
+
+    $folioLimpio = preg_replace('/[^a-zA-Z0-9_-]/', '_', $folio);
+    $folioLimpio = substr($folioLimpio, 0, 30);
+
+    return 'CAN-' . date('YmdHis') . '-' . $folioLimpio . '-' . $random;
 }
 
 function insertar_log_cancelacion_unificado(
@@ -122,40 +156,76 @@ function insertar_log_cancelacion_unificado(
     ?int $idManual,
     string $folio,
     int $cantidadDevuelta,
-    ?string $motivo
+    ?string $motivo,
+    string $cancelacionUid
 ): void {
-    // Se guarda id_venta como NULL para que el log de venta cancelada no dependa
-    // de una fila de ventas que será eliminada después.
-    if ($idAutoIncrement) {
-        $stmt = $conn->prepare("
-            INSERT INTO `ventas_canceladas`
-                (`id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
-            VALUES
-                (NULL, ?, ?, NOW(), ?)
-        ");
+    $tieneCancelacionUid = columna_existe($conn, 'ventas_canceladas', 'cancelacion_uid');
 
-        if (!$stmt) {
-            throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
+    if ($tieneCancelacionUid) {
+        if ($idAutoIncrement) {
+            $stmt = $conn->prepare("
+                INSERT INTO `ventas_canceladas`
+                    (`cancelacion_uid`, `id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
+                VALUES
+                    (?, NULL, ?, ?, NOW(), ?)
+            ");
+
+            if (!$stmt) {
+                throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
+            }
+
+            $stmt->bind_param('siss', $cancelacionUid, $cantidadDevuelta, $motivo, $folio);
+        } else {
+            if ($idManual === null) {
+                throw new Exception('No se pudo generar el ID manual para ventas_canceladas.');
+            }
+
+            $stmt = $conn->prepare("
+                INSERT INTO `ventas_canceladas`
+                    (`id`, `cancelacion_uid`, `id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
+                VALUES
+                    (?, ?, NULL, ?, ?, NOW(), ?)
+            ");
+
+            if (!$stmt) {
+                throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
+            }
+
+            $stmt->bind_param('isiss', $idManual, $cancelacionUid, $cantidadDevuelta, $motivo, $folio);
         }
-
-        $stmt->bind_param('iss', $cantidadDevuelta, $motivo, $folio);
     } else {
-        if ($idManual === null) {
-            throw new Exception('No se pudo generar el ID manual para ventas_canceladas.');
+        // Respaldo por si en otra BD todavía no existe cancelacion_uid.
+        if ($idAutoIncrement) {
+            $stmt = $conn->prepare("
+                INSERT INTO `ventas_canceladas`
+                    (`id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
+                VALUES
+                    (NULL, ?, ?, NOW(), ?)
+            ");
+
+            if (!$stmt) {
+                throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
+            }
+
+            $stmt->bind_param('iss', $cantidadDevuelta, $motivo, $folio);
+        } else {
+            if ($idManual === null) {
+                throw new Exception('No se pudo generar el ID manual para ventas_canceladas.');
+            }
+
+            $stmt = $conn->prepare("
+                INSERT INTO `ventas_canceladas`
+                    (`id`, `id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
+                VALUES
+                    (?, NULL, ?, ?, NOW(), ?)
+            ");
+
+            if (!$stmt) {
+                throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
+            }
+
+            $stmt->bind_param('iiss', $idManual, $cantidadDevuelta, $motivo, $folio);
         }
-
-        $stmt = $conn->prepare("
-            INSERT INTO `ventas_canceladas`
-                (`id`, `id_venta`, `cantidad_devuelta`, `motivo`, `fecha_cancelacion`, `folio_ticket`)
-            VALUES
-                (?, NULL, ?, ?, NOW(), ?)
-        ");
-
-        if (!$stmt) {
-            throw new Exception('No se pudo preparar el log de venta cancelada: ' . $conn->error);
-        }
-
-        $stmt->bind_param('iiss', $idManual, $cantidadDevuelta, $motivo, $folio);
     }
 
     if (!$stmt->execute()) {
@@ -174,13 +244,41 @@ function insertar_log_cancelacion_unificado(
 
 function contar_logs_cancelacion(mysqli $conn, string $folio): int
 {
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM `ventas_canceladas` WHERE `folio_ticket` = ?");
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM `ventas_canceladas`
+        WHERE `folio_ticket` = ?
+    ");
 
     if (!$stmt) {
         throw new Exception('No se pudo contar el log de venta cancelada: ' . $conn->error);
     }
 
     $stmt->bind_param('s', $folio);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return intval($row['total'] ?? 0);
+}
+
+function contar_logs_cancelacion_uid(mysqli $conn, string $cancelacionUid): int
+{
+    if (!columna_existe($conn, 'ventas_canceladas', 'cancelacion_uid')) {
+        return 0;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM `ventas_canceladas`
+        WHERE `cancelacion_uid` = ?
+    ");
+
+    if (!$stmt) {
+        throw new Exception('No se pudo contar el log por cancelacion_uid: ' . $conn->error);
+    }
+
+    $stmt->bind_param('s', $cancelacionUid);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -203,6 +301,7 @@ function insertar_log_pedido_cancelado(
     }
 
     $accion = $pedidoEstabaCompletado ? 'PEDIDO COMPLETADO CANCELADO' : 'PEDIDO CANCELADO';
+
     $detalle = $pedidoEstabaCompletado
         ? "Se canceló un pedido que ya estaba completado. Ticket: $folio. Stock restaurado. Productos procesados: $productosProcesados. Cantidad total cancelada: $cantidadTotalCancelada."
         : "Se canceló el pedido desde historial de ventas. Ticket: $folio. Stock restaurado. Productos procesados: $productosProcesados. Cantidad total cancelada: $cantidadTotalCancelada.";
@@ -261,7 +360,12 @@ function insertar_log_pedido_cancelado(
 
 function contar_logs_pedido_cancelado(mysqli $conn, int $idOrden): int
 {
-    $acciones = ['PEDIDO CANCELADO', 'PEDIDO COMPLETADO CANCELADO', 'Pedido cancelado', 'Pedido completado cancelado'];
+    $acciones = [
+        'PEDIDO CANCELADO',
+        'PEDIDO COMPLETADO CANCELADO',
+        'Pedido cancelado',
+        'Pedido completado cancelado'
+    ];
 
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS total
@@ -303,6 +407,8 @@ $idOrden = null;
 $total = 0;
 $completados = 0;
 $pedidoEstabaCompletado = false;
+$cancelacionUid = null;
+$logsFinales = 0;
 
 try {
     if (!tabla_existe($conn, 'ventas_canceladas')) {
@@ -370,26 +476,21 @@ try {
 
     if (!$res || $res->num_rows === 0) {
         $q->close();
-        throw new Exception('No se encontraron ventas para este folio.');
+        throw new Exception('No se encontraron ventas activas para este folio. Es posible que esta venta ya haya sido cancelada o eliminada.');
     }
 
     $ventas = $res->fetch_all(MYSQLI_ASSOC);
     $q->close();
 
-    $ver = $conn->prepare("SELECT id FROM `ventas_canceladas` WHERE `folio_ticket` = ? LIMIT 1");
+    /*
+        IMPORTANTE:
+        Ya NO se valida si existe el folio en ventas_canceladas.
+        Antes se hacía algo como:
+        SELECT id FROM ventas_canceladas WHERE folio_ticket = ? LIMIT 1
 
-    if (!$ver) {
-        throw new Exception('No se pudo verificar si ya estaba cancelada: ' . $conn->error);
-    }
-
-    $ver->bind_param('s', $folio);
-    $ver->execute();
-    $yaCancelada = $ver->get_result()->num_rows > 0;
-    $ver->close();
-
-    if ($yaCancelada) {
-        throw new Exception('Esta venta ya fue cancelada anteriormente.');
-    }
+        Eso causaba el conflicto cuando una venta nueva usaba un folio que ya había sido cancelado antes.
+        Ahora cada cancelación se identifica por cancelacion_uid.
+    */
 
     $cantidadTotalCancelada = 0;
 
@@ -401,13 +502,17 @@ try {
         throw new Exception('La cantidad total a cancelar no es válida.');
     }
 
+    $logsFolioAntes = contar_logs_cancelacion($conn, $folio);
+    $cancelacionUid = generar_cancelacion_uid($folio);
+
     insertar_log_cancelacion_unificado(
         $conn,
         $idAutoIncrementVentasCanceladas,
         $idManualVentasCanceladas,
         $folio,
         $cantidadTotalCancelada,
-        $motivo
+        $motivo,
+        $cancelacionUid
     );
 
     $productosProcesados = 0;
@@ -418,7 +523,15 @@ try {
         $cantidadVendida = intval($v['cantidad_vendida']);
         $proveedor = trim((string)($v['proveedor'] ?? ''));
 
-        $upStock = $conn->prepare("UPDATE `productos` SET `cantidad` = `cantidad` + ? WHERE `id` = ?");
+        if ($idVenta <= 0 || $idProducto <= 0 || $cantidadVendida <= 0) {
+            throw new Exception('Se detectó un registro de venta inválido. No se puede continuar con la cancelación.');
+        }
+
+        $upStock = $conn->prepare("
+            UPDATE `productos`
+            SET `cantidad` = `cantidad` + ?
+            WHERE `id` = ?
+        ");
 
         if (!$upStock) {
             throw new Exception('No se pudo preparar la restauración de stock: ' . $conn->error);
@@ -450,7 +563,10 @@ try {
             }
         }
 
-        $del = $conn->prepare("DELETE FROM `ventas` WHERE `id` = ?");
+        $del = $conn->prepare("
+            DELETE FROM `ventas`
+            WHERE `id` = ?
+        ");
 
         if (!$del) {
             throw new Exception('No se pudo preparar la eliminación de ventas: ' . $conn->error);
@@ -464,22 +580,47 @@ try {
             throw new Exception('No se pudo eliminar la venta original: ' . $error);
         }
 
+        if ($del->affected_rows <= 0) {
+            $del->close();
+            throw new Exception('No se eliminó la venta original. Se revierte la operación para evitar descuadre de stock.');
+        }
+
         $del->close();
         $productosProcesados++;
     }
 
     $logsFinales = contar_logs_cancelacion($conn, $folio);
 
-    if ($logsFinales !== 1) {
-        $mensajeFk = existe_fk_canceladas_hacia_ventas($conn)
-            ? ' Detecté una relación de ventas_canceladas.id_venta hacia ventas.id. El log se guarda con id_venta NULL, pero revisa que la columna permita NULL.'
-            : '';
+    if (columna_existe($conn, 'ventas_canceladas', 'cancelacion_uid')) {
+        $logsUidFinales = contar_logs_cancelacion_uid($conn, $cancelacionUid);
 
-        throw new Exception('La venta no se canceló porque el log unificado no quedó guardado correctamente en ventas_canceladas.' . $mensajeFk);
+        if ($logsUidFinales !== 1) {
+            $mensajeFk = existe_fk_canceladas_hacia_ventas($conn)
+                ? ' Detecté una relación de ventas_canceladas.id_venta hacia ventas.id. El log se guarda con id_venta NULL, pero revisa que la columna permita NULL.'
+                : '';
+
+            throw new Exception('La venta no se canceló porque el log único de cancelación no quedó guardado correctamente en ventas_canceladas.' . $mensajeFk);
+        }
+    } else {
+        if ($logsFinales <= $logsFolioAntes) {
+            $mensajeFk = existe_fk_canceladas_hacia_ventas($conn)
+                ? ' Detecté una relación de ventas_canceladas.id_venta hacia ventas.id. El log se guarda con id_venta NULL, pero revisa que la columna permita NULL.'
+                : '';
+
+            throw new Exception('La venta no se canceló porque no se insertó un nuevo log en ventas_canceladas.' . $mensajeFk);
+        }
+    }
+
+    if ($productosProcesados <= 0) {
+        throw new Exception('No se procesó ningún producto de la venta.');
     }
 
     if ($esPedido && $idOrden) {
-        $updatePedido = $conn->prepare("UPDATE `pedidos` SET `estado` = 'cancelado' WHERE `id_orden` = ?");
+        $updatePedido = $conn->prepare("
+            UPDATE `pedidos`
+            SET `estado` = 'cancelado'
+            WHERE `id_orden` = ?
+        ");
 
         if (!$updatePedido) {
             throw new Exception('No se pudo preparar actualización del pedido: ' . $conn->error);
@@ -503,7 +644,8 @@ try {
         if ($tieneFechaCancelacion && $tieneEstado) {
             $updateOrden = $conn->prepare("
                 UPDATE `ordenes_pedido`
-                SET `fecha_cancelacion` = NOW(), `estado` = 'cancelado'
+                SET `fecha_cancelacion` = NOW(),
+                    `estado` = 'cancelado'
                 WHERE `id_orden` = ?
             ");
         } elseif ($tieneFechaCancelacion) {
@@ -570,6 +712,7 @@ try {
 
     responder_json(true, $mensajeFinal, [
         'folio' => $folio,
+        'cancelacion_uid' => $cancelacionUid,
         'id_orden' => $idOrden,
         'logs_guardados' => $logsFinales,
         'log_pedido_guardado' => $esPedido,

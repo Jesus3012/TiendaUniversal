@@ -51,6 +51,387 @@ function obtenerProveedores($conn) {
     return $proveedores;
 }
 
+
+// ======================= FORMATO ÚNICO DE CÓDIGOS =======================
+// Regla nueva para que TODOS los códigos sigan con la letra P:
+// - Código único:    P00000048
+// - Código múltiple: P000048001, P000048002, P000048003...
+// Esto evita que los productos nuevos salgan como 4800001 o 5000001.
+function normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo) {
+    if ($tipo_inventario !== 'producto') {
+        return 'multiple';
+    }
+
+    $tipo_codigo = strtolower(trim((string)$tipo_codigo));
+    return $tipo_codigo === 'unico' ? 'unico' : 'multiple';
+}
+
+function normalizarCodigoBarra($codigo) {
+    $codigo = trim((string)$codigo);
+    $codigo = preg_replace('/\s+/', '', $codigo);
+    return strtoupper($codigo);
+}
+
+function codigoUnicoProducto($producto_id) {
+    return 'P' . str_pad((string)(int)$producto_id, 8, '0', STR_PAD_LEFT);
+}
+
+function codigoMultipleProducto($producto_id, $consecutivo) {
+    return 'P' . str_pad((string)(int)$producto_id, 6, '0', STR_PAD_LEFT) . str_pad((string)(int)$consecutivo, 3, '0', STR_PAD_LEFT);
+}
+
+function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1) {
+    $producto_id = (int)$producto_id;
+    $codigo = normalizarCodigoBarra($codigo);
+    $disponible = (int)$disponible;
+
+    if ($codigo === '') {
+        throw new Exception('Se intentó guardar un código vacío.');
+    }
+
+    $stmt = $conn->prepare("SELECT id, producto_id FROM codigos_barras WHERE codigo = ? LIMIT 1");
+    if (!$stmt) {
+        throw new Exception('Error preparando validación de código: ' . $conn->error);
+    }
+    $stmt->bind_param('s', $codigo);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $existente = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+
+    if ($existente) {
+        if ((int)$existente['producto_id'] !== $producto_id) {
+            throw new Exception("El código {$codigo} ya está asignado a otro producto.");
+        }
+
+        $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ? WHERE id = ?");
+        if (!$stmt) {
+            throw new Exception('Error preparando actualización de código existente: ' . $conn->error);
+        }
+        $idExistente = (int)$existente['id'];
+        $stmt->bind_param('ii', $disponible, $idExistente);
+        if (!$stmt->execute()) {
+            $error = $stmt->error;
+            $stmt->close();
+            throw new Exception('Error actualizando código existente: ' . $error);
+        }
+        $stmt->close();
+        return;
+    }
+
+    $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, ?)");
+    if (!$stmt) {
+        throw new Exception('Error preparando inserción de código: ' . $conn->error);
+    }
+    $stmt->bind_param('isi', $producto_id, $codigo, $disponible);
+    if (!$stmt->execute()) {
+        $error = $stmt->error;
+        $stmt->close();
+        throw new Exception('Error insertando código de barras: ' . $error);
+    }
+    $stmt->close();
+}
+
+
+function limpiarArchivosCodigosProducto($producto_id) {
+    $codigos_dir = __DIR__ . '/uploads/codigos/';
+    foreach (glob($codigos_dir . 'producto_' . intval($producto_id) . '*.{png,zip,pdf}', GLOB_BRACE) as $archivo) {
+        if (is_file($archivo)) {
+            @unlink($archivo);
+        }
+    }
+}
+
+function textoCortoPNG($texto, $max = 60) {
+    $texto = trim((string)$texto);
+    $texto = preg_replace('/\s+/u', ' ', $texto);
+    if (function_exists('mb_strlen') && mb_strlen($texto, 'UTF-8') > $max) {
+        return mb_substr($texto, 0, $max, 'UTF-8');
+    }
+    if (!function_exists('mb_strlen') && strlen($texto) > $max) {
+        return substr($texto, 0, $max);
+    }
+    return $texto;
+}
+
+function gdTextCentered($img, $size, $y, $color, $font, $text, $canvasWidth) {
+    $text = (string)$text;
+    if ($font && file_exists($font)) {
+        $box = imagettfbbox($size, 0, $font, $text);
+        $textWidth = abs($box[2] - $box[0]);
+        $x = intval(($canvasWidth - $textWidth) / 2);
+        imagettftext($img, $size, 0, $x, $y, $color, $font, $text);
+    } else {
+        $fontSize = max(1, min(5, intval($size / 3)));
+        $textWidth = imagefontwidth($fontSize) * strlen($text);
+        imagestring($img, $fontSize, intval(($canvasWidth - $textWidth) / 2), $y - 12, $text, $color);
+    }
+}
+
+function medirTextoGD($font, $size, $text) {
+    $text = (string)$text;
+    if ($font && file_exists($font)) {
+        $box = imagettfbbox($size, 0, $font, $text);
+        return abs($box[2] - $box[0]);
+    }
+    $fontSize = max(1, min(5, intval($size / 3)));
+    return imagefontwidth($fontSize) * strlen($text);
+}
+
+function truncarTextoPorAncho($texto, $font, $size, $maxWidth) {
+    $texto = trim((string)$texto);
+    if ($texto === '') {
+        return '';
+    }
+    if (medirTextoGD($font, $size, $texto) <= $maxWidth) {
+        return $texto;
+    }
+    $ellipsis = '…';
+    while ($texto !== '' && medirTextoGD($font, $size, $texto . $ellipsis) > $maxWidth) {
+        if (function_exists('mb_substr')) {
+            $texto = rtrim(mb_substr($texto, 0, mb_strlen($texto, 'UTF-8') - 1, 'UTF-8'));
+        } else {
+            $texto = rtrim(substr($texto, 0, strlen($texto) - 1));
+        }
+    }
+    return $texto === '' ? $ellipsis : $texto . $ellipsis;
+}
+
+function convertirBlancoATransparente($src, $tolerancia = 245) {
+    // FIX HOSTINGER/GD:
+    // En algunos servidores, Picqer genera el fondo del barcode como transparente,
+    // pero con RGB negro. Si solo se revisa RGB, el fondo transparente se convierte
+    // en negro y el código queda como un rectángulo sólido.
+    // Para etiquetas de la Nimbot es más seguro dejar fondo blanco real.
+    if (!$src) {
+        return null;
+    }
+
+    $w = imagesx($src);
+    $h = imagesy($src);
+    if ($w <= 0 || $h <= 0) {
+        return $src;
+    }
+
+    $dst = imagecreatetruecolor($w, $h);
+    imagealphablending($dst, true);
+    imagesavealpha($dst, false);
+
+    $white = imagecolorallocate($dst, 255, 255, 255);
+    $black = imagecolorallocate($dst, 0, 0, 0);
+    imagefilledrectangle($dst, 0, 0, $w, $h, $white);
+
+    for ($y = 0; $y < $h; $y++) {
+        for ($x = 0; $x < $w; $x++) {
+            $rgba = imagecolorat($src, $x, $y);
+            $c = imagecolorsforindex($src, $rgba);
+            $alpha = isset($c['alpha']) ? (int)$c['alpha'] : 0;
+
+            // Alpha alto = transparente => blanco.
+            // Blanco/casi blanco => blanco.
+            // Todo lo demás son barras => negro.
+            if (
+                $alpha >= 120 ||
+                ($c['red'] >= $tolerancia && $c['green'] >= $tolerancia && $c['blue'] >= $tolerancia)
+            ) {
+                imagesetpixel($dst, $x, $y, $white);
+            } else {
+                imagesetpixel($dst, $x, $y, $black);
+            }
+        }
+    }
+
+    return $dst;
+}
+
+function copiarBarcodeSinDistorsion($dst, $barcode, $dstX, $dstY, $dstW, $dstH) {
+    $srcW = imagesx($barcode);
+    $srcH = imagesy($barcode);
+    if ($srcW <= 0 || $srcH <= 0) return;
+
+    if ($srcW <= $dstW && $srcH <= $dstH) {
+        $x = $dstX + intval(($dstW - $srcW) / 2);
+        $y = $dstY + intval(($dstH - $srcH) / 2);
+        imagecopy($dst, $barcode, $x, $y, 0, 0, $srcW, $srcH);
+        return;
+    }
+
+    $scale = min($dstW / $srcW, $dstH / $srcH);
+    $newW = max(1, intval($srcW * $scale));
+    $newH = max(1, intval($srcH * $scale));
+    $x = $dstX + intval(($dstW - $newW) / 2);
+    $y = $dstY + intval(($dstH - $newH) / 2);
+    imagecopyresized($dst, $barcode, $x, $y, 0, 0, $newW, $newH, $srcW, $srcH);
+}
+
+function crearBarcodePNGExacto($generator, $codigo, $maxWidth, $height) {
+    foreach ([5, 4, 3, 2, 1] as $factor) {
+        $pngData = $generator->getBarcode($codigo, $generator::TYPE_CODE_128, $factor, $height);
+        $barcode = @imagecreatefromstring($pngData);
+        if ($barcode && imagesx($barcode) <= $maxWidth) {
+            $barcodeTransparente = convertirBlancoATransparente($barcode);
+            imagedestroy($barcode);
+            return $barcodeTransparente;
+        }
+        if ($barcode) {
+            imagedestroy($barcode);
+        }
+    }
+
+    $pngData = $generator->getBarcode($codigo, $generator::TYPE_CODE_128, 1, $height);
+    $barcode = @imagecreatefromstring($pngData);
+    $barcodeTransparente = convertirBlancoATransparente($barcode);
+    if ($barcode) {
+        imagedestroy($barcode);
+    }
+    return $barcodeTransparente;
+}
+
+function dibujarEtiquetaCodigoEnCanvas($img, $item, $topY, $generator, $fontRegular, $fontBold) {
+    $canvasW = 240;
+    $bloqueH = 133;
+    $bottomY = $topY + $bloqueH - 1;
+
+    $white = imagecolorallocate($img, 255, 255, 255);
+    $black = imagecolorallocate($img, 0, 0, 0);
+    $lightGray = imagecolorallocate($img, 232, 232, 232);
+
+    imagefilledrectangle($img, 0, $topY, $canvasW - 1, $bottomY, $white);
+
+    $nombre = textoCortoPNG($item['nombre'] ?? '', 68);
+    $precio = '$' . number_format((float)($item['precio_venta'] ?? 0), 2);
+    $codigo = (string)($item['codigo'] ?? '');
+
+    $titulo = trim($nombre . '  ' . $precio);
+    $titulo = truncarTextoPorAncho($titulo, $fontBold, 8, 232);
+    gdTextCentered($img, 8, $topY + 11, $black, $fontBold, $titulo, $canvasW);
+
+    $barcodeMaxW = 234;
+    $barcodeMaxH = 86;
+    $barcode = crearBarcodePNGExacto($generator, $codigo, $barcodeMaxW, 82);
+    if ($barcode) {
+        copiarBarcodeSinDistorsion($img, $barcode, 3, $topY + 16, $barcodeMaxW, $barcodeMaxH);
+        imagedestroy($barcode);
+    }
+
+    gdTextCentered($img, 10, $topY + 112, $black, $fontBold, $codigo, $canvasW);
+
+    if ($bottomY < 399) {
+        imageline($img, 4, $bottomY, $canvasW - 4, $bottomY, $lightGray);
+    }
+}
+
+function completarGrupoTresCodigos($grupo) {
+    if (empty($grupo)) {
+        return $grupo;
+    }
+    $grupo = array_values($grupo);
+    while (count($grupo) < 3) {
+        $grupo[] = end($grupo);
+    }
+    return array_slice($grupo, 0, 3);
+}
+
+function crearPNGTripleCodigos($items, $destino) {
+    $generator = new BarcodeGeneratorPNG();
+
+    $w = 240;
+    $h = 400;
+    $img = imagecreatetruecolor($w, $h);
+
+    $fontRegular = null;
+    $fontBold = null;
+    $fontCandidatesRegular = [
+        __DIR__ . '/assets/fonts/Arial.ttf',
+        __DIR__ . '/assets/fonts/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        'C:/Windows/Fonts/arial.ttf'
+    ];
+    $fontCandidatesBold = [
+        __DIR__ . '/assets/fonts/Arial-Bold.ttf',
+        __DIR__ . '/assets/fonts/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        'C:/Windows/Fonts/arialbd.ttf'
+    ];
+
+    foreach ($fontCandidatesRegular as $f) {
+        if (file_exists($f)) { $fontRegular = $f; break; }
+    }
+    foreach ($fontCandidatesBold as $f) {
+        if (file_exists($f)) { $fontBold = $f; break; }
+    }
+
+    $items = completarGrupoTresCodigos($items);
+    for ($i = 0; $i < 3; $i++) {
+        if (isset($items[$i])) {
+            dibujarEtiquetaCodigoEnCanvas($img, $items[$i], $i * 133, $generator, $fontRegular, $fontBold);
+        }
+    }
+
+    imagepng($img, $destino, 0);
+    imagedestroy($img);
+}
+
+function obtenerCodigosProductoParaPNG($conn, $producto_id) {
+    $stmt = $conn->prepare("SELECT p.id, p.nombre, p.precio_venta, cb.codigo
+        FROM productos p
+        JOIN codigos_barras cb ON p.id = cb.producto_id
+        WHERE p.id = ? AND p.activo = 1 AND p.tipo_inventario = 'producto'
+        ORDER BY cb.codigo ASC");
+    if (!$stmt) {
+        throw new Exception('Error consultando códigos para PNG: ' . $conn->error);
+    }
+    $stmt->bind_param('i', $producto_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    $items = [];
+    while ($row = $res->fetch_assoc()) {
+        $items[] = $row;
+    }
+    $stmt->close();
+    return $items;
+}
+
+function generarPNGCodigosProducto($conn, $producto_id) {
+    $codigos_dir = __DIR__ . '/uploads/codigos/';
+    if (!is_dir($codigos_dir)) {
+        mkdir($codigos_dir, 0777, true);
+    }
+
+    limpiarArchivosCodigosProducto($producto_id);
+
+    $items = obtenerCodigosProductoParaPNG($conn, $producto_id);
+    if (empty($items)) {
+        return;
+    }
+
+    $chunks = array_chunk($items, 3);
+    $archivos = [];
+
+    foreach ($chunks as $index => $grupo) {
+        $numero = str_pad($index + 1, 3, '0', STR_PAD_LEFT);
+        $archivo = $codigos_dir . 'producto_' . intval($producto_id) . '_' . $numero . '.png';
+        crearPNGTripleCodigos($grupo, $archivo);
+        $archivos[] = $archivo;
+    }
+
+    if (!empty($archivos[0])) {
+        @copy($archivos[0], $codigos_dir . 'producto_' . intval($producto_id) . '.png');
+    }
+
+    if (count($archivos) > 1 && class_exists('ZipArchive')) {
+        $zipPath = $codigos_dir . 'producto_' . intval($producto_id) . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+            foreach ($archivos as $archivo) {
+                $zip->addFile($archivo, basename($archivo));
+            }
+            $zip->close();
+        }
+    }
+}
+
 // ========================= AGREGAR PROVEEDOR =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_proveedor') {
     // Limpiar completamente el buffer
@@ -149,7 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $cantidad = intval($_POST['cantidad'] ?? 0);
         $precio_compra = floatval($_POST['precio_compra'] ?? 0);
         $precio_venta = floatval($_POST['precio_venta'] ?? 0);
-        $tipo_codigo = $_POST['tipo_codigo'] ?? 'multiple';
+        $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $_POST['tipo_codigo'] ?? 'multiple');
         
         $atributos = [];
         $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
@@ -163,7 +544,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $cantidad = floatval($_POST['cantidad_insumo'] ?? 0);
         $precio_compra = floatval($_POST['precio_compra_insumo'] ?? 0);
         $precio_venta = 0;
-        $tipo_codigo = 'unico';
+        $tipo_codigo = 'multiple';
         $atributos_json = null;
         
         $tipo_unidad_insumo = $_POST['tipo_unidad_insumo'] ?? 'unidad';
@@ -305,24 +686,21 @@ function generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_cod
     if ($tipo_inventario !== 'producto') {
         return;
     }
-    
+
+    $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo);
+    $producto_id = (int)$producto_id;
+    $cantidad = max(0, (int)floor((float)$cantidad));
+
     if ($tipo_codigo === 'unico') {
-        $codigo = "P" . str_pad($producto_id, 8, '0', STR_PAD_LEFT);
-        $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, 1)");
-        $stmt->bind_param("is", $producto_id, $codigo);
-        $stmt->execute();
-        $stmt->close();
+        insertarCodigoBarraSeguro($conn, $producto_id, codigoUnicoProducto($producto_id), 1);
     } else {
         for ($i = 1; $i <= $cantidad; $i++) {
-            $codigo = $producto_id . str_pad($i, 5, '0', STR_PAD_LEFT);
-            $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, 1)");
-            $stmt->bind_param("is", $producto_id, $codigo);
-            $stmt->execute();
-            $stmt->close();
+            insertarCodigoBarraSeguro($conn, $producto_id, codigoMultipleProducto($producto_id, $i), 1);
         }
     }
-    
+
     generarPDFCodigos($conn, $nombre, $producto_id, $cantidad, $tipo_codigo);
+    generarPNGCodigosProducto($conn, $producto_id);
 }
 
 function generarPDFCodigos($conn, $nombre, $producto_id, $cantidad, $tipo_codigo = 'multiple') {

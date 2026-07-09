@@ -1,48 +1,187 @@
 <?php
-// Incluir sesión y conexión (NO volver a llamar session_start)
-require_once 'includes/session.php';
+// includes/navbar.php
 
-// CORREGIR: Si el ID no está en sesión pero el nombre sí, buscarlo
-if (!isset($_SESSION['id']) && isset($_SESSION['nombre']) && isset($conn)) {
-    $nombre_sesion = $_SESSION['nombre'];
-    $sql_buscar = "SELECT id FROM usuarios WHERE nombre = ?";
-    $stmt_buscar = $conn->prepare($sql_buscar);
-    $stmt_buscar->bind_param("s", $nombre_sesion);
-    $stmt_buscar->execute();
-    $result_buscar = $stmt_buscar->get_result();
-    if ($result_buscar && $result_buscar->num_rows > 0) {
-        $row_buscar = $result_buscar->fetch_assoc();
-        $_SESSION['id'] = $row_buscar['id'];
+// Incluir sesión y conexión
+// Usamos __DIR__ para que funcione aunque el navbar sea incluido desde cualquier archivo.
+if (file_exists(__DIR__ . '/session.php')) {
+    require_once __DIR__ . '/session.php';
+} else {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
     }
-    $stmt_buscar->close();
 }
 
+if (!isset($conn) && file_exists(__DIR__ . '/db.php')) {
+    require_once __DIR__ . '/db.php';
+}
+
+// ====================== FUNCIONES BASE ======================
+
+if (!function_exists('navbar_redirect')) {
+    function navbar_redirect($url)
+    {
+        if (!headers_sent()) {
+            header("Location: " . $url);
+            exit;
+        }
+
+        echo "<script>window.location.href = " . json_encode($url) . ";</script>";
+        echo '<noscript><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '"></noscript>';
+        exit;
+    }
+}
+
+if (!function_exists('navbar_normalizar_rol')) {
+    function navbar_normalizar_rol($rol)
+    {
+        $rol = mb_strtolower(trim((string)$rol), 'UTF-8');
+
+        $map = [
+            'admin' => 'administrador',
+            'administrador' => 'administrador',
+            'vendedor' => 'vendedor',
+            'seller' => 'vendedor',
+        ];
+
+        return $map[$rol] ?? $rol;
+    }
+}
+
+if (!function_exists('navbar_usuario_id')) {
+    function navbar_usuario_id()
+    {
+        return $_SESSION['usuario_id']
+            ?? $_SESSION['id_usuario']
+            ?? $_SESSION['id']
+            ?? null;
+    }
+}
+
+// ====================== RECUPERAR ID SI SOLO EXISTE EL NOMBRE ======================
+
+if (
+    empty($_SESSION['id']) &&
+    empty($_SESSION['usuario_id']) &&
+    isset($_SESSION['nombre']) &&
+    isset($conn)
+) {
+    $nombre_sesion = $_SESSION['nombre'];
+
+    $sql_buscar = "SELECT id FROM usuarios WHERE nombre = ? LIMIT 1";
+    $stmt_buscar = $conn->prepare($sql_buscar);
+
+    if ($stmt_buscar) {
+        $stmt_buscar->bind_param("s", $nombre_sesion);
+        $stmt_buscar->execute();
+        $result_buscar = $stmt_buscar->get_result();
+
+        if ($result_buscar && $result_buscar->num_rows > 0) {
+            $row_buscar = $result_buscar->fetch_assoc();
+
+            $_SESSION['id'] = (int)$row_buscar['id'];
+            $_SESSION['usuario_id'] = (int)$row_buscar['id'];
+        }
+
+        $stmt_buscar->close();
+    }
+}
+
+// ====================== PROTECCIÓN CENTRAL DE RUTAS ======================
+
+$current_page = basename(parse_url($_SERVER['SCRIPT_NAME'], PHP_URL_PATH));
+
+$public_pages = [
+    'login.php',
+    'logout.php',
+    'forgot_password.php',
+    'reset_password.php',
+    'procesar_reset.php',
+    'sin_permiso.php',
+];
+
+if (!in_array($current_page, $public_pages, true)) {
+    $usuario_id = navbar_usuario_id();
+    $rol_actual = navbar_normalizar_rol($_SESSION['rol'] ?? '');
+
+    if (empty($usuario_id) || empty($rol_actual)) {
+        navbar_redirect('login.php?expired=1');
+    }
+
+    $permisos_rutas = [
+        // ================= ADMINISTRADOR =================
+        'dashboard_admin.php' => ['administrador'],
+        'corte_caja.php' => ['administrador'],
+        'dashboard_inventario.php' => ['administrador'],
+        'dashboard_productos.php' => ['administrador'],
+        'proveedores.php' => ['administrador'],
+        'historial_reportes.php' => ['administrador'],
+        'historial_stock.php' => ['administrador'],
+        'ver_ventas.php' => ['administrador'],
+        'configuracion.php' => ['administrador'],
+        'asignar_productos_vendedor.php' => ['administrador'],
+        'venta_admin.php' => ['administrador'],
+
+        // ================= VENDEDOR =================
+        'dashboard_vendedor.php' => ['vendedor'],
+        'inventario.php' => ['vendedor'],
+        'dashboard_reportes_ventas.php' => ['vendedor'],
+        'vendedor_ajustes_productos.php' => ['vendedor'],
+
+        // ================= COMPARTIDAS =================
+        // Ambos entran primero aquí para tomar la decisión de venta.
+        'dashboard_ventas.php' => ['administrador', 'vendedor'],
+
+        // También queda compartida porque dashboard_ventas.php puede mandar aquí.
+        'ventas.php' => ['administrador', 'vendedor'],
+
+        'historial_ventas.php' => ['administrador', 'vendedor'],
+        'mi_perfil.php' => ['administrador', 'vendedor'],
+    ];
+
+    if (isset($permisos_rutas[$current_page])) {
+        if (!in_array($rol_actual, $permisos_rutas[$current_page], true)) {
+            navbar_redirect('sin_permiso.php');
+        }
+    }
+}
+
+// ====================== DATOS DE USUARIO ======================
+
 $nombre = $_SESSION['nombre'] ?? 'Usuario';
-$rol = $_SESSION['rol'] ?? 'Sin rol';
-$user_id = $_SESSION['id'] ?? 0;
+$rol = navbar_normalizar_rol($_SESSION['rol'] ?? 'Sin rol');
+$user_id = navbar_usuario_id() ?? 0;
+
+$es_admin = ($rol === 'administrador');
+$es_vendedor = ($rol === 'vendedor');
 
 // Obtener configuración de la tienda
 $config = [];
-$sql_config = "SELECT nombre, telefono, email, direccion, horario, logo FROM configuracion_galeria WHERE id = 1";
-$result_config = $conn->query($sql_config);
-if ($result_config && $result_config->num_rows > 0) {
-    $config = $result_config->fetch_assoc();
+
+if (isset($conn)) {
+    $sql_config = "SELECT nombre, telefono, email, direccion, horario, logo FROM configuracion_galeria WHERE id = 1";
+    $result_config = $conn->query($sql_config);
+
+    if ($result_config && $result_config->num_rows > 0) {
+        $config = $result_config->fetch_assoc();
+    }
 }
 
-// ========== VERSIÓN CORREGIDA PARA LA FOTO DE PERFIL ==========
+// ====================== FOTO DE PERFIL ======================
+
 $foto_perfil = '';
 $tiene_foto = false;
 
-// Buscar directamente el archivo en la carpeta
 $ruta_directa = 'uploads/perfiles/perfil_1.jpeg';
+
 if (file_exists($ruta_directa)) {
     $foto_perfil = $ruta_directa;
     $tiene_foto = true;
 } else {
-    // Buscar con otras extensiones
     $extensiones = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'JPG', 'JPEG', 'PNG'];
+
     foreach ($extensiones as $ext) {
         $ruta = 'uploads/perfiles/perfil_1.' . $ext;
+
         if (file_exists($ruta)) {
             $foto_perfil = $ruta;
             $tiene_foto = true;
@@ -51,28 +190,36 @@ if (file_exists($ruta_directa)) {
     }
 }
 
-// Si no se encontró, usar la ruta de la BD
-if (!$tiene_foto && $user_id > 0) {
+if (!$tiene_foto && $user_id > 0 && isset($conn)) {
     $sql_foto = "SELECT foto_perfil FROM usuarios WHERE id = ?";
     $stmt = $conn->prepare($sql_foto);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result_foto = $stmt->get_result();
-    if ($result_foto && $result_foto->num_rows > 0) {
-        $user_data = $result_foto->fetch_assoc();
-        if (!empty($user_data['foto_perfil']) && file_exists($user_data['foto_perfil'])) {
-            $foto_perfil = $user_data['foto_perfil'];
-            $tiene_foto = true;
+
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result_foto = $stmt->get_result();
+
+        if ($result_foto && $result_foto->num_rows > 0) {
+            $user_data = $result_foto->fetch_assoc();
+
+            if (!empty($user_data['foto_perfil']) && file_exists($user_data['foto_perfil'])) {
+                $foto_perfil = $user_data['foto_perfil'];
+                $tiene_foto = true;
+            }
         }
+
+        $stmt->close();
     }
-    $stmt->close();
 }
 
-// Obtener inicial del nombre
+// Inicial del nombre
 $inicial = '';
+
 if (!empty($nombre)) {
     $inicial = mb_strtoupper(mb_substr(trim($nombre), 0, 1, 'UTF-8'), 'UTF-8');
 }
+
+// ====================== LOGO DE TIENDA ======================
 
 $tienda_nombre = $config['nombre'] ?? 'Tienda Pescadores';
 $tienda_logo = '';
@@ -102,7 +249,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  
+
   <!-- Estilos del Navbar -->
   <link rel="stylesheet" href="css/navbar-styles.css">
 </head>
@@ -115,6 +262,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
   <!-- Mobile Sidebar -->
   <div class="mobile-overlay" id="mobileOverlay"></div>
+
   <div class="mobile-sidebar" id="mobileSidebar">
     <div class="mobile-sidebar-header">
       <div class="logo-area">
@@ -123,12 +271,15 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <?php else: ?>
           <i class="fas fa-fish" style="color: white; font-size: 24px;"></i>
         <?php endif; ?>
+
         <h3><?php echo htmlspecialchars($tienda_nombre); ?></h3>
       </div>
+
       <button class="mobile-sidebar-close" id="mobileSidebarClose">
         <i class="fas fa-times"></i>
       </button>
     </div>
+
     <div class="mobile-sidebar-content">
       <div class="mobile-user-info">
         <?php if ($tiene_foto && !empty($foto_perfil) && file_exists($foto_perfil)): ?>
@@ -136,6 +287,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <?php else: ?>
           <div class="mobile-user-initial"><?php echo htmlspecialchars($inicial); ?></div>
         <?php endif; ?>
+
         <div class="mobile-user-details">
           <strong><?php echo htmlspecialchars($nombre); ?></strong>
           <span><?php echo ucfirst(htmlspecialchars($rol)); ?></span>
@@ -143,7 +295,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       </div>
 
       <div class="mobile-nav-links">
-        <?php if ($rol === 'administrador'): ?>
+        <?php if ($es_admin): ?>
           <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i> Inicio</a>
           <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i> Corte de Caja</a>
           <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
@@ -151,44 +303,47 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
           <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
           <a href="dashboard_productos.php"><i class="fas fa-box"></i> Registrar Productos</a>
           <a href="proveedores.php"><i class="fas fa-truck"></i> Proveedores</a>
-          <a href="historial_reportes.php"><i class="fas fa-file-alt"></i>Reportes</a>
+          <a href="historial_reportes.php"><i class="fas fa-file-alt"></i> Reportes</a>
           <a href="historial_stock.php"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
-          <a href="ver_ventas.php"><i class="fas fa-chart-line"></i> Estadisticas</a>
+          <a href="ver_ventas.php"><i class="fas fa-chart-line"></i> Estadísticas</a>
           <a href="configuracion.php"><i class="fas fa-cogs"></i> Configuración</a>
           <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i> Asignar Productos</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
-              <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i> Registrar Ventas</a> -->
 
-        <?php elseif ($rol === 'vendedor'): ?>
+        <?php elseif ($es_vendedor): ?>
           <a href="dashboard_vendedor.php"><i class="fas fa-home"></i> Panel Vendedor</a>
-          <a href="ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+          <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
           <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
           <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
           <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i> Reportes</a>
           <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i> Ajustes de Productos</a>
           <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
         <?php endif; ?>
-        
-        <a href="logout.php" style="margin-top: 12px;"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+
+        <a href="logout.php" style="margin-top: 12px;">
+          <i class="fas fa-sign-out-alt"></i> Cerrar sesión
+        </a>
       </div>
     </div>
   </div>
 
   <!-- Desktop Sidebar -->
-<aside class="sidebar-custom" id="sidebar">
-  <div class="sidebar-header">
-    <div class="logo-area">
-      <?php if ($logo_exists): ?>
-        <img src="<?php echo htmlspecialchars($tienda_logo); ?>?v=<?php echo $logo_version; ?>" alt="Logo">
-      <?php else: ?>
-        <i class="fas fa-fish" style="color: white; font-size: 24px;"></i>
-      <?php endif; ?>
-      <span><?php echo htmlspecialchars($tienda_nombre); ?></span>
+  <aside class="sidebar-custom" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-area">
+        <?php if ($logo_exists): ?>
+          <img src="<?php echo htmlspecialchars($tienda_logo); ?>?v=<?php echo $logo_version; ?>" alt="Logo">
+        <?php else: ?>
+          <i class="fas fa-fish" style="color: white; font-size: 24px;"></i>
+        <?php endif; ?>
+
+        <span><?php echo htmlspecialchars($tienda_nombre); ?></span>
+      </div>
+
+      <button id="toggleBtn" class="toggle-btn" title="Colapsar menú">
+        <i class="fas fa-chevron-left"></i>
+      </button>
     </div>
-    <button id="toggleBtn" class="toggle-btn" title="Colapsar menú">
-      <i class="fas fa-chevron-left"></i>
-    </button>
-  </div>
 
     <div class="user-info">
       <?php if ($tiene_foto && !empty($foto_perfil) && file_exists($foto_perfil)): ?>
@@ -196,6 +351,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       <?php else: ?>
         <div class="user-initial"><?php echo htmlspecialchars($inicial); ?></div>
       <?php endif; ?>
+
       <div class="user-details">
         <strong><?php echo htmlspecialchars($nombre); ?></strong>
         <span><?php echo ucfirst(htmlspecialchars($rol)); ?></span>
@@ -203,7 +359,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
     </div>
 
     <div class="nav-links">
-      <?php if ($rol === 'administrador'): ?>
+      <?php if ($es_admin): ?>
         <a href="dashboard_admin.php"><i class="fas fa-home"></i><span>Inicio</span></a>
         <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i><span>Corte de Caja</span></a>
         <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
@@ -213,16 +369,14 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
         <a href="proveedores.php"><i class="fas fa-truck"></i><span>Proveedores</span></a>
         <a href="historial_reportes.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
         <a href="historial_stock.php"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
-        <a href="ver_ventas.php"><i class="fas fa-chart-line"></i><span>Estadisticas</span></a>
+        <a href="ver_ventas.php"><i class="fas fa-chart-line"></i><span>Estadísticas</span></a>
         <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i><span>Asignar Productos</span></a>
         <a href="configuracion.php"><i class="fas fa-cogs"></i><span>Configuración</span></a>
         <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
-            <!-- <a href="venta_admin.php"><i class="fas fa-cash-register"></i><span>Registrar Ventas</span></a> -->
-        </div>
 
-      <?php elseif ($rol === 'vendedor'): ?>
+      <?php elseif ($es_vendedor): ?>
         <a href="dashboard_vendedor.php"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>
-        <a href="ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
+        <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
         <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
         <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
         <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
@@ -240,93 +394,97 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
   <!-- Scripts -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-<script>
+  <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Desktop sidebar toggle
-        const sidebar = document.getElementById('sidebar');
-        const toggleBtn = document.getElementById('toggleBtn');
-        const contentWrapper = document.querySelector('.content-wrapper');
-        
-        if (toggleBtn && sidebar && contentWrapper) {
-            const toggleIcon = toggleBtn.querySelector('i');
-            
-            toggleBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('closed');
-                
-                if (sidebar.classList.contains('closed')) {
-                    toggleIcon.classList.remove('fa-chevron-left');
-                    toggleIcon.classList.add('fa-chevron-right');
-                    contentWrapper.style.marginLeft = 'var(--sidebar-collapsed)';
-                } else {
-                    toggleIcon.classList.remove('fa-chevron-right');
-                    toggleIcon.classList.add('fa-chevron-left');
-                    contentWrapper.style.marginLeft = 'var(--sidebar-width)';
-                }
-            });
-        }
+      const sidebar = document.getElementById('sidebar');
+      const toggleBtn = document.getElementById('toggleBtn');
+      const contentWrapper = document.querySelector('.content-wrapper');
 
-        // Submenu toggles
-        document.querySelectorAll('.submenu-toggle').forEach(toggle => {
-            toggle.addEventListener('click', function() {
-                const parent = this.parentElement;
-                if (parent) parent.classList.toggle('open');
-            });
+      if (toggleBtn && sidebar && contentWrapper) {
+        const toggleIcon = toggleBtn.querySelector('i');
+
+        toggleBtn.addEventListener('click', function() {
+          sidebar.classList.toggle('closed');
+
+          if (sidebar.classList.contains('closed')) {
+            toggleIcon.classList.remove('fa-chevron-left');
+            toggleIcon.classList.add('fa-chevron-right');
+            contentWrapper.style.marginLeft = 'var(--sidebar-collapsed)';
+          } else {
+            toggleIcon.classList.remove('fa-chevron-right');
+            toggleIcon.classList.add('fa-chevron-left');
+            contentWrapper.style.marginLeft = 'var(--sidebar-width)';
+          }
         });
+      }
 
-        // Mobile menu functionality
-        const mobileHamburger = document.getElementById('mobileHamburger');
-        const mobileSidebar = document.getElementById('mobileSidebar');
-        const mobileOverlay = document.getElementById('mobileOverlay');
-        const mobileSidebarClose = document.getElementById('mobileSidebarClose');
+      document.querySelectorAll('.submenu-toggle').forEach(function(toggle) {
+        toggle.addEventListener('click', function() {
+          const parent = this.parentElement;
+          if (parent) {
+            parent.classList.toggle('open');
+          }
+        });
+      });
 
-        if (mobileHamburger && mobileSidebar && mobileOverlay && mobileSidebarClose) {
-            function openMobileSidebar() {
-                mobileSidebar.classList.add('open');
-                mobileOverlay.classList.add('active');
-                document.body.style.overflow = 'hidden';
-            }
+      const mobileHamburger = document.getElementById('mobileHamburger');
+      const mobileSidebar = document.getElementById('mobileSidebar');
+      const mobileOverlay = document.getElementById('mobileOverlay');
+      const mobileSidebarClose = document.getElementById('mobileSidebarClose');
 
-            function closeMobileSidebar() {
-                mobileSidebar.classList.remove('open');
-                mobileOverlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
-
-            mobileHamburger.addEventListener('click', openMobileSidebar);
-            mobileSidebarClose.addEventListener('click', closeMobileSidebar);
-            mobileOverlay.addEventListener('click', closeMobileSidebar);
+      if (mobileHamburger && mobileSidebar && mobileOverlay && mobileSidebarClose) {
+        function openMobileSidebar() {
+          mobileSidebar.classList.add('open');
+          mobileOverlay.classList.add('active');
+          document.body.style.overflow = 'hidden';
         }
 
-        // Responsive behavior
-        function handleResponsive() {
-            const sidebar = document.getElementById('sidebar');
-            const contentWrapper = document.querySelector('.content-wrapper');
-            
-            if (window.innerWidth < 768) {
-                if (sidebar) sidebar.classList.remove('closed');
-                if (contentWrapper) contentWrapper.style.marginLeft = '0';
+        function closeMobileSidebar() {
+          mobileSidebar.classList.remove('open');
+          mobileOverlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+
+        mobileHamburger.addEventListener('click', openMobileSidebar);
+        mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+        mobileOverlay.addEventListener('click', closeMobileSidebar);
+      }
+
+      function handleResponsive() {
+        const sidebar = document.getElementById('sidebar');
+        const contentWrapper = document.querySelector('.content-wrapper');
+
+        if (window.innerWidth < 768) {
+          if (sidebar) {
+            sidebar.classList.remove('closed');
+          }
+
+          if (contentWrapper) {
+            contentWrapper.style.marginLeft = '0';
+          }
+        } else {
+          const mobileSidebar = document.getElementById('mobileSidebar');
+          const mobileOverlay = document.getElementById('mobileOverlay');
+
+          if (mobileSidebar && mobileOverlay) {
+            mobileSidebar.classList.remove('open');
+            mobileOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+          }
+
+          if (sidebar && contentWrapper) {
+            if (sidebar.classList.contains('closed')) {
+              contentWrapper.style.marginLeft = 'var(--sidebar-collapsed)';
             } else {
-                const mobileSidebar = document.getElementById('mobileSidebar');
-                const mobileOverlay = document.getElementById('mobileOverlay');
-                if (mobileSidebar && mobileOverlay) {
-                    mobileSidebar.classList.remove('open');
-                    mobileOverlay.classList.remove('active');
-                    document.body.style.overflow = '';
-                }
-                
-                if (sidebar && contentWrapper) {
-                    if (sidebar.classList.contains('closed')) {
-                        contentWrapper.style.marginLeft = 'var(--sidebar-collapsed)';
-                    } else {
-                        contentWrapper.style.marginLeft = 'var(--sidebar-width)';
-                    }
-                }
+              contentWrapper.style.marginLeft = 'var(--sidebar-width)';
             }
+          }
         }
+      }
 
-        window.addEventListener('resize', handleResponsive);
-        handleResponsive();
+      window.addEventListener('resize', handleResponsive);
+      handleResponsive();
     });
-</script>
+  </script>
 </body>
 </html>

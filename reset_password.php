@@ -1,25 +1,175 @@
 <?php
 session_start();
 
-include 'includes/db.php';
-include 'includes/csrf.php';
-include 'includes/header.php';
+require_once 'includes/db.php';
+require_once 'includes/csrf.php';
 
-$token = $_GET['token'] ?? '';
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$stmt = $conn->prepare("
-    SELECT email 
-    FROM password_resets
-    WHERE token = ? 
-    AND expires_at > NOW()
-    LIMIT 1
-");
-$stmt->bind_param("s", $token);
-$stmt->execute();
-$res = $stmt->get_result();
+$token = trim($_GET['token'] ?? '');
 
-if ($res->num_rows !== 1) {
+function obtenerResetValido(mysqli $conn, string $token): ?array
+{
+    if ($token === '') {
+        return null;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id, email
+        FROM password_resets
+        WHERE token = ?
+        AND expires_at > NOW()
+        LIMIT 1
+    ");
+    $stmt->bind_param("s", $token);
+    $stmt->execute();
+
+    $res = $stmt->get_result();
+
+    if ($res->num_rows !== 1) {
+        return null;
+    }
+
+    return $res->fetch_assoc();
+}
+
+function limpiarTexto(string $texto): string
+{
+    return htmlspecialchars($texto, ENT_QUOTES, 'UTF-8');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+
+    $passwordPlain = $_POST['password'] ?? '';
+    $passwordConfirm = $_POST['password_confirm'] ?? '';
+
+    if ($passwordPlain !== $passwordConfirm) {
+        $_SESSION['swal'] = [
+            'icon' => 'error',
+            'title' => 'Error',
+            'text' => 'Las contraseñas no coinciden.'
+        ];
+    } elseif (strlen($passwordPlain) < 8) {
+        $_SESSION['swal'] = [
+            'icon' => 'warning',
+            'title' => 'Contraseña muy corta',
+            'text' => 'La contraseña debe contener al menos 8 caracteres.'
+        ];
+    } else {
+        $resetData = obtenerResetValido($conn, $token);
+
+        if (!$resetData) {
+            $_SESSION['swal'] = [
+                'icon' => 'error',
+                'title' => 'Enlace expirado',
+                'text' => 'Este enlace ya no es válido. Solicita uno nuevo.'
+            ];
+
+            header('Location: forgot_password.php');
+            exit;
+        }
+
+        $resetId = (int)$resetData['id'];
+        $email = $resetData['email'];
+
+        try {
+            $conn->begin_transaction();
+
+            $stmt = $conn->prepare("
+                SELECT id
+                FROM usuarios
+                WHERE email = ?
+                LIMIT 1
+            ");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+
+            $usuarioRes = $stmt->get_result();
+
+            if ($usuarioRes->num_rows !== 1) {
+                throw new Exception("No se encontró una cuenta asociada a este enlace.");
+            }
+
+            $usuario = $usuarioRes->fetch_assoc();
+            $usuarioId = (int)$usuario['id'];
+
+            $passwordHash = password_hash($passwordPlain, PASSWORD_BCRYPT);
+
+            $stmt = $conn->prepare("
+                UPDATE usuarios
+                SET password = ?,
+                    debe_cambiar_password = 0
+                WHERE id = ?
+            ");
+            $stmt->bind_param("si", $passwordHash, $usuarioId);
+            $stmt->execute();
+
+            /*
+                No borramos el registro de password_resets.
+                Solo cambiamos el token y lo expiramos para que:
+                1. El registro prevalezca en BD.
+                2. El enlace anterior ya no pueda usarse.
+            */
+            $stmt = $conn->prepare("
+                UPDATE password_resets
+                SET token = SHA2(CONCAT(token, '|USED|', NOW(), '|', id), 256),
+                    expires_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->bind_param("i", $resetId);
+            $stmt->execute();
+
+            /*
+                Opcional pero recomendado:
+                invalida otros enlaces activos del mismo correo.
+            */
+            $stmt = $conn->prepare("
+                UPDATE password_resets
+                SET token = SHA2(CONCAT(token, '|USED|', NOW(), '|', id), 256),
+                    expires_at = NOW()
+                WHERE email = ?
+                AND expires_at > NOW()
+            ");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+
+            $conn->commit();
+
+            /*
+                Compatible con tu login.php actual.
+                Importante: lleva html + timer + redirect para que SweetAlert no se quede cargando.
+            */
+            $_SESSION['swal'] = [
+                'icon' => 'success',
+                'title' => 'Contraseña restablecida',
+                'html' => 'Ya puedes iniciar sesión con tu nueva contraseña.',
+                'timer' => 2200,
+                'redirect' => 'login.php'
+            ];
+
+            header('Location: login.php');
+            exit;
+
+        } catch (Throwable $e) {
+            $conn->rollback();
+
+            $_SESSION['swal'] = [
+                'icon' => 'error',
+                'title' => 'No se pudo restablecer',
+                'text' => 'Ocurrió un problema al actualizar la contraseña. Inténtalo nuevamente.'
+            ];
+        }
+    }
+}
+
+$resetActual = obtenerResetValido($conn, $token);
+
+require_once 'includes/header.php';
+
+if (!$resetActual) {
 ?>
+
 <style>
 body {
     min-height: 100vh;
@@ -104,73 +254,9 @@ body {
         </div>
     </div>
 </div>
+
 <?php
     exit;
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-
-    $passwordPlain = $_POST['password'] ?? '';
-    $passwordConfirm = $_POST['password_confirm'] ?? '';
-
-    if ($passwordPlain !== $passwordConfirm) {
-        $_SESSION['swal'] = [
-            'icon' => 'error',
-            'title' => 'Error',
-            'text' => 'Las contraseñas no coinciden.'
-        ];
-    } elseif (strlen($passwordPlain) < 8) {
-        $_SESSION['swal'] = [
-            'icon' => 'warning',
-            'title' => 'Contraseña muy corta',
-            'text' => 'La contraseña debe contener al menos 8 caracteres.'
-        ];
-    } else {
-
-        $stmt = $conn->prepare("
-            SELECT email 
-            FROM password_resets
-            WHERE token = ? 
-            AND expires_at > NOW()
-            LIMIT 1
-        ");
-        $stmt->bind_param("s", $token);
-        $stmt->execute();
-        $check = $stmt->get_result();
-
-        if ($check->num_rows !== 1) {
-            $_SESSION['swal'] = [
-                'icon' => 'error',
-                'title' => 'Enlace expirado',
-                'text' => 'Este enlace ya no es válido. Solicita uno nuevo.'
-            ];
-
-            header('Location: forgot_password.php');
-            exit;
-        }
-
-        $email = $check->fetch_assoc()['email'];
-
-        $password = password_hash($passwordPlain, PASSWORD_BCRYPT);
-
-        $stmt = $conn->prepare("UPDATE usuarios SET password = ? WHERE email = ?");
-        $stmt->bind_param("ss", $password, $email);
-        $stmt->execute();
-
-        $stmt = $conn->prepare("DELETE FROM password_resets WHERE token = ?");
-        $stmt->bind_param("s", $token);
-        $stmt->execute();
-
-        $_SESSION['swal'] = [
-            'icon'  => 'success',
-            'title' => 'Contraseña restablecida',
-            'text'  => 'Ya puedes iniciar sesión con tu nueva contraseña.'
-        ];
-
-        header('Location: login.php');
-        exit;
-    }
 }
 ?>
 
@@ -389,7 +475,7 @@ body {
             <small>Utiliza una contraseña de al menos 8 caracteres.</small>
 
             <form method="POST" id="resetForm">
-                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                <input type="hidden" name="csrf_token" value="<?= limpiarTexto(csrf_token()) ?>">
 
                 <div class="form-group mb-4">
                     <label class="form-label-custom">Nueva contraseña</label>
@@ -599,6 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const btn = form.querySelector('button[type="submit"]');
+
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Guardando...';
@@ -609,22 +696,27 @@ document.addEventListener('DOMContentLoaded', () => {
             text: 'Por favor espera',
             allowOutsideClick: false,
             allowEscapeKey: false,
+            showConfirmButton: false,
             didOpen: () => Swal.showLoading()
         });
 
-        setTimeout(() => form.submit(), 400);
+        setTimeout(() => {
+            form.submit();
+        }, 300);
     });
 });
 </script>
 
 <?php if (!empty($_SESSION['swal'])): ?>
 <script>
-Swal.fire({
-    icon: '<?= $_SESSION['swal']['icon'] ?>',
-    title: '<?= $_SESSION['swal']['title'] ?>',
-    text: '<?= $_SESSION['swal']['text'] ?? '' ?>',
-    confirmButtonText: 'Aceptar',
-    confirmButtonColor: '#f97316'
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({
+        icon: <?= json_encode($_SESSION['swal']['icon'] ?? 'info') ?>,
+        title: <?= json_encode($_SESSION['swal']['title'] ?? '') ?>,
+        text: <?= json_encode($_SESSION['swal']['text'] ?? '') ?>,
+        confirmButtonText: 'Aceptar',
+        confirmButtonColor: '#f97316'
+    });
 });
 </script>
 <?php unset($_SESSION['swal']); endif; ?>
