@@ -391,12 +391,23 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
     </a>
   </aside>
 
+  <?php
+  // Módulo legal: muestra el aviso únicamente cuando falta la aceptación.
+  $archivo_legal = __DIR__ . '/documentos_legales.php';
+
+  if (is_file($archivo_legal)) {
+      require_once $archivo_legal;
+  } else {
+      error_log('No se encontró el módulo legal en: ' . $archivo_legal);
+  }
+  ?>
+
   <!-- Scripts -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      const sidebar = document.getElementById('sidebar');
+const sidebar = document.getElementById('sidebar');
       const toggleBtn = document.getElementById('toggleBtn');
       const contentWrapper = document.querySelector('.content-wrapper');
 

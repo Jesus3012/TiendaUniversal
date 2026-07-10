@@ -874,14 +874,443 @@ include 'includes/navbar.php';
         </head>
     <body>
         <link rel="stylesheet" href="css/configuracion.css?v=<?= time() ?>">
+        <style>
+            /* =========================================================
+               ENCABEZADO DE CONFIGURACIÓN
+               ========================================================= */
+            .config-page-hero {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 20px 22px;
+                border: 1px solid rgba(249, 115, 22, .14);
+                border-radius: 18px;
+                background:
+                    radial-gradient(circle at top right, rgba(251, 146, 60, .16), transparent 34%),
+                    linear-gradient(135deg, #ffffff 0%, #fffaf5 100%);
+                box-shadow: 0 12px 28px rgba(15, 23, 42, .06);
+            }
+
+            .config-page-hero-icon {
+                width: 54px;
+                height: 54px;
+                flex: 0 0 54px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 16px;
+                color: #ffffff;
+                background: linear-gradient(135deg, #f97316, #fb923c);
+                box-shadow: 0 10px 22px rgba(249, 115, 22, .24);
+                font-size: 23px;
+            }
+
+            .config-page-hero-copy h1 {
+                margin: 0;
+                color: #172033;
+                font-size: clamp(24px, 2vw, 31px);
+                font-weight: 850;
+                line-height: 1.18;
+            }
+
+            .config-page-hero-copy p {
+                margin: 5px 0 0;
+                color: #64748b;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+
+            /* =========================================================
+               PESTAÑAS SUPERIORES
+               ========================================================= */
+            .nav-tabs-wrapper {
+                margin-top: 18px;
+                padding: 8px !important;
+                overflow: visible !important;
+                border: 1px solid #eef2f7 !important;
+                border-radius: 18px !important;
+                background: #ffffff !important;
+                box-shadow: 0 10px 25px rgba(15, 23, 42, .06);
+            }
+
+            #configTabs.config-tabs-grid {
+                display: grid !important;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 8px;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+            }
+
+            #configTabs.config-tabs-grid .nav-item {
+                width: 100%;
+                min-width: 0;
+                margin: 0 !important;
+            }
+
+            #configTabs.config-tabs-grid .nav-link {
+                width: 100%;
+                min-height: 52px;
+                display: flex !important;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                margin: 0 !important;
+                padding: 10px 8px !important;
+                border: 1px solid transparent !important;
+                border-radius: 12px !important;
+                color: #5f6f86 !important;
+                background: transparent !important;
+                font-size: 14px;
+                font-weight: 750;
+                line-height: 1.2;
+                text-align: center;
+                white-space: nowrap;
+                transition: transform .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
+            }
+
+            #configTabs.config-tabs-grid .nav-link i {
+                flex: 0 0 auto;
+                color: #718198;
+                font-size: 15px;
+            }
+
+            #configTabs.config-tabs-grid .nav-link:hover {
+                color: #c2410c !important;
+                background: #fff7ed !important;
+                transform: translateY(-1px);
+            }
+
+            #configTabs.config-tabs-grid .nav-link.active {
+                color: #c2410c !important;
+                border-color: #fed7aa !important;
+                background: linear-gradient(135deg, #fff7ed, #fffbf7) !important;
+                box-shadow: 0 7px 18px rgba(249, 115, 22, .12);
+            }
+
+            #configTabs.config-tabs-grid .nav-link.active i {
+                color: #f97316;
+            }
+
+            /* =========================================================
+               CENTRO DE DOCUMENTOS LEGALES
+               ========================================================= */
+            .legal-center-page {
+                display: grid;
+                gap: 16px;
+                padding-bottom: 5px;
+            }
+
+            .legal-center-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 18px;
+                padding: 18px 20px;
+                overflow: hidden;
+                border: 1px solid rgba(249, 115, 22, .18);
+                border-radius: 18px;
+                background:
+                    radial-gradient(circle at top right, rgba(251, 146, 60, .15), transparent 38%),
+                    linear-gradient(135deg, #ffffff, #fffaf5);
+                box-shadow: 0 10px 26px rgba(15, 23, 42, .055);
+            }
+
+            .legal-center-header-main {
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+
+            .legal-center-header-icon {
+                width: 52px;
+                height: 52px;
+                flex: 0 0 52px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 15px;
+                color: #ffffff;
+                background: linear-gradient(135deg, #f97316, #fb923c);
+                box-shadow: 0 9px 20px rgba(249, 115, 22, .22);
+                font-size: 22px;
+            }
+
+            .legal-center-eyebrow {
+                display: block;
+                margin-bottom: 2px;
+                color: #c2410c;
+                font-size: 10px;
+                font-weight: 900;
+                letter-spacing: .09em;
+                text-transform: uppercase;
+            }
+
+            .legal-center-header h2 {
+                margin: 0;
+                color: #172033;
+                font-size: 24px;
+                font-weight: 850;
+                line-height: 1.2;
+            }
+
+            .legal-center-header p {
+                margin: 4px 0 0;
+                color: #64748b;
+                font-size: 14px;
+                line-height: 1.45;
+            }
+
+            .legal-center-badge {
+                flex: 0 0 auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 7px;
+                padding: 8px 11px;
+                border: 1px solid #fed7aa;
+                border-radius: 999px;
+                color: #9a3412;
+                background: #fff7ed;
+                font-size: 11px;
+                font-weight: 850;
+                white-space: nowrap;
+            }
+
+            .legal-window-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 16px;
+            }
+
+            .legal-doc-window {
+                position: relative;
+                width: 100%;
+                min-height: 178px;
+                display: flex;
+                align-items: stretch;
+                padding: 0;
+                overflow: hidden;
+                border: 1px solid #e2e8f0;
+                border-radius: 18px;
+                color: inherit;
+                background: #ffffff;
+                box-shadow: 0 12px 28px rgba(15, 23, 42, .065);
+                text-align: left;
+                cursor: pointer;
+                appearance: none;
+                transition:
+                    transform .18s ease,
+                    border-color .18s ease,
+                    box-shadow .18s ease;
+            }
+
+            .legal-doc-window::before {
+                content: "";
+                width: 7px;
+                flex: 0 0 7px;
+                background: linear-gradient(180deg, #f97316, #fb923c);
+            }
+
+            .legal-doc-window.legal-privacy-window::before {
+                background: linear-gradient(180deg, #2563eb, #3b82f6);
+            }
+
+            .legal-doc-window:hover,
+            .legal-doc-window:focus-visible {
+                transform: translateY(-3px);
+                border-color: #fdba74;
+                box-shadow: 0 18px 36px rgba(15, 23, 42, .10);
+                outline: none;
+            }
+
+            .legal-doc-window.legal-privacy-window:hover,
+            .legal-doc-window.legal-privacy-window:focus-visible {
+                border-color: #93c5fd;
+            }
+
+            .legal-doc-window-content {
+                min-width: 0;
+                flex: 1;
+                display: flex;
+                align-items: flex-start;
+                gap: 16px;
+                padding: 23px 22px;
+            }
+
+            .legal-doc-window-icon {
+                width: 54px;
+                height: 54px;
+                flex: 0 0 54px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 16px;
+                color: #ea580c;
+                background: #fff7ed;
+                font-size: 22px;
+            }
+
+            .legal-privacy-window .legal-doc-window-icon {
+                color: #2563eb;
+                background: #eff6ff;
+            }
+
+            .legal-doc-window-copy {
+                min-width: 0;
+                flex: 1;
+            }
+
+            .legal-doc-window-copy > span {
+                display: block;
+                margin-bottom: 4px;
+                color: #94a3b8;
+                font-size: 10px;
+                font-weight: 900;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+            }
+
+            .legal-doc-window-copy h3 {
+                margin: 0;
+                color: #172033;
+                font-size: 20px;
+                font-weight: 850;
+                line-height: 1.25;
+            }
+
+            .legal-doc-window-copy p {
+                margin: 8px 0 15px;
+                color: #64748b;
+                font-size: 13px;
+                line-height: 1.55;
+            }
+
+            .legal-doc-window-action {
+                display: inline-flex;
+                align-items: center;
+                gap: 7px;
+                color: #c2410c;
+                font-size: 12px;
+                font-weight: 850;
+            }
+
+            .legal-privacy-window .legal-doc-window-action {
+                color: #1d4ed8;
+            }
+
+            .legal-doc-window-action i {
+                transition: transform .18s ease;
+            }
+
+            .legal-doc-window:hover .legal-doc-window-action i {
+                transform: translateX(3px);
+            }
+
+            @media (max-width: 1250px) {
+                #configTabs.config-tabs-grid {
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                }
+            }
+
+            @media (max-width: 850px) {
+                #configTabs.config-tabs-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                .legal-window-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .legal-center-badge {
+                    display: none;
+                }
+            }
+
+            @media (max-width: 575px) {
+                .config-page-hero {
+                    padding: 16px;
+                }
+
+                .config-page-hero-icon {
+                    width: 46px;
+                    height: 46px;
+                    flex-basis: 46px;
+                    border-radius: 14px;
+                    font-size: 19px;
+                }
+
+                #configTabs.config-tabs-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 6px;
+                }
+
+                #configTabs.config-tabs-grid .nav-link {
+                    justify-content: center;
+                    min-height: 45px;
+                    padding: 9px 7px !important;
+                    font-size: 12px;
+                    white-space: normal;
+                }
+
+                .legal-center-header {
+                    padding: 16px;
+                }
+
+                .legal-center-header-icon {
+                    width: 46px;
+                    height: 46px;
+                    flex-basis: 46px;
+                    border-radius: 14px;
+                    font-size: 19px;
+                }
+
+                .legal-center-header h2 {
+                    font-size: 21px;
+                }
+
+                .legal-center-header p {
+                    font-size: 13px;
+                }
+
+                .legal-doc-window {
+                    min-height: 0;
+                }
+
+                .legal-doc-window-content {
+                    gap: 13px;
+                    padding: 18px 16px;
+                }
+
+                .legal-doc-window-icon {
+                    width: 46px;
+                    height: 46px;
+                    flex-basis: 46px;
+                    border-radius: 14px;
+                    font-size: 19px;
+                }
+
+                .legal-doc-window-copy h3 {
+                    font-size: 18px;
+                }
+            }
+        </style>
 
             <div class="content-wrapper">
                 <section class="content-header">
                     <div class="container-fluid">
                         <div class="row mb-2">
                             <div class="col-12">
-                                <h1><i class="fas fa-cog mr-2"></i> Panel de Configuración</h1>
-                                <small class="text-muted">Administra todos los aspectos del sistema</small>
+                                <div class="config-page-hero">
+                                    <div class="config-page-hero-icon">
+                                        <i class="fas fa-cog"></i>
+                                    </div>
+
+                                    <div class="config-page-hero-copy">
+                                        <h1>Panel de Configuración</h1>
+                                        <p>Administra la tienda, los usuarios, los respaldos y la información legal del sistema.</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -891,13 +1320,14 @@ include 'includes/navbar.php';
                     <div class="container-fluid">
                         <!-- Tabs de navegación -->
                         <div class="nav-tabs-wrapper">
-                            <ul class="nav nav-tabs" id="configTabs" role="tablist">
+                            <ul class="nav nav-tabs config-tabs-grid" id="configTabs" role="tablist">
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'backup' ? 'active' : '' ?>" data-tab="backup"><i class="fas fa-database"></i> Respaldos</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'auditoria' ? 'active' : '' ?>" data-tab="auditoria"><i class="fas fa-history"></i> Auditoría</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'legal' ? 'active' : '' ?>" data-tab="legal" title="Privacidad y términos"><i class="fas fa-file-signature"></i>Terminos y Con.</button></li>
                             </ul>
                         </div>
 
@@ -1279,6 +1709,88 @@ include 'includes/navbar.php';
                         </div>
                     </div>
                 </div>
+
+                <!-- TAB PRIVACIDAD Y TÉRMINOS -->
+                <div class="tab-pane <?= $tab_activo == 'legal' ? 'active' : '' ?>" id="tab-legal" data-tab-content="legal">
+                    <section class="legal-center-page">
+                        <header class="legal-center-header">
+                            <div class="legal-center-header-main">
+                                <div class="legal-center-header-icon">
+                                    <i class="fas fa-scale-balanced"></i>
+                                </div>
+
+                                <div>
+                                    <span class="legal-center-eyebrow">Centro legal</span>
+                                    <h2>Privacidad y términos</h2>
+                                    <p>
+                                        Selecciona un documento para consultarlo en una ventana independiente.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="legal-center-badge">
+                                <i class="fas fa-shield-alt"></i>
+                                Documentos vigentes
+                            </div>
+                        </header>
+
+                        <div class="legal-window-grid">
+                            <button
+                                type="button"
+                                class="legal-doc-window legal-terms-window"
+                                onclick="abrirDocumentoLegalConfiguracion('terminos')"
+                                aria-label="Abrir Términos y Condiciones"
+                            >
+                                <div class="legal-doc-window-content">
+                                    <div class="legal-doc-window-icon">
+                                        <i class="fas fa-file-contract"></i>
+                                    </div>
+
+                                    <div class="legal-doc-window-copy">
+                                        <span>Documento de uso</span>
+                                        <h3>Términos y Condiciones</h3>
+                                        <p>
+                                            Consulta las reglas de acceso, operación, seguridad,
+                                            confidencialidad y responsabilidades dentro del sistema.
+                                        </p>
+
+                                        <div class="legal-doc-window-action">
+                                            Abrir documento
+                                            <i class="fas fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="legal-doc-window legal-privacy-window"
+                                onclick="abrirDocumentoLegalConfiguracion('privacidad')"
+                                aria-label="Abrir Aviso de Privacidad"
+                            >
+                                <div class="legal-doc-window-content">
+                                    <div class="legal-doc-window-icon">
+                                        <i class="fas fa-user-shield"></i>
+                                    </div>
+
+                                    <div class="legal-doc-window-copy">
+                                        <span>Protección de datos</span>
+                                        <h3>Aviso de Privacidad</h3>
+                                        <p>
+                                            Consulta cómo se utilizan y protegen los datos,
+                                            sus finalidades y los derechos relacionados con la información.
+                                        </p>
+
+                                        <div class="legal-doc-window-action">
+                                            Abrir documento
+                                            <i class="fas fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     </section>
@@ -1441,6 +1953,109 @@ include 'includes/navbar.php';
 </div>
 
 <script>
+// ==================== DOCUMENTOS LEGALES ====================
+function seleccionarDocumentoLegalVisible(tipoDocumento) {
+    const documento =
+        tipoDocumento === 'privacidad'
+            ? 'privacidad'
+            : 'terminos';
+
+    const overlays = Array.from(
+        document.querySelectorAll('#legalOverlay')
+    );
+
+    const overlay =
+        overlays.find(function(elemento) {
+            return elemento.classList.contains('legal-visible');
+        })
+        || overlays[0];
+
+    if (!overlay) {
+        return;
+    }
+
+    const panelId =
+        documento === 'privacidad'
+            ? 'legalPanelPrivacidad'
+            : 'legalPanelTerminos';
+
+    const tabId =
+        documento === 'privacidad'
+            ? 'legalTabPrivacidad'
+            : 'legalTabTerminos';
+
+    overlay
+        .querySelectorAll('.legal-tab')
+        .forEach(function(tab) {
+            tab.classList.toggle(
+                'activa',
+                tab.id === tabId
+            );
+        });
+
+    overlay
+        .querySelectorAll('.legal-panel')
+        .forEach(function(panel) {
+            panel.classList.toggle(
+                'activo',
+                panel.id === panelId
+            );
+        });
+
+    const cuerpo =
+        overlay.querySelector('.legal-modal-body');
+
+    if (cuerpo) {
+        cuerpo.scrollTop = 0;
+    }
+}
+
+function abrirDocumentoLegalConfiguracion(tipoDocumento) {
+    const documento =
+        tipoDocumento === 'privacidad'
+            ? 'privacidad'
+            : 'terminos';
+
+    const funcionDirecta =
+        documento === 'privacidad'
+            ? window.mostrarAvisoPrivacidad
+            : window.mostrarTerminosLegales;
+
+    if (typeof funcionDirecta === 'function') {
+        funcionDirecta();
+    } else if (
+        typeof window.mostrarDocumentosLegales === 'function'
+    ) {
+        window.mostrarDocumentosLegales(
+            true,
+            documento
+        );
+    } else {
+        Swal.fire({
+            title: 'Documento no disponible',
+            text: 'No fue posible cargar los documentos legales. Recarga la página.',
+            icon: 'error',
+            confirmButtonColor: '#f97316',
+            confirmButtonText: 'Aceptar'
+        });
+
+        return;
+    }
+
+    /*
+     * Se fuerza la pestaña seleccionada en el modal visible.
+     * Se ejecuta dos veces para evitar que otro script la cambie
+     * nuevamente a Términos durante la apertura.
+     */
+    requestAnimationFrame(function() {
+        seleccionarDocumentoLegalVisible(documento);
+    });
+
+    setTimeout(function() {
+        seleccionarDocumentoLegalVisible(documento);
+    }, 80);
+}
+
 // ==================== FUNCIÓN GENÉRICA PARA ENVIAR FORMULARIOS CON FETCH ====================
 async function enviarFormularioFetch(form, actionValue) {
     const formData = new FormData(form);
