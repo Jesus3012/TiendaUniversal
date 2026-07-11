@@ -90,6 +90,44 @@ if (
 
 $current_page = basename(parse_url($_SERVER['SCRIPT_NAME'], PHP_URL_PATH));
 
+/**
+ * Devuelve la clase "active" cuando la página actual pertenece
+ * al módulo indicado.
+ *
+ * Puede recibir una sola página:
+ * navbar_clase_activa('dashboard_admin.php')
+ *
+ * O varias páginas relacionadas con el mismo módulo:
+ * navbar_clase_activa(['dashboard_ventas.php', 'ventas.php'])
+ */
+if (!function_exists('navbar_clase_activa')) {
+    function navbar_clase_activa($paginas)
+    {
+        global $current_page;
+
+        $pagina_actual = mb_strtolower(
+            trim((string)$current_page),
+            'UTF-8'
+        );
+
+        $paginas = is_array($paginas) ? $paginas : [$paginas];
+
+        foreach ($paginas as $pagina) {
+            $pagina = mb_strtolower(
+                basename(parse_url((string)$pagina, PHP_URL_PATH)),
+                'UTF-8'
+            );
+
+            if ($pagina_actual === $pagina) {
+                return 'active';
+            }
+        }
+
+        return '';
+    }
+}
+
+
 $public_pages = [
     'login.php',
     'logout.php',
@@ -251,7 +289,13 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <!-- Estilos del Navbar -->
-  <link rel="stylesheet" href="css/navbar-styles.css">
+  <?php
+  $navbar_css_file = __DIR__ . '/../css/navbar-styles.css';
+  $navbar_css_version = is_file($navbar_css_file)
+      ? filemtime($navbar_css_file)
+      : time();
+  ?>
+  <link rel="stylesheet" href="css/navbar-styles.css?v=<?php echo $navbar_css_version; ?>">
 </head>
 <body>
 
@@ -296,28 +340,28 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
       <div class="mobile-nav-links">
         <?php if ($es_admin): ?>
-          <a href="dashboard_admin.php"><i class="fas fa-home fa-anim"></i> Inicio</a>
-          <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i> Corte de Caja</a>
-          <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
-          <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
-          <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
-          <a href="dashboard_productos.php"><i class="fas fa-box"></i> Registrar Productos</a>
-          <a href="proveedores.php"><i class="fas fa-truck"></i> Proveedores</a>
-          <a href="historial_reportes.php"><i class="fas fa-file-alt"></i> Reportes</a>
-          <a href="historial_stock.php"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
-          <a href="ver_ventas.php"><i class="fas fa-chart-line"></i> Estadísticas</a>
-          <a href="configuracion.php"><i class="fas fa-cogs"></i> Configuración</a>
-          <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i> Asignar Productos</a>
-          <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
+          <a href="dashboard_admin.php" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-home fa-anim"></i> Inicio</a>
+          <a href="corte_caja.php" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i> Corte de Caja</a>
+          <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+          <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
+          <a href="dashboard_inventario.php" class="<?php echo navbar_clase_activa('dashboard_inventario.php'); ?>"><i class="fas fa-boxes"></i> Inventario</a>
+          <a href="dashboard_productos.php" class="<?php echo navbar_clase_activa('dashboard_productos.php'); ?>"><i class="fas fa-box"></i> Registrar Productos</a>
+          <a href="proveedores.php" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i> Proveedores</a>
+          <a href="historial_reportes.php" class="<?php echo navbar_clase_activa('historial_reportes.php'); ?>"><i class="fas fa-file-alt"></i> Reportes</a>
+          <a href="historial_stock.php" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
+          <a href="ver_ventas.php" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i> Estadísticas</a>
+          <a href="configuracion.php" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-cogs"></i> Configuración</a>
+          <a href="asignar_productos_vendedor.php" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i> Asignar Productos</a>
+          <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i> Mi Perfil</a>
 
         <?php elseif ($es_vendedor): ?>
-          <a href="dashboard_vendedor.php"><i class="fas fa-home"></i> Panel Vendedor</a>
-          <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i> Registrar Venta</a>
-          <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
-          <a href="inventario.php"><i class="fas fa-boxes"></i> Inventario</a>
-          <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i> Reportes</a>
-          <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i> Ajustes de Productos</a>
-          <a href="mi_perfil.php"><i class="fas fa-user"></i> Mi Perfil</a>
+          <a href="dashboard_vendedor.php" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-home"></i> Panel Vendedor</a>
+          <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i> Registrar Venta</a>
+          <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
+          <a href="inventario.php" class="<?php echo navbar_clase_activa('inventario.php'); ?>"><i class="fas fa-boxes"></i> Inventario</a>
+          <a href="dashboard_reportes_ventas.php" class="<?php echo navbar_clase_activa('dashboard_reportes_ventas.php'); ?>"><i class="fas fa-file-alt"></i> Reportes</a>
+          <a href="vendedor_ajustes_productos.php" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-cog"></i> Ajustes de Productos</a>
+          <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i> Mi Perfil</a>
         <?php endif; ?>
 
         <a href="logout.php" style="margin-top: 12px;">
@@ -360,28 +404,28 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
     <div class="nav-links">
       <?php if ($es_admin): ?>
-        <a href="dashboard_admin.php"><i class="fas fa-home"></i><span>Inicio</span></a>
-        <a href="corte_caja.php"><i class="fas fa-money-bill-wave"></i><span>Corte de Caja</span></a>
-        <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
-        <a href="dashboard_inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
-        <a href="dashboard_productos.php"><i class="fas fa-box"></i><span>Registrar Productos</span></a>
-        <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
-        <a href="proveedores.php"><i class="fas fa-truck"></i><span>Proveedores</span></a>
-        <a href="historial_reportes.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
-        <a href="historial_stock.php"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
-        <a href="ver_ventas.php"><i class="fas fa-chart-line"></i><span>Estadísticas</span></a>
-        <a href="asignar_productos_vendedor.php"><i class="fas fa-user-tag"></i><span>Asignar Productos</span></a>
-        <a href="configuracion.php"><i class="fas fa-cogs"></i><span>Configuración</span></a>
-        <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
+        <a href="dashboard_admin.php" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-home"></i><span>Inicio</span></a>
+        <a href="corte_caja.php" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i><span>Corte de Caja</span></a>
+        <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
+        <a href="dashboard_inventario.php" class="<?php echo navbar_clase_activa('dashboard_inventario.php'); ?>"><i class="fas fa-boxes"></i><span>Inventario</span></a>
+        <a href="dashboard_productos.php" class="<?php echo navbar_clase_activa('dashboard_productos.php'); ?>"><i class="fas fa-box"></i><span>Registrar Productos</span></a>
+        <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
+        <a href="proveedores.php" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i><span>Proveedores</span></a>
+        <a href="historial_reportes.php" class="<?php echo navbar_clase_activa('historial_reportes.php'); ?>"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
+        <a href="historial_stock.php" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
+        <a href="ver_ventas.php" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i><span>Estadísticas</span></a>
+        <a href="asignar_productos_vendedor.php" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i><span>Asignar Productos</span></a>
+        <a href="configuracion.php" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-cogs"></i><span>Configuración</span></a>
+        <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
 
       <?php elseif ($es_vendedor): ?>
-        <a href="dashboard_vendedor.php"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>
-        <a href="dashboard_ventas.php"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
-        <a href="historial_ventas.php"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
-        <a href="inventario.php"><i class="fas fa-boxes"></i><span>Inventario</span></a>
-        <a href="dashboard_reportes_ventas.php"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
-        <a href="vendedor_ajustes_productos.php"><i class="fas fa-cog"></i><span>Ajustes de Productos</span></a>
-        <a href="mi_perfil.php"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
+        <a href="dashboard_vendedor.php" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>
+        <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
+        <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
+        <a href="inventario.php" class="<?php echo navbar_clase_activa('inventario.php'); ?>"><i class="fas fa-boxes"></i><span>Inventario</span></a>
+        <a href="dashboard_reportes_ventas.php" class="<?php echo navbar_clase_activa('dashboard_reportes_ventas.php'); ?>"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
+        <a href="vendedor_ajustes_productos.php" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-cog"></i><span>Ajustes de Productos</span></a>
+        <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
       <?php endif; ?>
     </div>
 
@@ -407,7 +451,79 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-const sidebar = document.getElementById('sidebar');
+      /*
+       * Respaldo para marcar el módulo activo usando la URL real.
+       * Esto evita problemas por caché, includes o configuraciones del servidor.
+       */
+      const currentFile = (
+        window.location.pathname.split('/').pop() || ''
+      ).toLowerCase();
+
+      const modulePages = {
+        'dashboard_admin.php': ['dashboard_admin.php'],
+        'corte_caja.php': ['corte_caja.php'],
+        'dashboard_ventas.php': [
+          'dashboard_ventas.php',
+          'ventas.php',
+          'venta_admin.php'
+        ],
+        'dashboard_inventario.php': ['dashboard_inventario.php'],
+        'dashboard_productos.php': ['dashboard_productos.php'],
+        'historial_ventas.php': ['historial_ventas.php'],
+        'proveedores.php': ['proveedores.php'],
+        'historial_reportes.php': ['historial_reportes.php'],
+        'historial_stock.php': ['historial_stock.php'],
+        'ver_ventas.php': ['ver_ventas.php'],
+        'asignar_productos_vendedor.php': [
+          'asignar_productos_vendedor.php'
+        ],
+        'configuracion.php': ['configuracion.php'],
+        'mi_perfil.php': ['mi_perfil.php'],
+        'dashboard_vendedor.php': ['dashboard_vendedor.php'],
+        'inventario.php': ['inventario.php'],
+        'dashboard_reportes_ventas.php': [
+          'dashboard_reportes_ventas.php'
+        ],
+        'vendedor_ajustes_productos.php': [
+          'vendedor_ajustes_productos.php'
+        ]
+      };
+
+      document.querySelectorAll(
+        '.nav-links a[href], .mobile-nav-links a[href]'
+      ).forEach(function(link) {
+        const href = link.getAttribute('href');
+
+        if (!href || href.startsWith('#')) {
+          return;
+        }
+
+        let linkFile = '';
+
+        try {
+          linkFile = (
+            new URL(href, window.location.href)
+              .pathname
+              .split('/')
+              .pop() || ''
+          ).toLowerCase();
+        } catch (error) {
+          linkFile = href.split('?')[0].split('/').pop().toLowerCase();
+        }
+
+        const relatedPages = modulePages[linkFile] || [linkFile];
+        const isActive = relatedPages.includes(currentFile);
+
+        link.classList.toggle('active', isActive);
+
+        if (isActive) {
+          link.setAttribute('aria-current', 'page');
+        } else {
+          link.removeAttribute('aria-current');
+        }
+      });
+
+      const sidebar = document.getElementById('sidebar');
       const toggleBtn = document.getElementById('toggleBtn');
       const contentWrapper = document.querySelector('.content-wrapper');
 
