@@ -1,13 +1,46 @@
 <?php
-include 'includes/session.php';
-include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
+declare(strict_types=1);
 
-if ($_SESSION['rol'] !== 'vendedor' && $_SESSION['rol'] !== 'administrador') {
-    header("Location: login.php");
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+
+/*
+|--------------------------------------------------------------------------
+| Validación de acceso
+|--------------------------------------------------------------------------
+| Esta validación debe ejecutarse antes de incluir header.php o navbar.php,
+| porque esos archivos generan salida HTML y después ya no se puede usar
+| header() para redirigir.
+*/
+
+$usuario_id_sesion = (int) ($_SESSION['usuario_id'] ?? 0);
+$rol_actual = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$roles_permitidos = [
+    'vendedor',
+    'administrador',
+    'super_administrador',
+];
+
+if ($usuario_id_sesion <= 0) {
+    header('Location: login.php');
     exit;
 }
+
+if (!in_array($rol_actual, $roles_permitidos, true)) {
+    header('Location: sin_permiso.php');
+    exit;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Interfaz
+|--------------------------------------------------------------------------
+| Se carga únicamente después de validar la sesión y el rol.
+*/
+
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/navbar.php';
 ?>
 
 <style>

@@ -5,10 +5,17 @@ session_start();
 require_once 'includes/csrf.php';
 require_once 'includes/db.php';
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
+$rol_actual = strtolower(trim((string)($_SESSION['rol'] ?? '')));
+$roles_administrativos = ['administrador', 'super_administrador'];
+
+if (
+    !isset($_SESSION['usuario_id']) ||
+    !in_array($rol_actual, $roles_administrativos, true)
+) {
     header("Location: login.php");
     exit;
 }
+
 
 // Evita que Hostinger/LiteSpeed/navegador sirvan una versión vieja del modal o del POST.
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -124,8 +131,55 @@ function productoActivoParaCodigos($conn, $producto_id) {
     return $producto && (int)$producto['activo'] === 1 && ($producto['tipo_inventario'] ?? '') === 'producto';
 }
 
+/**
+ * Detecta productos que ya tienen uno o más códigos históricos sin la letra P.
+ *
+ * Esos códigos son permanentes: nunca se eliminan, reemplazan, renombran ni
+ * convierten al formato nuevo. El campo "disponible" sí puede seguir cambiando
+ * durante una venta porque eso no modifica el valor del código.
+ */
+function productoTieneCodigosLegados($conn, $producto_id) {
+    $producto_id = (int)$producto_id;
+
+    if ($producto_id <= 0) {
+        return false;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id
+        FROM codigos_barras
+        WHERE producto_id = ?
+          AND UPPER(TRIM(codigo)) NOT LIKE 'P%'
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        throw new Exception('Error validando códigos históricos: ' . $conn->error);
+    }
+
+    $stmt->bind_param('i', $producto_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $tiene_codigo_legado = $res && $res->num_rows > 0;
+    $stmt->close();
+
+    return $tiene_codigo_legado;
+}
+
+/**
+ * Elimina códigos únicamente cuando el producto usa el formato nuevo con P.
+ *
+ * Los códigos históricos numéricos quedan protegidos incluso si se edita,
+ * ajusta, aumenta o disminuye el stock. Al desactivar el producto solo se
+ * eliminan sus archivos PNG/ZIP/PDF, pero el código permanece en la BD.
+ */
 function eliminarCodigosProducto($conn, $producto_id) {
     $producto_id = (int)$producto_id;
+
+    if (productoTieneCodigosLegados($conn, $producto_id)) {
+        limpiarArchivosCodigosProducto($producto_id);
+        return;
+    }
 
     $stmt = $conn->prepare("DELETE FROM codigos_barras WHERE producto_id = ?");
     if (!$stmt) {
@@ -202,8 +256,28 @@ function reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo,
     $producto_id = (int)$producto_id;
     $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo);
 
-    // Primero se limpian los códigos anteriores. Si el producto está inactivo,
-    // ya no se vuelven a crear códigos ni PNG porque no tiene caso imprimirlos.
+    /*
+     * REGLA PERMANENTE PARA CÓDIGOS HISTÓRICOS:
+     * Si el producto tiene aunque sea un código que no comienza con P,
+     * se conserva exactamente como está. No se elimina ni se vuelve a crear
+     * al editar datos, agregar stock, disminuirlo, ajustarlo o regenerar todos.
+     *
+     * Solo volvemos a generar la imagen usando el mismo valor guardado.
+     */
+    if (productoTieneCodigosLegados($conn, $producto_id)) {
+        if (
+            $tipo_inventario === 'producto' &&
+            productoActivoParaCodigos($conn, $producto_id)
+        ) {
+            generarPNGCodigosProducto($conn, $producto_id);
+        } else {
+            limpiarArchivosCodigosProducto($producto_id);
+        }
+
+        return;
+    }
+
+    // Los productos del formato nuevo con P continúan funcionando igual.
     eliminarCodigosProducto($conn, $producto_id);
 
     if ($tipo_inventario !== 'producto' || !productoActivoParaCodigos($conn, $producto_id)) {
@@ -211,12 +285,22 @@ function reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo,
     }
 
     if ($tipo_codigo === 'unico') {
-        insertarCodigoBarraSeguro($conn, $producto_id, codigoUnicoProducto($producto_id), 1);
+        insertarCodigoBarraSeguro(
+            $conn,
+            $producto_id,
+            codigoUnicoProducto($producto_id),
+            1
+        );
     } else {
         $cantidad_codigos = cantidadEnteraParaCodigos($cantidad);
 
         for ($i = 1; $i <= $cantidad_codigos; $i++) {
-            insertarCodigoBarraSeguro($conn, $producto_id, codigoMultipleProducto($producto_id, $i), 1);
+            insertarCodigoBarraSeguro(
+                $conn,
+                $producto_id,
+                codigoMultipleProducto($producto_id, $i),
+                1
+            );
         }
     }
 
@@ -702,7 +786,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             Swal.fire({
                 icon: 'success',
                 title: 'Producto actualizado',
-                text: 'Los cambios se guardaron correctamente y los códigos quedaron sincronizados sin duplicados.',
+                text: 'Los cambios se guardaron correctamente. Los códigos históricos sin P se conservaron sin cambios.',
                 confirmButtonColor: '#f97316'
             }).then(() => {
                 window.location='ajustes_productos.php';
@@ -799,7 +883,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
         Swal.fire({
             icon: 'success',
             title: 'Códigos regenerados',
-            text: 'Se limpiaron y regeneraron los códigos de {$regenerados} artículos activos sin duplicados.',
+            text: 'Se sincronizaron los códigos de {$regenerados} artículos. Los códigos históricos sin P se conservaron intactos.',
             confirmButtonColor: '#f97316'
         }).then(() => {
             window.location='ajustes_productos.php';
@@ -825,7 +909,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
 // ========================= GENERAR CÓDIGOS DE BARRAS =========================
 function generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario = 'producto') {
     // Función conservada por compatibilidad con otras partes del sistema.
-    // Ahora SIEMPRE reemplaza los códigos del producto en lugar de duplicarlos.
+    // Los códigos nuevos con P se sincronizan; los históricos sin P se conservan intactos.
     reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario);
 }
 
@@ -1448,7 +1532,7 @@ if (!empty($errors)) {
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                        <a href="<?= in_array($rol_actual, $roles_administrativos, true) ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
                             <i class="fas fa-home"></i> Inicio
                         </a>
                     </li>

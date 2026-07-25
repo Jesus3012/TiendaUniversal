@@ -116,6 +116,14 @@ if (isset($_POST['login'])) {
             $stmt->bind_result($id, $nombre, $hashed_password, $rol, $activo, $debe_cambiar_password);
             $stmt->fetch();
 
+            // Tipos explícitos para PHP e Intelephense.
+            $id = (int) $id;
+            $nombre = (string) $nombre;
+            $hashed_password = (string) ($hashed_password ?? '');
+            $rol = strtolower(trim((string) $rol));
+            $activo = (int) $activo;
+            $debe_cambiar_password = (int) $debe_cambiar_password;
+
             if (!$activo) {
                 $swal = "
                 Swal.fire({
@@ -132,6 +140,7 @@ if (isset($_POST['login'])) {
                 session_regenerate_id(true);
 
                 $_SESSION['usuario_id'] = $id;
+                $_SESSION['id'] = $id;
                 $_SESSION['nombre'] = $nombre;
                 $_SESSION['rol'] = $rol;
                 $_SESSION['last_activity'] = time();
@@ -148,7 +157,9 @@ if (isset($_POST['login'])) {
                     setcookie('remember_hash', '', time() - 3600, '/');
                 }
 
-                $dashboard = ($rol === 'administrador') ? 'dashboard_admin.php' : 'dashboard_vendedor.php';
+                $dashboard = in_array($rol, ['administrador', 'super_administrador'], true)
+                    ? 'dashboard_admin.php'
+                    : 'dashboard_vendedor.php';
 
                 if ($debe_cambiar_password == 1) {
                     $mensaje = '<br><small class="text-warning">Por seguridad, deberás cambiar tu contraseña</small>';

@@ -1,19 +1,11 @@
 <?php
 // includes/navbar.php
 
-// Incluir sesión y conexión
-// Usamos __DIR__ para que funcione aunque el navbar sea incluido desde cualquier archivo.
-if (file_exists(__DIR__ . '/session.php')) {
-    require_once __DIR__ . '/session.php';
-} else {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-}
-
-if (!isset($conn) && file_exists(__DIR__ . '/db.php')) {
-    require_once __DIR__ . '/db.php';
-}
+// Dependencias directas. require_once evita cargas duplicadas y permite que
+// Intelephense encuentre todas las funciones del módulo de permisos.
+require_once __DIR__ . '/session.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/permisos.php';
 
 // ====================== FUNCIONES BASE ======================
 
@@ -34,16 +26,7 @@ if (!function_exists('navbar_redirect')) {
 if (!function_exists('navbar_normalizar_rol')) {
     function navbar_normalizar_rol($rol)
     {
-        $rol = mb_strtolower(trim((string)$rol), 'UTF-8');
-
-        $map = [
-            'admin' => 'administrador',
-            'administrador' => 'administrador',
-            'vendedor' => 'vendedor',
-            'seller' => 'vendedor',
-        ];
-
-        return $map[$rol] ?? $rol;
+        return permisos_normalizar_rol($rol);
     }
 }
 
@@ -105,17 +88,13 @@ if (!function_exists('navbar_clase_activa')) {
     {
         global $current_page;
 
-        $pagina_actual = mb_strtolower(
-            trim((string)$current_page),
-            'UTF-8'
-        );
+        $pagina_actual = permisos_minusculas($current_page);
 
         $paginas = is_array($paginas) ? $paginas : [$paginas];
 
         foreach ($paginas as $pagina) {
-            $pagina = mb_strtolower(
-                basename(parse_url((string)$pagina, PHP_URL_PATH)),
-                'UTF-8'
+            $pagina = permisos_minusculas(
+                basename(parse_url((string) $pagina, PHP_URL_PATH))
             );
 
             if ($pagina_actual === $pagina) {
@@ -128,59 +107,10 @@ if (!function_exists('navbar_clase_activa')) {
 }
 
 
-$public_pages = [
-    'login.php',
-    'logout.php',
-    'forgot_password.php',
-    'reset_password.php',
-    'procesar_reset.php',
-    'sin_permiso.php',
-];
+$public_pages = permisos_paginas_publicas();
 
 if (!in_array($current_page, $public_pages, true)) {
-    $usuario_id = navbar_usuario_id();
-    $rol_actual = navbar_normalizar_rol($_SESSION['rol'] ?? '');
-
-    if (empty($usuario_id) || empty($rol_actual)) {
-        navbar_redirect('login.php?expired=1');
-    }
-
-    $permisos_rutas = [
-        // ================= ADMINISTRADOR =================
-        'dashboard_admin.php' => ['administrador'],
-        'corte_caja.php' => ['administrador'],
-        'dashboard_inventario.php' => ['administrador'],
-        'dashboard_productos.php' => ['administrador'],
-        'proveedores.php' => ['administrador'],
-        'historial_reportes.php' => ['administrador'],
-        'historial_stock.php' => ['administrador'],
-        'ver_ventas.php' => ['administrador'],
-        'configuracion.php' => ['administrador'],
-        'asignar_productos_vendedor.php' => ['administrador'],
-        'venta_admin.php' => ['administrador'],
-
-        // ================= VENDEDOR =================
-        'dashboard_vendedor.php' => ['vendedor'],
-        'inventario.php' => ['vendedor'],
-        'dashboard_reportes_ventas.php' => ['vendedor'],
-        'vendedor_ajustes_productos.php' => ['vendedor'],
-
-        // ================= COMPARTIDAS =================
-        // Ambos entran primero aquí para tomar la decisión de venta.
-        'dashboard_ventas.php' => ['administrador', 'vendedor'],
-
-        // También queda compartida porque dashboard_ventas.php puede mandar aquí.
-        'ventas.php' => ['administrador', 'vendedor'],
-
-        'historial_ventas.php' => ['administrador', 'vendedor'],
-        'mi_perfil.php' => ['administrador', 'vendedor'],
-    ];
-
-    if (isset($permisos_rutas[$current_page])) {
-        if (!in_array($rol_actual, $permisos_rutas[$current_page], true)) {
-            navbar_redirect('sin_permiso.php');
-        }
-    }
+    permisos_proteger_ruta($conn, $current_page);
 }
 
 // ====================== DATOS DE USUARIO ======================
@@ -189,8 +119,30 @@ $nombre = $_SESSION['nombre'] ?? 'Usuario';
 $rol = navbar_normalizar_rol($_SESSION['rol'] ?? 'Sin rol');
 $user_id = navbar_usuario_id() ?? 0;
 
-$es_admin = ($rol === 'administrador');
+$es_admin = in_array($rol, ['administrador', 'super_administrador'], true);
+$es_super_admin = ($rol === 'super_administrador');
 $es_vendedor = ($rol === 'vendedor');
+
+if (!function_exists('navbar_modulo_permitido')) {
+    function navbar_modulo_permitido($claveModulo)
+    {
+        global $conn;
+
+        return permisos_rol_tiene_modulo(
+            $conn,
+            $_SESSION['rol'] ?? '',
+            $claveModulo
+        );
+    }
+}
+
+$ruta_inventario_menu = $es_vendedor
+    ? 'inventario.php'
+    : 'dashboard_inventario.php';
+
+$ruta_reportes_menu = $es_vendedor
+    ? 'dashboard_reportes_ventas.php'
+    : 'historial_reportes.php';
 
 // Obtener configuración de la tienda
 $config = [];
@@ -254,7 +206,19 @@ if (!$tiene_foto && $user_id > 0 && isset($conn)) {
 $inicial = '';
 
 if (!empty($nombre)) {
-    $inicial = mb_strtoupper(mb_substr(trim($nombre), 0, 1, 'UTF-8'), 'UTF-8');
+    $nombreLimpio = trim((string) $nombre);
+
+    if (
+        function_exists('mb_substr') &&
+        function_exists('mb_strtoupper')
+    ) {
+        $inicial = mb_strtoupper(
+            mb_substr($nombreLimpio, 0, 1, 'UTF-8'),
+            'UTF-8'
+        );
+    } else {
+        $inicial = strtoupper(substr($nombreLimpio, 0, 1));
+    }
 }
 
 // ====================== LOGO DE TIENDA ======================
@@ -296,6 +260,11 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       : time();
   ?>
   <link rel="stylesheet" href="css/navbar-styles.css?v=<?php echo $navbar_css_version; ?>">
+  <style>
+    [data-modulo][data-permitido="0"] {
+      display: none !important;
+    }
+  </style>
 </head>
 <body>
 
@@ -334,35 +303,31 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
         <div class="mobile-user-details">
           <strong><?php echo htmlspecialchars($nombre); ?></strong>
-          <span><?php echo ucfirst(htmlspecialchars($rol)); ?></span>
+          <span><?php echo $es_super_admin ? 'Superadministrador' : ucfirst(htmlspecialchars($rol)); ?></span>
         </div>
       </div>
 
       <div class="mobile-nav-links">
-        <?php if ($es_admin): ?>
-          <a href="dashboard_admin.php" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-home fa-anim"></i> Inicio</a>
-          <a href="corte_caja.php" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i> Corte de Caja</a>
-          <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i> Registrar Venta</a>
-          <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
-          <a href="dashboard_inventario.php" class="<?php echo navbar_clase_activa('dashboard_inventario.php'); ?>"><i class="fas fa-boxes"></i> Inventario</a>
-          <a href="dashboard_productos.php" class="<?php echo navbar_clase_activa('dashboard_productos.php'); ?>"><i class="fas fa-box"></i> Registrar Productos</a>
-          <a href="proveedores.php" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i> Proveedores</a>
-          <a href="historial_reportes.php" class="<?php echo navbar_clase_activa('historial_reportes.php'); ?>"><i class="fas fa-file-alt"></i> Reportes</a>
-          <a href="historial_stock.php" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-history"></i> Historial Movimientos Stock</a>
-          <a href="ver_ventas.php" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i> Estadísticas</a>
-          <a href="configuracion.php" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-cogs"></i> Configuración</a>
-          <a href="asignar_productos_vendedor.php" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i> Asignar Productos</a>
-          <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i> Mi Perfil</a>
-
-        <?php elseif ($es_vendedor): ?>
-          <a href="dashboard_vendedor.php" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-home"></i> Panel Vendedor</a>
-          <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i> Registrar Venta</a>
-          <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i> Historial de ventas</a>
-          <a href="inventario.php" class="<?php echo navbar_clase_activa('inventario.php'); ?>"><i class="fas fa-boxes"></i> Inventario</a>
-          <a href="dashboard_reportes_ventas.php" class="<?php echo navbar_clase_activa('dashboard_reportes_ventas.php'); ?>"><i class="fas fa-file-alt"></i> Reportes</a>
-          <a href="vendedor_ajustes_productos.php" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-cog"></i> Ajustes de Productos</a>
-          <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i> Mi Perfil</a>
-        <?php endif; ?>
+          <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i> Panel administrativo</a>
+          <?php if (!$es_super_admin): ?>
+          <a href="dashboard_vendedor.php" data-modulo="panel_vendedor" data-permitido="<?php echo navbar_modulo_permitido('panel_vendedor') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-gauge-high"></i> Panel vendedor</a>
+          <?php endif; ?>
+          <a href="corte_caja.php" data-modulo="corte_caja" data-permitido="<?php echo navbar_modulo_permitido('corte_caja') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i> Corte de caja</a>
+          <a href="dashboard_ventas.php" data-modulo="ventas" data-permitido="<?php echo navbar_modulo_permitido('ventas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php', 'ventas_proveedor.php', 'pedidos.php']); ?>"><i class="fas fa-cash-register"></i> Registrar venta</a>
+          <a href="historial_ventas.php" data-modulo="historial_ventas" data-permitido="<?php echo navbar_modulo_permitido('historial_ventas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-receipt"></i> Historial de ventas</a>
+          <a href="<?php echo htmlspecialchars($ruta_inventario_menu, ENT_QUOTES, 'UTF-8'); ?>" data-modulo="inventario" data-permitido="<?php echo navbar_modulo_permitido('inventario') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_inventario.php', 'inventario_admin.php', 'inventario.php']); ?>"><i class="fas fa-boxes-stacked"></i> Inventario</a>
+          <a href="dashboard_productos.php" data-modulo="productos" data-permitido="<?php echo navbar_modulo_permitido('productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_productos.php', 'productos.php', 'ajustes_productos.php']); ?>"><i class="fas fa-box"></i> Productos</a>
+          <a href="vendedor_ajustes_productos.php" data-modulo="ajustes_productos" data-permitido="<?php echo navbar_modulo_permitido('ajustes_productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-sliders"></i> Ajustes de productos</a>
+          <a href="proveedores.php" data-modulo="proveedores" data-permitido="<?php echo navbar_modulo_permitido('proveedores') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i> Proveedores</a>
+          <a href="<?php echo htmlspecialchars($ruta_reportes_menu, ENT_QUOTES, 'UTF-8'); ?>" data-modulo="reportes" data-permitido="<?php echo navbar_modulo_permitido('reportes') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['historial_reportes.php', 'dashboard_reportes_ventas.php', 'reportes_vendedor.php', 'reporte_vendedor_productos.php']); ?>"><i class="fas fa-file-lines"></i> Reportes</a>
+          <a href="historial_stock.php" data-modulo="historial_stock" data-permitido="<?php echo navbar_modulo_permitido('historial_stock') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-clock-rotate-left"></i> Historial de stock</a>
+          <a href="ver_ventas.php" data-modulo="estadisticas" data-permitido="<?php echo navbar_modulo_permitido('estadisticas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i> Estadísticas</a>
+          <a href="asignar_productos_vendedor.php" data-modulo="asignar_productos" data-permitido="<?php echo navbar_modulo_permitido('asignar_productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i> Asignar productos</a>
+          <a href="configuracion.php" data-modulo="configuracion" data-permitido="<?php echo navbar_modulo_permitido('configuracion') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-gears"></i> Configuración</a>
+          <?php if ($es_admin): ?>
+          <a href="control_accesos.php" data-modulo="control_accesos" data-permitido="1" class="<?php echo navbar_clase_activa('control_accesos.php'); ?>"><i class="fas fa-user-shield"></i> Control de accesos</a>
+          <?php endif; ?>
+          <a href="mi_perfil.php" data-modulo="mi_perfil" data-permitido="<?php echo navbar_modulo_permitido('mi_perfil') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i> Mi perfil</a>
 
         <a href="logout.php" style="margin-top: 12px;">
           <i class="fas fa-sign-out-alt"></i> Cerrar sesión
@@ -398,35 +363,31 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
 
       <div class="user-details">
         <strong><?php echo htmlspecialchars($nombre); ?></strong>
-        <span><?php echo ucfirst(htmlspecialchars($rol)); ?></span>
+        <span><?php echo $es_super_admin ? 'Superadministrador' : ucfirst(htmlspecialchars($rol)); ?></span>
       </div>
     </div>
 
     <div class="nav-links">
-      <?php if ($es_admin): ?>
-        <a href="dashboard_admin.php" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-home"></i><span>Inicio</span></a>
-        <a href="corte_caja.php" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i><span>Corte de Caja</span></a>
-        <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
-        <a href="dashboard_inventario.php" class="<?php echo navbar_clase_activa('dashboard_inventario.php'); ?>"><i class="fas fa-boxes"></i><span>Inventario</span></a>
-        <a href="dashboard_productos.php" class="<?php echo navbar_clase_activa('dashboard_productos.php'); ?>"><i class="fas fa-box"></i><span>Registrar Productos</span></a>
-        <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
-        <a href="proveedores.php" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i><span>Proveedores</span></a>
-        <a href="historial_reportes.php" class="<?php echo navbar_clase_activa('historial_reportes.php'); ?>"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
-        <a href="historial_stock.php" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-history"></i><span>Historial Movimientos Stock</span></a>
-        <a href="ver_ventas.php" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i><span>Estadísticas</span></a>
-        <a href="asignar_productos_vendedor.php" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i><span>Asignar Productos</span></a>
-        <a href="configuracion.php" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-cogs"></i><span>Configuración</span></a>
-        <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
-
-      <?php elseif ($es_vendedor): ?>
-        <a href="dashboard_vendedor.php" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-home"></i><span>Panel Vendedor</span></a>
-        <a href="dashboard_ventas.php" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php']); ?>"><i class="fas fa-cash-register"></i><span>Registrar Venta</span></a>
-        <a href="historial_ventas.php" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-hand-holding-usd"></i><span>Historial de ventas</span></a>
-        <a href="inventario.php" class="<?php echo navbar_clase_activa('inventario.php'); ?>"><i class="fas fa-boxes"></i><span>Inventario</span></a>
-        <a href="dashboard_reportes_ventas.php" class="<?php echo navbar_clase_activa('dashboard_reportes_ventas.php'); ?>"><i class="fas fa-file-alt"></i><span>Reportes</span></a>
-        <a href="vendedor_ajustes_productos.php" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-cog"></i><span>Ajustes de Productos</span></a>
-        <a href="mi_perfil.php" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i><span>Mi Perfil</span></a>
-      <?php endif; ?>
+        <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i><span>Panel administrativo</span></a>
+        <?php if (!$es_super_admin): ?>
+        <a href="dashboard_vendedor.php" data-modulo="panel_vendedor" data-permitido="<?php echo navbar_modulo_permitido('panel_vendedor') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-gauge-high"></i><span>Panel vendedor</span></a>
+        <?php endif; ?>
+        <a href="corte_caja.php" data-modulo="corte_caja" data-permitido="<?php echo navbar_modulo_permitido('corte_caja') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('corte_caja.php'); ?>"><i class="fas fa-money-bill-wave"></i><span>Corte de caja</span></a>
+        <a href="dashboard_ventas.php" data-modulo="ventas" data-permitido="<?php echo navbar_modulo_permitido('ventas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_ventas.php', 'ventas.php', 'venta_admin.php', 'ventas_proveedor.php', 'pedidos.php']); ?>"><i class="fas fa-cash-register"></i><span>Registrar venta</span></a>
+        <a href="historial_ventas.php" data-modulo="historial_ventas" data-permitido="<?php echo navbar_modulo_permitido('historial_ventas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('historial_ventas.php'); ?>"><i class="fas fa-receipt"></i><span>Historial de ventas</span></a>
+        <a href="<?php echo htmlspecialchars($ruta_inventario_menu, ENT_QUOTES, 'UTF-8'); ?>" data-modulo="inventario" data-permitido="<?php echo navbar_modulo_permitido('inventario') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_inventario.php', 'inventario_admin.php', 'inventario.php']); ?>"><i class="fas fa-boxes-stacked"></i><span>Inventario</span></a>
+        <a href="dashboard_productos.php" data-modulo="productos" data-permitido="<?php echo navbar_modulo_permitido('productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['dashboard_productos.php', 'productos.php', 'ajustes_productos.php']); ?>"><i class="fas fa-box"></i><span>Productos</span></a>
+        <a href="vendedor_ajustes_productos.php" data-modulo="ajustes_productos" data-permitido="<?php echo navbar_modulo_permitido('ajustes_productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('vendedor_ajustes_productos.php'); ?>"><i class="fas fa-sliders"></i><span>Ajustes de productos</span></a>
+        <a href="proveedores.php" data-modulo="proveedores" data-permitido="<?php echo navbar_modulo_permitido('proveedores') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('proveedores.php'); ?>"><i class="fas fa-truck"></i><span>Proveedores</span></a>
+        <a href="<?php echo htmlspecialchars($ruta_reportes_menu, ENT_QUOTES, 'UTF-8'); ?>" data-modulo="reportes" data-permitido="<?php echo navbar_modulo_permitido('reportes') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa(['historial_reportes.php', 'dashboard_reportes_ventas.php', 'reportes_vendedor.php', 'reporte_vendedor_productos.php']); ?>"><i class="fas fa-file-lines"></i><span>Reportes</span></a>
+        <a href="historial_stock.php" data-modulo="historial_stock" data-permitido="<?php echo navbar_modulo_permitido('historial_stock') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('historial_stock.php'); ?>"><i class="fas fa-clock-rotate-left"></i><span>Historial de stock</span></a>
+        <a href="ver_ventas.php" data-modulo="estadisticas" data-permitido="<?php echo navbar_modulo_permitido('estadisticas') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('ver_ventas.php'); ?>"><i class="fas fa-chart-line"></i><span>Estadísticas</span></a>
+        <a href="asignar_productos_vendedor.php" data-modulo="asignar_productos" data-permitido="<?php echo navbar_modulo_permitido('asignar_productos') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('asignar_productos_vendedor.php'); ?>"><i class="fas fa-user-tag"></i><span>Asignar productos</span></a>
+        <a href="configuracion.php" data-modulo="configuracion" data-permitido="<?php echo navbar_modulo_permitido('configuracion') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('configuracion.php'); ?>"><i class="fas fa-gears"></i><span>Configuración</span></a>
+        <?php if ($es_admin): ?>
+        <a href="control_accesos.php" data-modulo="control_accesos" data-permitido="1" class="<?php echo navbar_clase_activa('control_accesos.php'); ?>"><i class="fas fa-user-shield"></i><span>Control de accesos</span></a>
+        <?php endif; ?>
+        <a href="mi_perfil.php" data-modulo="mi_perfil" data-permitido="<?php echo navbar_modulo_permitido('mi_perfil') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('mi_perfil.php'); ?>"><i class="fas fa-user"></i><span>Mi perfil</span></a>
     </div>
 
     <a class="logout" href="logout.php">
@@ -478,6 +439,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
           'asignar_productos_vendedor.php'
         ],
         'configuracion.php': ['configuracion.php'],
+        'control_accesos.php': ['control_accesos.php'],
         'mi_perfil.php': ['mi_perfil.php'],
         'dashboard_vendedor.php': ['dashboard_vendedor.php'],
         'inventario.php': ['inventario.php'],

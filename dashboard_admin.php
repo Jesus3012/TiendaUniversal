@@ -1,13 +1,9 @@
 <?php
-require_once 'includes/session.php';
-require_once 'includes/db.php';
+require_once 'includes/auth_guard.php';
 require_once 'includes/csrf.php';
 
-// Verificar autenticación
-if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['rol'] ?? '') !== 'administrador') {
-    header("Location: login.php");
-    exit;
-}
+$rol_actual = permisos_normalizar_rol($_SESSION['rol'] ?? '');
+$es_super_administrador = ($rol_actual === 'super_administrador');
 
 $nombre_usuario = $_SESSION['nombre'] ?? 'Administrador';
 $nombre_completo = $nombre_usuario;
@@ -179,11 +175,18 @@ if ($resItems) {
 }
 $totalStockBajo = count($itemsStockBajo);
 
-// Usuarios
-$resUsuarios = $conn->query("SELECT COUNT(*) AS total_usuarios FROM usuarios");
-$totalUsuarios = $resUsuarios ? $resUsuarios->fetch_assoc()['total_usuarios'] : 0;
-$resUsuariosActivos = $conn->query("SELECT COUNT(*) AS total FROM usuarios WHERE activo = 1");
-$usuariosActivos = $resUsuariosActivos ? $resUsuariosActivos->fetch_assoc()['total'] : 0;
+// Usuarios. El administrador normal no cuenta al superadministrador.
+$sql_total_usuarios = $es_super_administrador
+    ? "SELECT COUNT(*) AS total_usuarios FROM usuarios"
+    : "SELECT COUNT(*) AS total_usuarios FROM usuarios WHERE rol <> 'super_administrador'";
+$resUsuarios = $conn->query($sql_total_usuarios);
+$totalUsuarios = $resUsuarios ? (int) $resUsuarios->fetch_assoc()['total_usuarios'] : 0;
+
+$sql_usuarios_activos = $es_super_administrador
+    ? "SELECT COUNT(*) AS total FROM usuarios WHERE activo = 1"
+    : "SELECT COUNT(*) AS total FROM usuarios WHERE activo = 1 AND rol <> 'super_administrador'";
+$resUsuariosActivos = $conn->query($sql_usuarios_activos);
+$usuariosActivos = $resUsuariosActivos ? (int) $resUsuariosActivos->fetch_assoc()['total'] : 0;
 
 // Utilidad hoy
 $sqlUtilidad = "SELECT SUM((p.precio_venta - p.precio_compra) * v.cantidad_vendida) AS utilidadHoy
@@ -502,11 +505,22 @@ $imagen_dashboard =
                     <div class="row g-3 mb-4">
                         <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="d-flex justify-content-between align-items-start"><div><p class="text-muted small mb-1">Total Usuarios</p><h3 class="fw-bold text-primary mb-0"><?= $totalUsuarios ?></h3></div><div class="bg-primary bg-opacity-10 rounded p-2"><i class="fas fa-users fa-lg text-primary"></i></div></div></div></div></div>
                         <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="d-flex justify-content-between align-items-start"><div><p class="text-muted small mb-1">Usuarios Activos</p><h3 class="fw-bold text-success mb-0"><?= $usuariosActivos ?></h3></div><div class="bg-success bg-opacity-10 rounded p-2"><i class="fas fa-user-check fa-lg text-success"></i></div></div></div></div></div>
-                        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="d-flex justify-content-between align-items-start"><div><p class="text-muted small mb-1">Administradores</p><h3 class="fw-bold text-warning mb-0"><?php $admins = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol='administrador'")->fetch_assoc(); echo $admins['total']; ?></h3></div><div class="bg-warning bg-opacity-10 rounded p-2"><i class="fas fa-user-shield fa-lg text-warning"></i></div></div></div></div></div>
+                        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="d-flex justify-content-between align-items-start"><div><p class="text-muted small mb-1">Administradores</p><h3 class="fw-bold text-warning mb-0"><?php
+                            $sql_admins = $es_super_administrador
+                                ? "SELECT COUNT(*) AS total FROM usuarios WHERE rol IN ('administrador', 'super_administrador')"
+                                : "SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'administrador'";
+                            $resultado_admins = $conn->query($sql_admins);
+                            $admins = $resultado_admins ? $resultado_admins->fetch_assoc() : ['total' => 0];
+                            echo (int) $admins['total'];
+                        ?></h3></div><div class="bg-warning bg-opacity-10 rounded p-2"><i class="fas fa-user-shield fa-lg text-warning"></i></div></div></div></div></div>
                     </div>
                     <div class="mb-3"><div class="input-group shadow-sm"><span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span><input type="text" id="searchUsuarios" class="form-control border-start-0" placeholder="Buscar por nombre, email o rol..."></div></div>
                     <div class="table-responsive"><table class="table table-hover align-middle" id="tablaUsuarios"><thead class="table-light"><tr><th class="py-3"><i class="fas fa-user me-2"></i>Nombre</th><th class="py-3"><i class="fas fa-envelope me-2"></i>Email</th><th class="py-3"><i class="fas fa-tag me-2"></i>Rol</th><th class="py-3"><i class="fas fa-circle me-2"></i>Estado</th></tr></thead>
-                    <tbody id="tbodyUsuarios"><?php $resUsers = $conn->query("SELECT nombre, email, rol, activo FROM usuarios ORDER BY nombre");
+                    <tbody id="tbodyUsuarios"><?php
+                    $sql_usuarios_modal = $es_super_administrador
+                        ? "SELECT nombre, email, rol, activo FROM usuarios ORDER BY nombre"
+                        : "SELECT nombre, email, rol, activo FROM usuarios WHERE rol <> 'super_administrador' ORDER BY nombre";
+                    $resUsers = $conn->query($sql_usuarios_modal);
                     if($resUsers && $resUsers->num_rows > 0): while($user = $resUsers->fetch_assoc()): ?>
                         <tr class="usuario-row"><td class="fw-medium"><?= htmlspecialchars($user['nombre']) ?></td><td><?= htmlspecialchars($user['email']) ?></td><td><span class="badge <?= $user['rol'] == 'administrador' ? 'bg-warning text-dark' : 'bg-info' ?> px-3 py-2"><i class="fas <?= $user['rol'] == 'administrador' ? 'fa-crown' : 'fa-user' ?> me-1"></i><?= ucfirst($user['rol']) ?></span></td><td><span class="badge <?= $user['activo'] == 1 ? 'bg-success' : 'bg-secondary' ?> px-3 py-2"><i class="fas <?= $user['activo'] == 1 ? 'fa-check-circle' : 'fa-times-circle' ?> me-1"></i><?= $user['activo'] == 1 ? 'Activo' : 'Inactivo' ?></span></td></tr>
                     <?php endwhile; else: ?><tr class="no-data-row"><td colspan="4" class="text-center py-5"><i class="fas fa-users fa-3x text-muted mb-3 d-block"></i><p class="text-muted mb-0">No hay usuarios registrados</p></td></tr><?php endif; ?></tbody>}</table><div id="noResultsUsuarios" class="text-center py-5" style="display: none;"><i class="fas fa-search fa-3x text-muted mb-3 d-block"></i><p class="text-muted mb-0">No se encontraron usuarios con ese criterio de búsqueda</p></div></div>

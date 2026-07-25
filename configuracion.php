@@ -5,18 +5,47 @@ use PHPMailer\PHPMailer\Exception;
 
 date_default_timezone_set('America/Mexico_City');
 
-session_start();
-require_once 'includes/db.php';
+require_once 'includes/auth_guard.php';
 
 // PHPMailer: instala con composer require phpmailer/phpmailer
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 }
 
-// Verificar si el usuario está logueado y es administrador
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
-    header('Location: login.php');
-    exit;
+$rol_sesion = permisos_normalizar_rol($_SESSION['rol'] ?? '');
+$es_super_administrador = ($rol_sesion === 'super_administrador');
+$es_administrador = permisos_puede_gestionar($rol_sesion);
+
+/**
+ * Un administrador normal nunca puede consultar ni modificar una cuenta
+ * con rol super_administrador, aunque intente enviar una petición manual.
+ */
+function obtenerRolUsuarioPorId($conn, $id_usuario) {
+    $id_usuario = (int)$id_usuario;
+
+    if ($id_usuario <= 0) {
+        return null;
+    }
+
+    $stmt = $conn->prepare("SELECT rol FROM usuarios WHERE id = ? LIMIT 1");
+    if (!$stmt) {
+        return null;
+    }
+
+    $stmt->bind_param("i", $id_usuario);
+    $stmt->execute();
+    $fila = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return $fila['rol'] ?? null;
+}
+
+function administradorPuedeGestionarUsuario($conn, $id_usuario, $es_super_administrador) {
+    if ($es_super_administrador) {
+        return true;
+    }
+
+    return obtenerRolUsuarioPorId($conn, $id_usuario) !== 'super_administrador';
 }
 
 $mensaje = '';
@@ -422,7 +451,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $password_default = 'Pescadores1';
         $password_hash = password_hash($password_default, PASSWORD_DEFAULT);
 
-        if ($nombre === '' || $email === '') {
+        $roles_permitidos = $es_super_administrador
+            ? ['vendedor', 'administrador', 'super_administrador']
+            : ['vendedor', 'administrador'];
+
+        if (!in_array($rol, $roles_permitidos, true)) {
+            $mensaje = "No tienes permiso para asignar ese rol.";
+            $tipo_mensaje = "danger";
+        } elseif ($nombre === '' || $email === '') {
             $mensaje = "Debes capturar nombre y correo electrónico.";
             $tipo_mensaje = "danger";
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -488,70 +524,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $rol = trim($_POST['rol'] ?? 'vendedor');
         $activo = intval($_POST['activo'] ?? 1);
         $password = trim($_POST['password'] ?? '');
-        
-        if (!empty($password)) {
-            $password_hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("UPDATE usuarios SET nombre = ?, email = ?, rol = ?, activo = ?, password = ? WHERE id = ?");
-            $stmt->bind_param("sssisi", $nombre, $email, $rol, $activo, $password_hash, $id_usuario);
-        } else {
-            $stmt = $conn->prepare("UPDATE usuarios SET nombre = ?, email = ?, rol = ?, activo = ? WHERE id = ?");
-            $stmt->bind_param("sssii", $nombre, $email, $rol, $activo, $id_usuario);
-        }
-        
-        if ($stmt->execute()) {
-            $mensaje = "Usuario actualizado correctamente.";
-            $tipo_mensaje = "success";
-            
-            $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Editar Usuario', ?, ?)");
-            $detalle = "Editó el usuario ID: $id_usuario";
-            $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
-            $stmt_audit->execute();
-        } else {
-            $mensaje = "Error al actualizar el usuario.";
+
+        $roles_permitidos = $es_super_administrador
+            ? ['vendedor', 'administrador', 'super_administrador']
+            : ['vendedor', 'administrador'];
+
+        if (!administradorPuedeGestionarUsuario($conn, $id_usuario, $es_super_administrador)) {
+            $mensaje = "No tienes permiso para consultar ni modificar esta cuenta.";
             $tipo_mensaje = "danger";
+        } elseif (!in_array($rol, $roles_permitidos, true)) {
+            $mensaje = "No tienes permiso para asignar ese rol.";
+            $tipo_mensaje = "danger";
+        } elseif ($nombre === '' || $email === '') {
+            $mensaje = "Debes capturar nombre y correo electrónico.";
+            $tipo_mensaje = "danger";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $mensaje = "El correo electrónico no tiene un formato válido.";
+            $tipo_mensaje = "danger";
+        } else {
+            if (!empty($password)) {
+                $password_hash = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("UPDATE usuarios SET nombre = ?, email = ?, rol = ?, activo = ?, password = ? WHERE id = ?");
+                $stmt->bind_param("sssisi", $nombre, $email, $rol, $activo, $password_hash, $id_usuario);
+            } else {
+                $stmt = $conn->prepare("UPDATE usuarios SET nombre = ?, email = ?, rol = ?, activo = ? WHERE id = ?");
+                $stmt->bind_param("sssii", $nombre, $email, $rol, $activo, $id_usuario);
+            }
+
+            if ($stmt->execute()) {
+                $mensaje = "Usuario actualizado correctamente.";
+                $tipo_mensaje = "success";
+
+                $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Editar Usuario', ?, ?)");
+                $detalle = "Editó el usuario ID: $id_usuario";
+                $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
+                $stmt_audit->execute();
+            } else {
+                $mensaje = "Error al actualizar el usuario.";
+                $tipo_mensaje = "danger";
+            }
         }
         $tab_activo = 'usuarios';
     }
-    
+
     // Resetear contraseña
     elseif ($action === 'reset_password') {
         $id_usuario = intval($_POST['id_usuario'] ?? 0);
         $password_default = 'Pescadores1';
         $password_hash = password_hash($password_default, PASSWORD_DEFAULT);
-        
-        $stmt = $conn->prepare("UPDATE usuarios SET password = ?, debe_cambiar_password = 1 WHERE id = ?");
-        $stmt->bind_param("si", $password_hash, $id_usuario);
-        
-        if ($stmt->execute()) {
-            $mensaje = "Contraseña restablecida a: <strong>Pescadores1</strong>. El usuario deberá cambiarla al iniciar sesión.";
-            $tipo_mensaje = "success";
-            
-            $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Resetear Contraseña', ?, ?)");
-            $detalle = "Restableció la contraseña del usuario ID: $id_usuario";
-            $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
-            $stmt_audit->execute();
-        } else {
-            $mensaje = "Error al restablecer la contraseña.";
+
+        if (!administradorPuedeGestionarUsuario($conn, $id_usuario, $es_super_administrador)) {
+            $mensaje = "No tienes permiso para restablecer la contraseña de esta cuenta.";
             $tipo_mensaje = "danger";
+        } else {
+            $stmt = $conn->prepare("UPDATE usuarios SET password = ?, debe_cambiar_password = 1 WHERE id = ?");
+            $stmt->bind_param("si", $password_hash, $id_usuario);
+
+            if ($stmt->execute()) {
+                $mensaje = "Contraseña restablecida a: <strong>Pescadores1</strong>. El usuario deberá cambiarla al iniciar sesión.";
+                $tipo_mensaje = "success";
+
+                $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Resetear Contraseña', ?, ?)");
+                $detalle = "Restableció la contraseña del usuario ID: $id_usuario";
+                $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
+                $stmt_audit->execute();
+            } else {
+                $mensaje = "Error al restablecer la contraseña.";
+                $tipo_mensaje = "danger";
+            }
         }
         $tab_activo = 'usuarios';
     }
-    
+
     // Eliminar usuario
     elseif ($action === 'eliminar_usuario') {
         $id_usuario = intval($_POST['id_usuario'] ?? 0);
-        
+
         if ($id_usuario == $_SESSION['usuario_id']) {
             $mensaje = "No puedes eliminar tu propio usuario.";
+            $tipo_mensaje = "danger";
+        } elseif (!administradorPuedeGestionarUsuario($conn, $id_usuario, $es_super_administrador)) {
+            $mensaje = "No tienes permiso para eliminar esta cuenta.";
             $tipo_mensaje = "danger";
         } else {
             $stmt = $conn->prepare("DELETE FROM usuarios WHERE id = ?");
             $stmt->bind_param("i", $id_usuario);
-            
+
             if ($stmt->execute()) {
                 $mensaje = "Usuario eliminado correctamente.";
                 $tipo_mensaje = "success";
-                
+
                 $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Eliminar Usuario', ?, ?)");
                 $detalle = "Eliminó el usuario ID: $id_usuario";
                 $stmt_audit->bind_param("iss", $usuario_id, $detalle, $ip);
@@ -563,7 +625,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         $tab_activo = 'usuarios';
     }
-    
+
     // Crear proveedor
     elseif ($action === 'crear_proveedor') {
         $nombre = trim($_POST['nombre'] ?? '');
@@ -717,10 +779,16 @@ $pagina_usuarios = isset($_GET['pagina_usuarios']) ? max(1, intval($_GET['pagina
 $por_pagina = 10;
 $offset_usuarios = ($pagina_usuarios - 1) * $por_pagina;
 
-$total_usuarios_result = $conn->query("SELECT COUNT(*) as total FROM usuarios");
-$total_usuarios = $total_usuarios_result->fetch_assoc()['total'];
+if ($es_super_administrador) {
+    $total_usuarios_result = $conn->query("SELECT COUNT(*) as total FROM usuarios");
+    $stmt_usuarios = $conn->prepare("SELECT * FROM usuarios ORDER BY id DESC LIMIT ? OFFSET ?");
+} else {
+    // El administrador normal no recibe cuentas super_administrador desde la BD.
+    $total_usuarios_result = $conn->query("SELECT COUNT(*) as total FROM usuarios WHERE rol <> 'super_administrador'");
+    $stmt_usuarios = $conn->prepare("SELECT * FROM usuarios WHERE rol <> 'super_administrador' ORDER BY id DESC LIMIT ? OFFSET ?");
+}
 
-$stmt_usuarios = $conn->prepare("SELECT * FROM usuarios ORDER BY id DESC LIMIT ? OFFSET ?");
+$total_usuarios = (int)($total_usuarios_result->fetch_assoc()['total'] ?? 0);
 $stmt_usuarios->bind_param("ii", $por_pagina, $offset_usuarios);
 $stmt_usuarios->execute();
 $usuarios = $stmt_usuarios->get_result();
@@ -1563,7 +1631,23 @@ include 'includes/navbar.php';
                                     <tr>
                                         <td data-label="Nombre"><?= htmlspecialchars($u['nombre']) ?></td>
                                         <td data-label="Email"><?= htmlspecialchars($u['email']) ?></td>
-                                        <td data-label="Rol"><span class="badge <?= $u['rol'] == 'administrador' ? 'badge-danger' : 'badge-info' ?>"><?= $u['rol'] ?></span></td>
+                                        <td data-label="Rol">
+                                            <?php
+                                            $clase_rol = 'badge-info';
+                                            $texto_rol = ucfirst((string)$u['rol']);
+
+                                            if ($u['rol'] === 'administrador') {
+                                                $clase_rol = 'badge-danger';
+                                                $texto_rol = 'Administrador';
+                                            } elseif ($u['rol'] === 'super_administrador') {
+                                                $clase_rol = 'badge-dark';
+                                                $texto_rol = 'Superadministrador';
+                                            } elseif ($u['rol'] === 'vendedor') {
+                                                $texto_rol = 'Vendedor';
+                                            }
+                                            ?>
+                                            <span class="badge <?= $clase_rol ?>"><?= htmlspecialchars($texto_rol) ?></span>
+                                        </td>
                                         <td data-label="Estado"><span class="badge <?= $u['activo'] ? 'badge-success' : 'badge-danger' ?>"><?= $u['activo'] ? 'Activo' : 'Inactivo' ?></span></td>
                                         <td data-label="Cambio Pwd"><?= $u['debe_cambiar_password'] ? '<span class="badge badge-warning"><i class="fas fa-exclamation-triangle mr-1"></i> Pendiente</span>' : '<span class="badge badge-success"><i class="fas fa-check mr-1"></i> Actualizada</span>' ?></td>
                                         <td data-label="Fecha Reg."><?= date('d/m/Y', strtotime($u['fecha_registro'])) ?></td>
@@ -1831,6 +1915,9 @@ include 'includes/navbar.php';
                         <select class="form-control" name="rol" id="usuario_rol">
                             <option value="vendedor">Vendedor</option>
                             <option value="administrador">Administrador</option>
+                            <?php if ($es_super_administrador): ?>
+                                <option value="super_administrador">Superadministrador</option>
+                            <?php endif; ?>
                         </select>
                     </div>
                     <div class="form-group">

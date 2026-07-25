@@ -4,10 +4,17 @@ session_start();
 require_once 'includes/csrf.php';
 require_once 'includes/db.php';
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
+$rol_actual = strtolower(trim((string)($_SESSION['rol'] ?? '')));
+$roles_administrativos = ['administrador', 'super_administrador'];
+
+if (
+    !isset($_SESSION['usuario_id']) ||
+    !in_array($rol_actual, $roles_administrativos, true)
+) {
     header("Location: login.php");
     exit;
 }
+
 
 include 'includes/header.php';
 include 'includes/navbar.php';
@@ -895,7 +902,7 @@ if (!empty($errors)) {
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                        <a href="<?= in_array($rol_actual, $roles_administrativos, true) ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
                             <i class="fas fa-home"></i> Inicio
                         </a>
                     </li>

@@ -1,18 +1,11 @@
 <?php
 date_default_timezone_set('America/Mexico_City');
 
-session_start();
-include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
+require_once 'includes/auth_guard.php';
+require_once 'includes/header.php';
+require_once 'includes/navbar.php';
 
-// Verificar autenticación
-if (!isset($_SESSION['usuario_id'])) {
-    header("Location: login.php");
-    exit;
-}
-
-$rol_usuario = $_SESSION['rol'] ?? 'vendedor';
+$rol_usuario = permisos_normalizar_rol($_SESSION['rol'] ?? 'vendedor');
 
 // Obtener proveedores para el modal
 $proveedores = [];

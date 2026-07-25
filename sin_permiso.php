@@ -1,94 +1,115 @@
 <?php
-// sin_permiso.php
+require_once __DIR__ . '/includes/session.php';
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
+$rol = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+$destino = in_array(
+    $rol,
+    ['administrador', 'super_administrador'],
+    true
+)
+    ? 'dashboard_admin.php'
+    : 'dashboard_vendedor.php';
 
-$rol = mb_strtolower(trim($_SESSION['rol'] ?? ''), 'UTF-8');
-
-$volver = 'login.php';
-
-if ($rol === 'administrador') {
-    $volver = 'dashboard_admin.php';
-} elseif ($rol === 'vendedor') {
-    $volver = 'dashboard_vendedor.php';
-}
+$modulo = trim((string) ($_GET['modulo'] ?? 'este módulo'));
 ?>
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Sin permiso</title>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
+    <title>Acceso restringido</title>
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    >
     <style>
+        * { box-sizing: border-box; }
         body {
-            margin: 0;
             min-height: 100vh;
             display: grid;
             place-items: center;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            background: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            font-family: Inter, Arial, sans-serif;
+            color: #1e293b;
+            background:
+                radial-gradient(
+                    circle at top,
+                    rgba(249, 115, 22, .16),
+                    transparent 38%
+                ),
+                #f8fafc;
         }
-
-        .card {
-            width: min(430px, 92%);
-            background: white;
-            padding: 34px;
-            border-radius: 22px;
+        .denied-card {
+            width: min(440px, 100%);
+            padding: 30px;
             text-align: center;
-            box-shadow: 0 20px 55px rgba(15, 23, 42, 0.12);
-            border: 1px solid rgba(249, 115, 22, 0.18);
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 24px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, .10);
         }
-
-        .icon {
-            width: 70px;
-            height: 70px;
-            margin: 0 auto 18px;
-            border-radius: 20px;
+        .denied-icon {
+            width: 72px;
+            height: 72px;
             display: grid;
             place-items: center;
-            background: linear-gradient(135deg, #fb923c, #f97316);
-            color: white;
-            font-size: 34px;
-            font-weight: 900;
+            margin: 0 auto 18px;
+            color: #fff;
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            border-radius: 22px;
+            font-size: 1.7rem;
         }
-
         h1 {
-            margin: 0 0 10px;
-            color: #0f172a;
-            font-size: 25px;
+            margin: 0 0 9px;
+            font-size: 1.5rem;
         }
-
         p {
-            margin: 0 0 24px;
+            margin: 0 0 22px;
             color: #64748b;
-            line-height: 1.5;
+            line-height: 1.55;
         }
-
+        small {
+            display: block;
+            margin-bottom: 22px;
+            color: #94a3b8;
+        }
         a {
-            display: inline-block;
-            padding: 12px 20px;
-            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 10px 18px;
+            color: #fff;
             background: #f97316;
-            color: white;
+            border-radius: 12px;
             text-decoration: none;
-            font-weight: 800;
-        }
-
-        a:hover {
-            background: #ea580c;
+            font-weight: 750;
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="icon">!</div>
-        <h1>Acceso no permitido</h1>
-        <p>No tienes permisos para entrar a esta sección.</p>
-        <a href="<?php echo htmlspecialchars($volver); ?>">Volver</a>
-    </div>
+    <main class="denied-card">
+        <div class="denied-icon">
+            <i class="fas fa-lock"></i>
+        </div>
+
+        <h1>Acceso restringido</h1>
+
+        <p>
+            Tu rol no tiene habilitado este módulo.
+            Un administrador puede activarlo desde Control de accesos.
+        </p>
+
+        <small>
+            <?= htmlspecialchars($modulo, ENT_QUOTES, 'UTF-8') ?>
+        </small>
+
+        <a href="<?= htmlspecialchars($destino, ENT_QUOTES, 'UTF-8') ?>">
+            <i class="fas fa-arrow-left"></i>
+            Volver al panel
+        </a>
+    </main>
 </body>
 </html>

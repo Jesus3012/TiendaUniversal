@@ -1,15 +1,8 @@
 <?php
-require_once 'includes/session.php';
-require_once 'includes/db.php';
+require_once 'includes/auth_guard.php';
 require_once 'includes/csrf.php';
 
-// Verificar autenticación - SOLO VENDEDOR
-if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['rol'] ?? '') !== 'vendedor') {
-    header("Location: login.php");
-    exit;
-}
-
-$id_vendedor = $_SESSION['usuario_id'];
+$id_vendedor = (int) $_SESSION['usuario_id'];
 $nombre_usuario = $_SESSION['nombre'] ?? 'Vendedor';
 $nombre_completo = $nombre_usuario;
 

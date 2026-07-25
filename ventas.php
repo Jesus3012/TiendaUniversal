@@ -155,8 +155,22 @@ function abrir_cajon_dinero(): array
     ];
 }
 
-if ($_SESSION['rol'] !== 'administrador' && $_SESSION['rol'] !== 'vendedor') {
-    header("Location: index.php");
+// Validar sesión y roles autorizados para el punto de venta.
+$usuario_id_sesion = (int) ($_SESSION['usuario_id'] ?? 0);
+$rol_actual = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+$roles_permitidos_venta = [
+    'administrador',
+    'super_administrador',
+    'vendedor',
+];
+
+if ($usuario_id_sesion <= 0) {
+    header('Location: login.php');
+    exit;
+}
+
+if (!in_array($rol_actual, $roles_permitidos_venta, true)) {
+    header('Location: sin_permiso.php');
     exit;
 }
 
@@ -501,7 +515,7 @@ include('includes/header.php');
 include('includes/navbar.php');
 
 $carrito_json = json_encode($_SESSION['carrito']);
-$rol_usuario = $_SESSION['rol'] ?? 'vendedor';
+$rol_usuario = $rol_actual;
 
 // Obtener productos para selección visual
 $productos_query = "SELECT id, nombre, precio_venta, cantidad as stock, imagen, categoria 
@@ -523,12 +537,12 @@ if ($productos_result) {
 <div class="content-wrapper">
     <div class="container-fluid">
         
-        <?php if ($rol_usuario === 'administrador'): ?>
+        <?php if (in_array($rol_usuario, ['administrador', 'super_administrador'], true)): ?>
         <div class="custom-breadcrumb">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                        <a href="<?= in_array($rol_usuario, ['administrador', 'super_administrador'], true) ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
                             <i class="fas fa-home"></i> Inicio
                         </a>
                     </li>
@@ -3065,4 +3079,4 @@ document.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('resize', function() {
     setTimeout(ajustarUnaFilaMas, 100);
 });
-</script>
+</script>v

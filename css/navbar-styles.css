@@ -485,12 +485,21 @@ body {
   left: 0;
   width: 85%;
   max-width: 320px;
+
+  /* 100dvh se adapta mejor a las barras del navegador móvil */
   height: 100vh;
+  height: 100dvh;
+
   background: var(--sidebar-gradient);
   transform: translateX(-100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1002;
-  overflow-y: auto;
+
+  /* El encabezado queda fijo y solo se desplaza el contenido */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -505,7 +514,9 @@ body {
 }
 
 .mobile-sidebar-header {
+  flex: 0 0 auto;
   padding: 20px;
+  padding-top: calc(20px + env(safe-area-inset-top));
   border-bottom: 2px solid rgba(255, 255, 255, 0.3);
   display: flex;
   justify-content: space-between;
@@ -555,7 +566,23 @@ body {
 }
 
 .mobile-sidebar-content {
+  flex: 1;
+  min-height: 0;
+
+  /* Scroll únicamente dentro del contenido */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
+  display: flex;
+  flex-direction: column;
+
   padding: 20px;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.42) transparent;
 }
 
 .mobile-user-info {
@@ -606,9 +633,11 @@ body {
 }
 
 .mobile-nav-links {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: min-content;
 }
 
 .mobile-nav-links a {
@@ -869,4 +898,57 @@ body .mobile-sidebar .mobile-nav-links a.active i,
 body .mobile-sidebar .mobile-nav-links a[aria-current="page"] i {
   color: #ffe2c4 !important;
   transform: scale(1.06) !important;
+}
+
+/* ==========================================================
+   CERRAR SESIÓN VISIBLE EN MÓVIL
+========================================================== */
+
+/*
+ * El enlace ya existe en navbar.php.
+ * Se identifica por su destino para no requerir cambiar el HTML.
+ */
+.mobile-nav-links a[href="logout.php"] {
+  flex-shrink: 0;
+  margin-top: 18px !important;
+  margin-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+
+  background: rgba(112, 43, 7, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-weight: 700;
+}
+
+.mobile-nav-links a[href="logout.php"]:hover,
+.mobile-nav-links a[href="logout.php"]:focus-visible {
+  background: rgba(112, 43, 7, 0.4);
+  transform: translateX(3px);
+}
+
+/* Scroll discreto para comprobar que aún existen opciones abajo */
+.mobile-sidebar-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mobile-sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mobile-sidebar-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.42);
+  border-radius: 999px;
+}
+
+.mobile-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.58);
+}
+
+@media (max-width: 768px) {
+  .mobile-sidebar {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .mobile-sidebar-content {
+    padding-bottom: calc(36px + env(safe-area-inset-bottom));
+  }
 }

@@ -1,15 +1,59 @@
 <?php
-include 'includes/session.php';
-include 'includes/db.php';
-include 'includes/header.php';
-include 'includes/navbar.php';
+declare(strict_types=1);
 
-if ($rol !== 'administrador') {
-    header("Location: inventario_vendedor.php");
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+
+/*
+|--------------------------------------------------------------------------
+| Validar acceso ANTES de imprimir HTML
+|--------------------------------------------------------------------------
+*/
+
+$usuario_id_sesion = (int) ($_SESSION['usuario_id'] ?? 0);
+$rol_actual = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$roles_administrativos = [
+    'administrador',
+    'super_administrador',
+];
+
+if ($usuario_id_sesion <= 0) {
+    header('Location: login.php');
     exit;
 }
 
+if (!in_array($rol_actual, $roles_administrativos, true)) {
+    header('Location: inventario_vendedor.php');
+    exit;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Cargar la interfaz después de validar
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/navbar.php';
+
 /* ================= FUNCIONES ================= */
+
+/**
+ * Convierte cualquier valor de base de datos a número seguro.
+ * Evita errores de PHP 8 cuando el valor es NULL, vacío o no numérico.
+ *
+ * @param mixed $valor
+ */
+function numeroSeguro($valor): float
+{
+    if ($valor === null || $valor === '' || !is_numeric($valor)) {
+        return 0.0;
+    }
+
+    return (float) $valor;
+}
+
 function obtenerCategorias($conn) {
     $result = $conn->query("
         SELECT DISTINCT categoria 
@@ -42,7 +86,7 @@ function obtenerTodosProductos($conn) {
     $result = $conn->query("
         SELECT 
             p.*,
-            (p.precio_venta - p.precio_compra) AS utilidad,
+            (COALESCE(p.precio_venta, 0) - COALESCE(p.precio_compra, 0)) AS utilidad,
             (SELECT COUNT(*) FROM codigos_barras cb WHERE cb.producto_id = p.id AND cb.disponible = 1) AS codigos_disponibles
         FROM productos p
         WHERE p.tipo_inventario = 'producto' 
@@ -51,7 +95,23 @@ function obtenerTodosProductos($conn) {
     ");
     $productos = [];
     while ($row = $result->fetch_assoc()) {
-        $row['atributos_array'] = json_decode($row['atributos'], true);
+        $atributosRaw = isset($row['atributos'])
+            ? trim((string) $row['atributos'])
+            : '';
+
+        $atributosDecodificados = $atributosRaw !== ''
+            ? json_decode($atributosRaw, true)
+            : [];
+
+        $row['atributos_array'] = is_array($atributosDecodificados)
+            ? $atributosDecodificados
+            : [];
+
+        $row['precio_compra'] = numeroSeguro($row['precio_compra'] ?? 0);
+        $row['precio_venta'] = numeroSeguro($row['precio_venta'] ?? 0);
+        $row['utilidad'] = numeroSeguro($row['utilidad'] ?? 0);
+        $row['cantidad'] = numeroSeguro($row['cantidad'] ?? 0);
+
         $row['tipo'] = 'producto';
         $productos[] = $row;
     }
@@ -70,7 +130,22 @@ function obtenerTodosInsumos($conn) {
     ");
     $insumos = [];
     while ($row = $result->fetch_assoc()) {
-        $row['atributos_array'] = json_decode($row['atributos'], true);
+        $atributosRaw = isset($row['atributos'])
+            ? trim((string) $row['atributos'])
+            : '';
+
+        $atributosDecodificados = $atributosRaw !== ''
+            ? json_decode($atributosRaw, true)
+            : [];
+
+        $row['atributos_array'] = is_array($atributosDecodificados)
+            ? $atributosDecodificados
+            : [];
+
+        $row['precio_compra'] = numeroSeguro($row['precio_compra'] ?? 0);
+        $row['precio_venta'] = numeroSeguro($row['precio_venta'] ?? 0);
+        $row['cantidad'] = numeroSeguro($row['cantidad'] ?? 0);
+
         $row['tipo'] = 'insumo';
         $insumos[] = $row;
     }
@@ -155,19 +230,19 @@ function obtenerEstadisticas($conn) {
     $stats = [];
     
     $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE activo = 1 AND tipo_inventario = 'producto'");
-    $stats['total_productos'] = $result->fetch_assoc()['total'];
+    $stats['total_productos'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
     
     $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE activo = 1 AND tipo_inventario = 'insumo'");
-    $stats['total_insumos'] = $result->fetch_assoc()['total'];
+    $stats['total_insumos'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
     
     $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE cantidad <= 5 AND activo = 1");
-    $stats['stock_bajo'] = $result->fetch_assoc()['total'];
+    $stats['stock_bajo'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
     
     $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE cantidad = 0 AND activo = 1");
-    $stats['sin_stock'] = $result->fetch_assoc()['total'];
+    $stats['sin_stock'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
     
     $result = $conn->query("SELECT SUM(precio_venta * cantidad) as total FROM productos WHERE activo = 1");
-    $stats['valor_total'] = $result->fetch_assoc()['total'] ?? 0;
+    $stats['valor_total'] = numeroSeguro($result->fetch_assoc()['total'] ?? 0);
     
     return $stats;
 }
@@ -511,7 +586,7 @@ unset($insumoTmp);
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href="<?= $_SESSION['rol'] === 'administrador' ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
+                        <a href="<?= in_array($rol_actual, ['administrador', 'super_administrador'], true) ? 'dashboard_admin.php' : 'dashboard_vendedor.php' ?>">
                             <i class="fas fa-home"></i> Inicio
                         </a>
                     </li>
@@ -532,7 +607,7 @@ unset($insumoTmp);
             <div class="col-lg-3 col-6">
                 <div class="small-box bg-primary-custom">
                     <div class="inner">
-                        <h3><?= number_format($stats['total_productos']) ?></h3>
+                        <h3><?= number_format(numeroSeguro($stats['total_productos'] ?? 0), 0) ?></h3>
                         <p>Productos</p>
                     </div>
                     <div class="icon">
@@ -543,7 +618,7 @@ unset($insumoTmp);
             <div class="col-lg-3 col-6">
                 <div class="small-box bg-success-custom">
                     <div class="inner">
-                        <h3><?= number_format($stats['total_insumos']) ?></h3>
+                        <h3><?= number_format(numeroSeguro($stats['total_insumos'] ?? 0), 0) ?></h3>
                         <p>Insumos</p>
                     </div>
                     <div class="icon">
@@ -554,7 +629,7 @@ unset($insumoTmp);
             <div class="col-lg-3 col-6">
                 <div class="small-box bg-warning-custom">
                     <div class="inner">
-                        <h3><?= number_format($stats['stock_bajo']) ?></h3>
+                        <h3><?= number_format(numeroSeguro($stats['stock_bajo'] ?? 0), 0) ?></h3>
                         <p>Stock Bajo (≤5)</p>
                     </div>
                     <div class="icon">
@@ -565,7 +640,7 @@ unset($insumoTmp);
             <div class="col-lg-3 col-6">
                 <div class="small-box bg-info-custom">
                     <div class="inner">
-                        <h3>$<?= number_format($stats['valor_total'], 0) ?></h3>
+                        <h3>$<?= number_format(numeroSeguro($stats['valor_total'] ?? 0), 0) ?></h3>
                         <p>Valor Inventario</p>
                     </div>
                     <div class="icon">
@@ -667,7 +742,7 @@ unset($insumoTmp);
             <div class="card-body">
                 <div class="row" id="productosGrid">
                     <?php foreach($todosProductos as $producto): 
-                        $stock = $producto['cantidad'];
+                        $stock = numeroSeguro($producto['cantidad'] ?? 0);
                         if($stock <= 0) { $stockClass = 'critical'; $stockStatus = 'Agotado'; }
                         elseif($stock <= 5) { $stockClass = 'critical'; $stockStatus = 'Stock Crítico'; }
                         elseif($stock <= 15) { $stockClass = 'low'; $stockStatus = 'Stock Bajo'; }
@@ -831,15 +906,15 @@ unset($insumoTmp);
                                 <div class="prices prices-producto">
                                     <div class="price-item">
                                         <small><i class="fas fa-arrow-down"></i> Compra</small>
-                                        <span class="price-value" style="color: #dc2626;">$<?= number_format($producto['precio_compra'], 0) ?></span>
+                                        <span class="price-value" style="color: #dc2626;">$<?= number_format(numeroSeguro($producto['precio_compra'] ?? 0), 0) ?></span>
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-arrow-up"></i> Venta</small>
-                                        <span class="price-value" style="color: #16a34a;">$<?= number_format($producto['precio_venta'], 0) ?></span>
+                                        <span class="price-value" style="color: #16a34a;">$<?= number_format(numeroSeguro($producto['precio_venta'] ?? 0), 0) ?></span>
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-chart-line"></i> Utilidad</small>
-                                        <span class="price-value" style="color: <?= $colorHex ?>;">$<?= number_format($producto['utilidad'], 0) ?></span>
+                                        <span class="price-value" style="color: <?= $colorHex ?>;">$<?= number_format(numeroSeguro($producto['utilidad'] ?? 0), 0) ?></span>
                                     </div>
                                 </div>
                                 
@@ -849,7 +924,7 @@ unset($insumoTmp);
                                             <i class="fas <?= $stock <= 0 ? 'fa-skull' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle') ?>"></i>
                                             <?= $stockStatus ?>
                                         </span>
-                                        <span class="stock-number"><?= number_format($stock) ?> unidades</span>
+                                        <span class="stock-number"><?= number_format(numeroSeguro($stock), 0) ?> unidades</span>
                                     </div>
                                     <div class="progress-bar-custom">
                                         <div class="progress-fill <?= $stockClass ?>" style="width: <?= $stockPercent ?>%"></div>
@@ -884,7 +959,7 @@ unset($insumoTmp);
             <div class="card-body">
                 <div class="row" id="insumosGrid">
                     <?php foreach($todosInsumos as $insumo): 
-                        $stock = $insumo['cantidad'];
+                        $stock = numeroSeguro($insumo['cantidad'] ?? 0);
                         if($stock <= 0) { $stockClass = 'critical'; $stockStatus = 'Agotado'; }
                         elseif($stock <= 5) { $stockClass = 'critical'; $stockStatus = 'Stock Crítico'; }
                         elseif($stock <= 15) { $stockClass = 'low'; $stockStatus = 'Stock Bajo'; }
@@ -944,7 +1019,7 @@ unset($insumoTmp);
                                 <div class="prices prices-insumo">
                                     <div class="price-item">
                                         <small><i class="fas fa-tag"></i> Costo</small>
-                                        <span class="text-danger">$<?= number_format($insumo['precio_compra'], 2) ?></span>
+                                        <span class="text-danger">$<?= number_format(numeroSeguro($insumo['precio_compra'] ?? 0), 2) ?></span>
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-weight-hanging"></i> Unidad</small>
@@ -958,7 +1033,7 @@ unset($insumoTmp);
                                             <i class="fas <?= $stock <= 0 ? 'fa-times-circle' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle') ?>"></i>
                                             <?= $stockStatus ?>
                                         </span>
-                                        <span class="stock-number"><?= number_format($stock, 2) ?> <?= $unidad ?></span>
+                                        <span class="stock-number"><?= number_format(numeroSeguro($stock), 2) ?> <?= $unidad ?></span>
                                     </div>
                                     <div class="progress-bar-custom">
                                         <div class="progress-fill <?= $stockClass ?>" style="width: <?= $stockPercent ?>%"></div>
