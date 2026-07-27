@@ -50,6 +50,25 @@ function valorTipoCodigoValido($valor) {
     return in_array($valor, ['unico', 'multiple'], true) ? $valor : null;
 }
 
+/**
+ * Aplica el 3% al precio capturado y redondea al peso entero más cercano.
+ * Ejemplo: 300 => 309, 301 => 310.
+ */
+function precioVentaConRecargo($precio_base, $porcentaje = 3.0) {
+    $precio_base = max(0, (float)$precio_base);
+    $porcentaje = max(0, (float)$porcentaje);
+
+    if ($precio_base <= 0) {
+        return 0.0;
+    }
+
+    return (float)round(
+        $precio_base * (1 + ($porcentaje / 100)),
+        0,
+        PHP_ROUND_HALF_UP
+    );
+}
+
 // ======================= FUNCIONES AUXILIARES =======================
 function obtenerCategorias($conn) {
     $result = $conn->query("SELECT DISTINCT categoria FROM productos WHERE activo = 1 AND categoria != '' ORDER BY categoria");
@@ -71,11 +90,15 @@ function obtenerProveedores($conn) {
 
 
 // ======================= CÓDIGOS DE BARRAS SEGUROS =======================
-// Regla del sistema:
-// - tipo_codigo = "unico": solo debe existir 1 código por producto: P + 8 dígitos.
-// - tipo_codigo = "multiple": debe existir 1 código por cada pieza actual en stock.
-// - Cada vez que se actualiza producto / tipo de código / stock, se reemplazan los códigos del producto,
-//   no se agregan encima de los anteriores. Así evitamos duplicados infinitos.
+// REGLAS DEFINITIVAS:
+// 1. Código único: debe existir exactamente 1 registro por producto.
+// 2. Código múltiple: deben existir exactamente tantos registros como piezas en stock.
+// 3. Al aumentar stock se conservan los códigos existentes y se agregan los faltantes.
+// 4. Al disminuir stock se eliminan físicamente los códigos sobrantes.
+// 5. Al cambiar de múltiple a único se eliminan todos los sobrantes y queda solo el principal.
+// 6. Los códigos normales usan P + ID sin ceros: P1, P7, P116, P142.
+// 7. Los 15 códigos especiales conservan exactamente sus ceros como código principal.
+
 function normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo) {
     if ($tipo_inventario !== 'producto') {
         return 'multiple';
@@ -100,16 +123,81 @@ function normalizarCodigoBarra($codigo) {
     return strtoupper($codigo);
 }
 
-function codigoUnicoProducto($producto_id) {
-    return 'P' . str_pad((string)(int)$producto_id, 8, '0', STR_PAD_LEFT);
+/**
+ * Códigos que deben conservar exactamente el formato anterior con ceros.
+ * La clave es el ID del producto y el valor es el código permanente.
+ */
+function codigosEspecialesProtegidos() {
+    return [
+        156 => 'P00000156',
+        82  => 'P00000082',
+        74  => 'P00000074',
+        155 => 'P00000155',
+        78  => 'P00000078',
+        53  => 'P00000053',
+        18  => 'P00000018',
+        121 => 'P00000121',
+        87  => 'P00000087',
+        81  => 'P00000081',
+        76  => 'P00000076',
+        54  => 'P00000054',
+        91  => 'P00000091',
+        75  => 'P00000075',
+        11  => 'P00000011',
+    ];
 }
 
+function codigoEspecialProtegidoProducto($producto_id) {
+    $producto_id = (int)$producto_id;
+    $especiales = codigosEspecialesProtegidos();
+
+    return $especiales[$producto_id] ?? null;
+}
+
+function productoTieneCodigoEspecialProtegido($producto_id) {
+    return codigoEspecialProtegidoProducto($producto_id) !== null;
+}
+
+/**
+ * Se conserva este nombre por compatibilidad con el resto del archivo.
+ * Ahora significa "producto con código especial protegido", no código sin P.
+ */
+function productoTieneCodigosLegados($conn, $producto_id) {
+    return productoTieneCodigoEspecialProtegido($producto_id);
+}
+
+/**
+ * Código único nuevo:
+ * - producto normal 116 => P116
+ * - producto protegido 156 => P00000156
+ */
+function codigoUnicoProducto($producto_id) {
+    $producto_id = (int)$producto_id;
+    $especial = codigoEspecialProtegidoProducto($producto_id);
+
+    if ($especial !== null) {
+        return $especial;
+    }
+
+    return 'P' . $producto_id;
+}
+
+/**
+ * Códigos múltiples nuevos sin relleno exagerado:
+ * - primer código: P116
+ * - siguientes: P116-2, P116-3, P116-4...
+ *
+ * Para un producto protegido, el primer código conserva su valor especial.
+ */
 function codigoMultipleProducto($producto_id, $consecutivo) {
-    // Formato único y consistente para TODOS los códigos del sistema:
-    // - Código único:   P00000048
-    // - Código múltiple: P000048001, P000048002, etc.
-    // Así todos conservan la letra P y evitamos mezclas con códigos solo numéricos.
-    return 'P' . str_pad((string)(int)$producto_id, 6, '0', STR_PAD_LEFT) . str_pad((string)(int)$consecutivo, 3, '0', STR_PAD_LEFT);
+    $producto_id = (int)$producto_id;
+    $consecutivo = max(1, (int)$consecutivo);
+
+    if ($consecutivo === 1) {
+        return codigoUnicoProducto($producto_id);
+    }
+
+    return 'P' . $producto_id . '-' . $consecutivo;
 }
 
 function productoActivoParaCodigos($conn, $producto_id) {
@@ -122,64 +210,208 @@ function productoActivoParaCodigos($conn, $producto_id) {
     if (!$stmt) {
         throw new Exception('Error validando producto activo: ' . $conn->error);
     }
+
     $stmt->bind_param('i', $producto_id);
     $stmt->execute();
     $res = $stmt->get_result();
     $producto = $res ? $res->fetch_assoc() : null;
     $stmt->close();
 
-    return $producto && (int)$producto['activo'] === 1 && ($producto['tipo_inventario'] ?? '') === 'producto';
+    return $producto
+        && (int)$producto['activo'] === 1
+        && ($producto['tipo_inventario'] ?? '') === 'producto';
 }
 
-/**
- * Detecta productos que ya tienen uno o más códigos históricos sin la letra P.
- *
- * Esos códigos son permanentes: nunca se eliminan, reemplazan, renombran ni
- * convierten al formato nuevo. El campo "disponible" sí puede seguir cambiando
- * durante una venta porque eso no modifica el valor del código.
- */
-function productoTieneCodigosLegados($conn, $producto_id) {
+function obtenerCodigosRegistradosProducto($conn, $producto_id) {
     $producto_id = (int)$producto_id;
 
-    if ($producto_id <= 0) {
-        return false;
-    }
-
     $stmt = $conn->prepare("
-        SELECT id
+        SELECT id, producto_id, codigo, disponible
         FROM codigos_barras
         WHERE producto_id = ?
-          AND UPPER(TRIM(codigo)) NOT LIKE 'P%'
-        LIMIT 1
+        ORDER BY id ASC
     ");
 
     if (!$stmt) {
-        throw new Exception('Error validando códigos históricos: ' . $conn->error);
+        throw new Exception('Error consultando códigos del producto: ' . $conn->error);
     }
 
     $stmt->bind_param('i', $producto_id);
     $stmt->execute();
     $res = $stmt->get_result();
-    $tiene_codigo_legado = $res && $res->num_rows > 0;
+
+    $codigos = [];
+    while ($res && ($row = $res->fetch_assoc())) {
+        $codigos[] = [
+            'id' => (int)$row['id'],
+            'producto_id' => (int)$row['producto_id'],
+            'codigo' => normalizarCodigoBarra($row['codigo']),
+            'disponible' => (int)$row['disponible'],
+        ];
+    }
+
+    $stmt->close();
+    return $codigos;
+}
+
+function buscarCodigoBarraGlobal($conn, $codigo) {
+    $codigo = normalizarCodigoBarra($codigo);
+
+    $stmt = $conn->prepare("
+        SELECT id, producto_id, codigo, disponible
+        FROM codigos_barras
+        WHERE UPPER(TRIM(codigo)) = ?
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        throw new Exception('Error buscando código de barras: ' . $conn->error);
+    }
+
+    $stmt->bind_param('s', $codigo);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_assoc() : null;
     $stmt->close();
 
-    return $tiene_codigo_legado;
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'id' => (int)$row['id'],
+        'producto_id' => (int)$row['producto_id'],
+        'codigo' => normalizarCodigoBarra($row['codigo']),
+        'disponible' => (int)$row['disponible'],
+    ];
+}
+
+function actualizarDisponibilidadCodigo($conn, $codigo_id, $disponible) {
+    $codigo_id = (int)$codigo_id;
+    $disponible = $disponible ? 1 : 0;
+
+    $stmt = $conn->prepare("
+        UPDATE codigos_barras
+        SET disponible = ?
+        WHERE id = ?
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        throw new Exception('Error preparando disponibilidad del código: ' . $conn->error);
+    }
+
+    $stmt->bind_param('ii', $disponible, $codigo_id);
+
+    if (!$stmt->execute()) {
+        $error = $stmt->error;
+        $stmt->close();
+        throw new Exception('Error actualizando disponibilidad del código: ' . $error);
+    }
+
+    $stmt->close();
+}
+
+function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1) {
+    $producto_id = (int)$producto_id;
+    $codigo = normalizarCodigoBarra($codigo);
+    $disponible = $disponible ? 1 : 0;
+
+    if ($producto_id <= 0) {
+        throw new Exception('Producto inválido al guardar el código de barras.');
+    }
+
+    if ($codigo === '') {
+        throw new Exception('Se intentó guardar un código vacío.');
+    }
+
+    $existente = buscarCodigoBarraGlobal($conn, $codigo);
+
+    if ($existente) {
+        if ((int)$existente['producto_id'] !== $producto_id) {
+            throw new Exception("El código {$codigo} ya está asignado a otro producto.");
+        }
+
+        actualizarDisponibilidadCodigo(
+            $conn,
+            (int)$existente['id'],
+            $disponible
+        );
+
+        return (int)$existente['id'];
+    }
+
+    $stmt = $conn->prepare("
+        INSERT INTO codigos_barras (producto_id, codigo, disponible)
+        VALUES (?, ?, ?)
+    ");
+
+    if (!$stmt) {
+        throw new Exception('Error preparando inserción de código: ' . $conn->error);
+    }
+
+    $stmt->bind_param('isi', $producto_id, $codigo, $disponible);
+
+    if (!$stmt->execute()) {
+        $error = $stmt->error;
+        $stmt->close();
+        throw new Exception('Error insertando código de barras: ' . $error);
+    }
+
+    $nuevo_id = (int)$conn->insert_id;
+    $stmt->close();
+
+    return $nuevo_id;
 }
 
 /**
- * Elimina códigos únicamente cuando el producto usa el formato nuevo con P.
- *
- * Los códigos históricos numéricos quedan protegidos incluso si se edita,
- * ajusta, aumenta o disminuye el stock. Al desactivar el producto solo se
- * eliminan sus archivos PNG/ZIP/PDF, pero el código permanece en la BD.
+ * Obtiene el siguiente código múltiple libre.
+ * Como los sobrantes se eliminan físicamente, un consecutivo libre puede
+ * reutilizarse cuando el stock vuelva a aumentar.
+ */
+function siguienteCodigoMultipleDisponible($conn, $producto_id) {
+    $producto_id = (int)$producto_id;
+
+    for ($consecutivo = 1; $consecutivo <= 1000000; $consecutivo++) {
+        $candidato = codigoMultipleProducto($producto_id, $consecutivo);
+
+        if (buscarCodigoBarraGlobal($conn, $candidato) === null) {
+            return $candidato;
+        }
+    }
+
+    throw new Exception('No fue posible generar un nuevo código múltiple.');
+}
+
+function eliminarCodigoBarraPorId($conn, $codigo_id) {
+    $codigo_id = (int)$codigo_id;
+
+    if ($codigo_id <= 0) {
+        return;
+    }
+
+    $stmt = $conn->prepare("DELETE FROM codigos_barras WHERE id = ? LIMIT 1");
+    if (!$stmt) {
+        throw new Exception('Error preparando eliminación de código: ' . $conn->error);
+    }
+
+    $stmt->bind_param('i', $codigo_id);
+
+    if (!$stmt->execute()) {
+        $error = $stmt->error;
+        $stmt->close();
+        throw new Exception('Error eliminando código sobrante: ' . $error);
+    }
+
+    $stmt->close();
+}
+
+/**
+ * Elimina todos los códigos del producto.
+ * Se usa al desactivar el artículo o convertirlo en insumo.
  */
 function eliminarCodigosProducto($conn, $producto_id) {
     $producto_id = (int)$producto_id;
-
-    if (productoTieneCodigosLegados($conn, $producto_id)) {
-        limpiarArchivosCodigosProducto($producto_id);
-        return;
-    }
 
     $stmt = $conn->prepare("DELETE FROM codigos_barras WHERE producto_id = ?");
     if (!$stmt) {
@@ -187,125 +419,152 @@ function eliminarCodigosProducto($conn, $producto_id) {
     }
 
     $stmt->bind_param('i', $producto_id);
+
     if (!$stmt->execute()) {
         $error = $stmt->error;
         $stmt->close();
-        throw new Exception('Error eliminando códigos anteriores: ' . $error);
+        throw new Exception('Error eliminando códigos del producto: ' . $error);
     }
-    $stmt->close();
 
+    $stmt->close();
     limpiarArchivosCodigosProducto($producto_id);
 }
 
-function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1) {
+/**
+ * Sincroniza la tabla codigos_barras con la configuración actual.
+ *
+ * ÚNICO:
+ * - queda exactamente un registro;
+ * - producto normal: P + ID, por ejemplo P116;
+ * - producto especial: conserva exactamente el código con ceros;
+ * - todos los códigos sobrantes se eliminan.
+ *
+ * MÚLTIPLE:
+ * - queda exactamente un registro por pieza existente en stock;
+ * - al aumentar stock conserva los anteriores y agrega los faltantes;
+ * - al disminuir stock elimina físicamente los más recientes;
+ * - el primer registro siempre es el código principal del producto.
+ */
+function reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario = 'producto', $stock_especial = 0) {
     $producto_id = (int)$producto_id;
-    $codigo = normalizarCodigoBarra($codigo);
-    $disponible = (int)$disponible;
-
-    if ($codigo === '') {
-        throw new Exception('Se intentó guardar un código vacío.');
-    }
-
-    // Protección aunque todavía no hayas agregado el índice UNIQUE en MySQL.
-    // Si el mismo código ya existe para otro producto, se detiene para no cruzar artículos.
-    $stmt = $conn->prepare("SELECT id, producto_id FROM codigos_barras WHERE codigo = ? LIMIT 1");
-    if (!$stmt) {
-        throw new Exception('Error preparando validación de código: ' . $conn->error);
-    }
-    $stmt->bind_param('s', $codigo);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $existente = $res ? $res->fetch_assoc() : null;
-    $stmt->close();
-
-    if ($existente) {
-        if ((int)$existente['producto_id'] !== $producto_id) {
-            throw new Exception("El código {$codigo} ya está asignado a otro producto.");
-        }
-
-        $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ? WHERE id = ?");
-        if (!$stmt) {
-            throw new Exception('Error preparando actualización de código existente: ' . $conn->error);
-        }
-        $idExistente = (int)$existente['id'];
-        $stmt->bind_param('ii', $disponible, $idExistente);
-        if (!$stmt->execute()) {
-            $error = $stmt->error;
-            $stmt->close();
-            throw new Exception('Error actualizando código existente: ' . $error);
-        }
-        $stmt->close();
-        return;
-    }
-
-    $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, ?)");
-    if (!$stmt) {
-        throw new Exception('Error preparando inserción de código: ' . $conn->error);
-    }
-
-    $stmt->bind_param('isi', $producto_id, $codigo, $disponible);
-    if (!$stmt->execute()) {
-        $error = $stmt->error;
-        $stmt->close();
-        throw new Exception('Error insertando código de barras: ' . $error);
-    }
-    $stmt->close();
-}
-
-function reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario = 'producto') {
-    $producto_id = (int)$producto_id;
+    $stock_especial = (int)$stock_especial === 1 ? 1 : 0;
     $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo);
 
-    /*
-     * REGLA PERMANENTE PARA CÓDIGOS HISTÓRICOS:
-     * Si el producto tiene aunque sea un código que no comienza con P,
-     * se conserva exactamente como está. No se elimina ni se vuelve a crear
-     * al editar datos, agregar stock, disminuirlo, ajustarlo o regenerar todos.
-     *
-     * Solo volvemos a generar la imagen usando el mismo valor guardado.
-     */
-    if (productoTieneCodigosLegados($conn, $producto_id)) {
-        if (
-            $tipo_inventario === 'producto' &&
-            productoActivoParaCodigos($conn, $producto_id)
-        ) {
-            generarPNGCodigosProducto($conn, $producto_id);
-        } else {
-            limpiarArchivosCodigosProducto($producto_id);
-        }
+    // Un producto sin cantidad fija siempre utiliza un solo código permanente.
+    if ($tipo_inventario === 'producto' && $stock_especial === 1) {
+        $tipo_codigo = 'unico';
+    }
 
+    $cantidad_entera = cantidadEnteraParaCodigos($cantidad);
+
+    if (
+        $tipo_inventario !== 'producto'
+        || !productoActivoParaCodigos($conn, $producto_id)
+    ) {
+        eliminarCodigosProducto($conn, $producto_id);
         return;
     }
 
-    // Los productos del formato nuevo con P continúan funcionando igual.
-    eliminarCodigosProducto($conn, $producto_id);
+    $codigo_principal_valor = codigoUnicoProducto($producto_id);
+    $codigos = obtenerCodigosRegistradosProducto($conn, $producto_id);
+    $codigo_principal = null;
 
-    if ($tipo_inventario !== 'producto' || !productoActivoParaCodigos($conn, $producto_id)) {
-        return;
+    foreach ($codigos as $codigo_registrado) {
+        if ($codigo_registrado['codigo'] === $codigo_principal_valor) {
+            $codigo_principal = $codigo_registrado;
+            break;
+        }
+    }
+
+    // Mientras el producto tenga al menos un código requerido, garantizamos
+    // que exista su código principal exacto (P116 o la excepción con ceros).
+    $cantidad_objetivo = $tipo_codigo === 'unico' ? 1 : $cantidad_entera;
+
+    if ($cantidad_objetivo > 0 && $codigo_principal === null) {
+        $nuevo_id = insertarCodigoBarraSeguro(
+            $conn,
+            $producto_id,
+            $codigo_principal_valor,
+            1
+        );
+
+        $codigo_principal = [
+            'id' => $nuevo_id,
+            'producto_id' => $producto_id,
+            'codigo' => $codigo_principal_valor,
+            'disponible' => 1,
+        ];
+
+        $codigos = obtenerCodigosRegistradosProducto($conn, $producto_id);
     }
 
     if ($tipo_codigo === 'unico') {
+        // Solo queda el código principal; todos los anteriores de tipo múltiple
+        // se eliminan definitivamente para evitar crecimiento innecesario.
+        foreach ($codigos as $codigo_registrado) {
+            if ((int)$codigo_registrado['id'] !== (int)$codigo_principal['id']) {
+                eliminarCodigoBarraPorId($conn, (int)$codigo_registrado['id']);
+            }
+        }
+
+        actualizarDisponibilidadCodigo($conn, (int)$codigo_principal['id'], 1);
+        generarPNGCodigosProducto($conn, $producto_id);
+        return;
+    }
+
+    // Múltiple con stock cero: no se necesita ninguna etiqueta almacenada.
+    if ($cantidad_objetivo <= 0) {
+        eliminarCodigosProducto($conn, $producto_id);
+        return;
+    }
+
+    // Recargar después de garantizar el principal y ordenarlo primero.
+    $codigos = obtenerCodigosRegistradosProducto($conn, $producto_id);
+    usort($codigos, static function ($a, $b) use ($codigo_principal_valor) {
+        $aPrincipal = $a['codigo'] === $codigo_principal_valor ? 0 : 1;
+        $bPrincipal = $b['codigo'] === $codigo_principal_valor ? 0 : 1;
+
+        if ($aPrincipal !== $bPrincipal) {
+            return $aPrincipal <=> $bPrincipal;
+        }
+
+        return ((int)$a['id']) <=> ((int)$b['id']);
+    });
+
+    // Si sobran registros, eliminar primero los más recientes, conservando
+    // siempre el código principal como primera etiqueta del producto.
+    if (count($codigos) > $cantidad_objetivo) {
+        $sobrantes = array_slice($codigos, $cantidad_objetivo);
+
+        foreach ($sobrantes as $codigo_sobrante) {
+            eliminarCodigoBarraPorId($conn, (int)$codigo_sobrante['id']);
+        }
+    }
+
+    // Si faltan registros, crear únicamente la diferencia.
+    $codigos = obtenerCodigosRegistradosProducto($conn, $producto_id);
+    $faltan = $cantidad_objetivo - count($codigos);
+
+    for ($i = 0; $i < $faltan; $i++) {
         insertarCodigoBarraSeguro(
             $conn,
             $producto_id,
-            codigoUnicoProducto($producto_id),
+            siguienteCodigoMultipleDisponible($conn, $producto_id),
             1
         );
-    } else {
-        $cantidad_codigos = cantidadEnteraParaCodigos($cantidad);
+    }
 
-        for ($i = 1; $i <= $cantidad_codigos; $i++) {
-            insertarCodigoBarraSeguro(
-                $conn,
-                $producto_id,
-                codigoMultipleProducto($producto_id, $i),
-                1
-            );
+    // Todos los códigos que permanecen corresponden al stock actual.
+    $codigos = obtenerCodigosRegistradosProducto($conn, $producto_id);
+    foreach ($codigos as $codigo_registrado) {
+        if ((int)$codigo_registrado['disponible'] !== 1) {
+            actualizarDisponibilidadCodigo($conn, (int)$codigo_registrado['id'], 1);
         }
     }
 
     generarPNGCodigosProducto($conn, $producto_id);
 }
+
 // ========================= AGREGAR STOCK =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_stock') {
     csrf_check();
@@ -324,7 +583,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
     }
     
     if (empty($errors)) {
-        $stmt = $conn->prepare("SELECT nombre, cantidad, tipo_inventario, tipo_codigo FROM productos WHERE id = ? AND activo = 1");
+        $stmt = $conn->prepare("SELECT nombre, cantidad, tipo_inventario, tipo_codigo, stock_especial FROM productos WHERE id = ? AND activo = 1");
         $stmt->bind_param("i", $producto_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -332,6 +591,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
         
         if (!$producto) {
             $errors[] = "Producto no encontrado.";
+        } elseif ((int)($producto['stock_especial'] ?? 0) === 1) {
+            $errors[] = "Este producto tiene cantidad especial sin límite. Desactiva Producto especial desde Editar antes de agregar stock.";
         } else {
             $cantidad_anterior = $producto['cantidad'];
             $cantidad_nueva = $cantidad_anterior + $cantidad_agregar;
@@ -362,7 +623,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
                         $producto_id,
                         $cantidad_nueva,
                         $producto['tipo_codigo'] ?? 'multiple',
-                        $tipo_inventario
+                        $tipo_inventario,
+                        (int)($producto['stock_especial'] ?? 0)
                     );
                 }
                 
@@ -407,7 +669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjus
     }
     
     if (empty($errors)) {
-        $stmt = $conn->prepare("SELECT nombre, cantidad, tipo_inventario, tipo_codigo FROM productos WHERE id = ? AND activo = 1");
+        $stmt = $conn->prepare("SELECT nombre, cantidad, tipo_inventario, tipo_codigo, stock_especial FROM productos WHERE id = ? AND activo = 1");
         $stmt->bind_param("i", $producto_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -415,6 +677,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjus
         
         if (!$producto) {
             $errors[] = "Producto no encontrado.";
+        } elseif ((int)($producto['stock_especial'] ?? 0) === 1) {
+            $errors[] = "Este producto tiene cantidad especial sin límite. Desactiva Producto especial desde Editar antes de ajustar stock.";
         } else {
             $cantidad_anterior = $producto['cantidad'];
             $diferencia = $nueva_cantidad - $cantidad_anterior;
@@ -450,7 +714,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjus
                         $producto_id,
                         $nueva_cantidad,
                         $producto['tipo_codigo'] ?? 'multiple',
-                        $tipo_inventario
+                        $tipo_inventario,
+                        (int)($producto['stock_especial'] ?? 0)
                     );
                 }
                 
@@ -543,12 +808,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         });
         </script>";
     } else {
-        $precio_compra = floatval($_POST['precio_compra']);
-        $precio_venta = floatval($_POST['precio_venta']);
+        $precio_compra = max(0, floatval($_POST['precio_compra'] ?? 0));
+        $precio_venta_capturado = max(0, floatval($_POST['precio_venta'] ?? 0));
+        $precio_venta_tocado = trim((string)($_POST['precio_venta_tocado'] ?? '0')) === '1';
 
-        // Obtener datos actuales ANTES de decidir tipo_codigo.
-        // Esto evita que el producto se cambie a múltiple si por alguna razón el select no viaja en el POST.
-        $stmt = $conn->prepare("SELECT imagen, cantidad, tipo_codigo, tipo_inventario FROM productos WHERE id = ? AND activo = 1");
+        // Obtener datos actuales ANTES de decidir tipo_codigo, stock especial y precio.
+        // Si el precio no cambió, se conserva para no volver a aplicar el 3%.
+        $stmt = $conn->prepare("SELECT imagen, cantidad, tipo_codigo, tipo_inventario, stock_especial, precio_venta FROM productos WHERE id = ? AND activo = 1");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -571,6 +837,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $tipo_inventario = trim((string)($_POST['tipo_inventario'] ?? $tipo_inventario_actual));
         if (!in_array($tipo_inventario, ['producto', 'insumo'], true)) {
             $tipo_inventario = $tipo_inventario_actual;
+        }
+
+        $stock_especial = (
+            $tipo_inventario === 'producto'
+            && isset($_POST['stock_especial'])
+            && (string)$_POST['stock_especial'] === '1'
+        ) ? 1 : 0;
+
+        // Respaldo del servidor: si el valor enviado cambió respecto al guardado,
+        // aplica el 3% aunque una versión vieja del JavaScript no haya enviado la bandera.
+        if (
+            !$precio_venta_tocado
+            && abs($precio_venta_capturado - (float)($producto_actual['precio_venta'] ?? 0)) > 0.0001
+        ) {
+            $precio_venta_tocado = true;
+        }
+
+        if ($tipo_inventario !== 'producto') {
+            $precio_venta = 0.0;
+        } elseif ($precio_venta_tocado) {
+            $precio_venta = precioVentaConRecargo($precio_venta_capturado, 3.0);
+        } else {
+            $precio_venta = (float)($producto_actual['precio_venta'] ?? 0);
         }
 
         $tipo_codigo_actual = normalizarTipoCodigoProducto(
@@ -600,18 +889,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $tipo_codigo = 'multiple';
         }
 
+        if ($stock_especial === 1) {
+            $tipo_codigo = 'unico';
+        }
+
         
         /*
-         * SEGURIDAD DE PRODUCCIÓN:
-         * Los artículos con códigos históricos sin P conservan tanto el valor
-         * de su código como su configuración actual. Aunque un formulario viejo,
-         * caché o manipulación del POST intente cambiar el tipo, no se permite
-         * convertirlos ni regenerarlos.
+         * Los 15 artículos especiales pueden cambiar entre código único y
+         * múltiple. Lo único protegido es el valor de su código principal,
+         * que conservará exactamente los ceros definidos en la lista.
          */
         $tiene_codigo_legado = productoTieneCodigosLegados($conn, $id);
-        if ($tiene_codigo_legado) {
-            $tipo_codigo = $tipo_codigo_actual;
-        }
 
         debugTipoCodigoHostinger('POST update producto', [
             'id' => $id,
@@ -621,7 +909,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             'post_tipo_codigo_forzado' => $_POST['tipo_codigo_forzado'] ?? null,
             'post_tipo_codigo_tocado' => $_POST['tipo_codigo_tocado'] ?? null,
             'tipo_codigo_decidido' => $tipo_codigo,
-                    'tiene_codigo_legado' => $tiene_codigo_legado ? 1 : 0,
+            'stock_especial_anterior' => (int)($producto_actual['stock_especial'] ?? 0),
+            'stock_especial_nuevo' => $stock_especial,
+            'precio_venta_tocado' => $precio_venta_tocado ? 1 : 0,
+            'precio_venta_guardado' => $precio_venta,
+            'tiene_codigo_legado' => $tiene_codigo_legado ? 1 : 0,
         ]);
         
         $atributos = [];
@@ -635,6 +927,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
         $imagen_path = $producto_actual['imagen'] ?? '';
         $cantidad_actual = (float)($producto_actual['cantidad'] ?? 0);
+
+        // Los productos especiales no almacenan una existencia fija.
+        // Al desactivar esta opción se conserva 0 hasta agregar o ajustar stock.
+        $cantidad_guardada = $stock_especial === 1 ? 0.0 : $cantidad_actual;
 
         // Procesar nueva imagen
         if (!empty($_FILES['imagen']['name'])) {
@@ -684,11 +980,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             precio_venta = ?,
             tipo_codigo = ?,
             tipo_inventario = ?,
-            tipo_adquisicion = ?
+            tipo_adquisicion = ?,
+            stock_especial = ?,
+            cantidad = ?
             WHERE id = ?";
 
         // Asegurar que $tipo_codigo nunca sea null ni vacío.
         $tipo_codigo_final = normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo ?? 'multiple');
+        if ($stock_especial === 1) {
+            $tipo_codigo_final = 'unico';
+        }
         $imagen_valor = $imagen_path ?? '';
 
         try {
@@ -705,7 +1006,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             // OJO: antes tipo_codigo se estaba mandando como double por un bind_param incorrecto,
             // y eso hacía que MySQL ENUM guardara vacío o perdiera el valor.
             $stmt->bind_param(
-                "ssssisddsssi",
+                "ssssisddsssidi",
                 $nombre,
                 $categoria,
                 $atributos_json,
@@ -717,6 +1018,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
                 $tipo_codigo_final,
                 $tipo_inventario,
                 $tipo_adquisicion,
+                $stock_especial,
+                $cantidad_guardada,
                 $id
             );
 
@@ -729,11 +1032,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             // Aunque el UPDATE grande se ejecute bien, este UPDATE deja tipo_codigo explícito
             // como texto válido del ENUM y evita pérdidas por bind/caché/formularios ocultos.
             if ($tipo_inventario === 'producto') {
-                $stmtHostingerTipo = $conn->prepare("UPDATE productos SET tipo_codigo = ? WHERE id = ? AND activo = 1 LIMIT 1");
+                $stmtHostingerTipo = $conn->prepare("UPDATE productos SET tipo_codigo = ?, stock_especial = ? WHERE id = ? AND activo = 1 LIMIT 1");
                 if (!$stmtHostingerTipo) {
                     throw new Exception('Error preparando guardado directo de tipo_codigo: ' . $conn->error);
                 }
-                $stmtHostingerTipo->bind_param('si', $tipo_codigo_final, $id);
+                $stmtHostingerTipo->bind_param('sii', $tipo_codigo_final, $stock_especial, $id);
                 if (!$stmtHostingerTipo->execute()) {
                     throw new Exception('Error guardando directo tipo_codigo: ' . $stmtHostingerTipo->error);
                 }
@@ -783,15 +1086,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             ]);
 
             // Punto clave:
-            // No se agregan códigos encima de los anteriores.
-            // Se eliminan los códigos del producto y se recrean según el tipo seleccionado.
-            // Si cambias de múltiple a único, quedan eliminados todos los anteriores y solo queda P000000XX.
+            // Editar el producto NO elimina ni renombra códigos existentes.
+            // Sincroniza la cantidad exacta de códigos con el stock y el tipo.
+            // Si se cambia a único, elimina todos los códigos sobrantes.
             reemplazarCodigosProducto(
                 $conn,
                 $id,
-                $cantidad_actual,
+                $cantidad_guardada,
                 $tipo_codigo_final,
-                $tipo_inventario
+                $tipo_inventario,
+                $stock_especial
             );
 
             $conn->commit();
@@ -800,7 +1104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             Swal.fire({
                 icon: 'success',
                 title: 'Producto actualizado',
-                text: 'Los cambios se guardaron correctamente. Los códigos históricos sin P se conservaron sin cambios.',
+                text: 'Los cambios se guardaron y los códigos quedaron sincronizados con el tipo y stock actual.',
                 confirmButtonColor: '#f97316'
             }).then(() => {
                 window.location='ajustes_productos.php';
@@ -843,8 +1147,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         unlink($producto['imagen']);
     }
 
-    // Al desactivar un producto también eliminamos sus códigos y PNG.
-    // Así ya no aparecen en descargas ni se regeneran etiquetas de productos inactivos.
+    // Al desactivar un producto se eliminan sus códigos para no conservar
+    // registros que ya no se utilizarán, y también se limpian sus PNG/ZIP.
     eliminarCodigosProducto($conn, $id);
 
     $stmt = $conn->prepare("UPDATE productos SET activo = 0 WHERE id = ?");
@@ -872,7 +1176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
     $conn->begin_transaction();
 
     try {
-        $res = $conn->query("SELECT id, cantidad, tipo_codigo, tipo_inventario FROM productos WHERE activo = 1 ORDER BY id ASC");
+        $res = $conn->query("SELECT id, cantidad, tipo_codigo, tipo_inventario, stock_especial FROM productos WHERE activo = 1 ORDER BY id ASC");
 
         if (!$res) {
             throw new Exception('No se pudieron consultar los productos: ' . $conn->error);
@@ -885,8 +1189,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
                 $conn,
                 (int)$producto['id'],
                 (float)$producto['cantidad'],
-                $producto['tipo_codigo'] ?? 'multiple',
-                $producto['tipo_inventario'] ?? 'producto'
+                ((int)($producto['stock_especial'] ?? 0) === 1 ? 'unico' : ($producto['tipo_codigo'] ?? 'multiple')),
+                $producto['tipo_inventario'] ?? 'producto',
+                (int)($producto['stock_especial'] ?? 0)
             );
             $regenerados++;
         }
@@ -897,7 +1202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
         Swal.fire({
             icon: 'success',
             title: 'Códigos regenerados',
-            text: 'Se sincronizaron los códigos de {$regenerados} artículos. Los códigos históricos sin P se conservaron intactos.',
+            text: 'Se sincronizaron los códigos de {$regenerados} artículos sin borrar ni renombrar los códigos existentes.',
             confirmButtonColor: '#f97316'
         }).then(() => {
             window.location='ajustes_productos.php';
@@ -921,10 +1226,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regen
 }
 
 // ========================= GENERAR CÓDIGOS DE BARRAS =========================
-function generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario = 'producto') {
+function generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario = 'producto', $stock_especial = 0) {
     // Función conservada por compatibilidad con otras partes del sistema.
-    // Los códigos nuevos con P se sincronizan; los históricos sin P se conservan intactos.
-    reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario);
+    // Sincroniza disponibilidad y agrega faltantes sin borrar ni renombrar códigos.
+    reemplazarCodigosProducto($conn, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario, $stock_especial);
 }
 
 
@@ -1447,12 +1752,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'todos_codigos') {
 $query = "
     SELECT
         p.*,
-        EXISTS (
-            SELECT 1
-            FROM codigos_barras cb
-            WHERE cb.producto_id = p.id
-              AND UPPER(TRIM(cb.codigo)) NOT LIKE 'P%'
-        ) AS tiene_codigo_legado
+        CASE
+            WHEN p.id IN (156, 82, 74, 155, 78, 53, 18, 121, 87, 81, 76, 54, 91, 75, 11)
+            THEN 1
+            ELSE 0
+        END AS tiene_codigo_legado
     FROM productos p
     WHERE p.activo = 1
     ORDER BY p.id DESC
@@ -1463,10 +1767,18 @@ $res = $conn->query($query);
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $row['atributos_array'] = $row['atributos'] ? json_decode($row['atributos'], true) : [];
-        $row['tipo_codigo'] = normalizarTipoCodigoProducto(
-            $row['tipo_inventario'] ?? 'producto',
-            $row['tipo_codigo'] ?? 'multiple'
-        );
+        $row['stock_especial'] = (
+            ($row['tipo_inventario'] ?? '') === 'producto'
+            && (int)($row['stock_especial'] ?? 0) === 1
+        ) ? 1 : 0;
+
+        $row['tipo_codigo'] = $row['stock_especial'] === 1
+            ? 'unico'
+            : normalizarTipoCodigoProducto(
+                $row['tipo_inventario'] ?? 'producto',
+                $row['tipo_codigo'] ?? 'multiple'
+            );
+
         $productos[] = $row;
     }
     $res->free();
@@ -1657,15 +1969,37 @@ if (!empty($errors)) {
                                         </td>
                                     </tr>
                                     <?php else: ?>
-                                        <?php foreach ($productos as $p): 
-                                            $badgeClass = $p['cantidad'] <= 0 ? 'badge-danger' : ($p['cantidad'] <= 5 ? 'badge-warning' : 'badge-success');
-                                            $cantidadDisplay = $p['tipo_inventario'] == 'insumo' ? number_format($p['cantidad'], 2) . ' m' : number_format($p['cantidad'], 0) . ' pz';
+                                        <?php foreach ($productos as $p):
+                                            $esEspecial = (
+                                                ($p['tipo_inventario'] ?? '') === 'producto'
+                                                && (int)($p['stock_especial'] ?? 0) === 1
+                                            );
+
+                                            if ($esEspecial) {
+                                                $badgeClass = 'badge-especial';
+                                                $cantidadDisplay = '<i class="fas fa-infinity"></i> Sin límite';
+                                            } else {
+                                                $badgeClass = $p['cantidad'] <= 0
+                                                    ? 'badge-danger'
+                                                    : ($p['cantidad'] <= 5 ? 'badge-warning' : 'badge-success');
+
+                                                $cantidadDisplay = $p['tipo_inventario'] == 'insumo'
+                                                    ? number_format($p['cantidad'], 2) . ' m'
+                                                    : number_format($p['cantidad'], 0) . ' pz';
+                                            }
                                         ?>
-                                        <tr class="producto-fila" data-tipo="<?= $p['tipo_inventario'] ?>" data-tipo-codigo="<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>" data-nombre="<?= strtolower(htmlspecialchars($p['nombre'])) ?>" data-categoria="<?= strtolower(htmlspecialchars($p['categoria'] ?? '')) ?>" data-proveedor="<?= strtolower(htmlspecialchars($p['proveedor'] ?? '')) ?>">
+                                        <tr class="producto-fila"
+                                            data-tipo="<?= $p['tipo_inventario'] ?>"
+                                            data-tipo-codigo="<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>"
+                                            data-especial="<?= $esEspecial ? '1' : '0' ?>"
+                                            data-nombre="<?= strtolower(htmlspecialchars($p['nombre'])) ?>"
+                                            data-categoria="<?= strtolower(htmlspecialchars($p['categoria'] ?? '')) ?>"
+                                            data-proveedor="<?= strtolower(htmlspecialchars($p['proveedor'] ?? '')) ?>">
                                             <td>
                                                 <?php if ($p['tipo_inventario'] == 'producto'): ?>
-                                                    <span class="badge-tipo badge-producto">
-                                                        <i class="fas fa-box"></i> Producto
+                                                    <span class="badge-tipo <?= $esEspecial ? 'badge-producto-especial' : 'badge-producto' ?>">
+                                                        <i class="fas <?= $esEspecial ? 'fa-infinity' : 'fa-box' ?>"></i>
+                                                        <?= $esEspecial ? 'Especial' : 'Producto' ?>
                                                     </span>
                                                 <?php else: ?>
                                                     <span class="badge-tipo badge-insumo">
@@ -1675,6 +2009,11 @@ if (!empty($errors)) {
                                             </td>
                                             <td class="fw-bold">
                                                 <?= htmlspecialchars($p['nombre']) ?>
+                                                <?php if ($esEspecial): ?>
+                                                    <span class="producto-especial-mini" title="Producto sin cantidad fija">
+                                                        <i class="fas fa-infinity"></i>
+                                                    </span>
+                                                <?php endif; ?>
                                                 <?php if (!empty($p['atributos_array'])): ?>
                                                     <i class="fas fa-info-circle text-primary ml-1" data-toggle="tooltip" title="<?= htmlspecialchars(implode(', ', array_map(function($k, $v) { return "$k: $v"; }, array_keys($p['atributos_array']), $p['atributos_array']))) ?>"></i>
                                                 <?php endif; ?>
@@ -1736,16 +2075,31 @@ if (!empty($errors)) {
                                             </td>
                                             <td class="text-center">
                                                 <div class="btn-group btn-group-sm">
-                                                    <button class="btn btn-success" title="Agregar stock" onclick="abrirModalAgregarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
-                                                        <i class="fas fa-plus-circle"></i>
-                                                    </button>
-                                                    <button class="btn btn-warning" title="Ajustar stock" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
-                                                        <i class="fas fa-sliders-h"></i>
-                                                    </button>
-                                                    <button class="btn btn-info" title="Editar" onclick="editarProducto(<?= (int)$p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>', <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>)">
+                                                    <?php if ($esEspecial): ?>
+                                                        <button type="button" class="btn btn-success btn-stock-bloqueado" disabled title="Desactiva Producto especial para agregar stock">
+                                                            <i class="fas fa-plus-circle"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-warning btn-stock-bloqueado" disabled title="Desactiva Producto especial para ajustar stock">
+                                                            <i class="fas fa-sliders-h"></i>
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <button type="button" class="btn btn-success" title="Agregar stock" onclick="abrirModalAgregarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                                            <i class="fas fa-plus-circle"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-warning" title="Ajustar stock" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                                            <i class="fas fa-sliders-h"></i>
+                                                        </button>
+                                                    <?php endif; ?>
+
+                                                    <button type="button" class="btn btn-info" title="Editar" onclick="editarProducto(
+                                                        <?= (int)$p['id'] ?>,
+                                                        '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>',
+                                                        <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>,
+                                                        <?= $esEspecial ? 1 : 0 ?>
+                                                    )">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
-                                                    <button class="btn btn-danger" title="Eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
+                                                    <button type="button" class="btn btn-danger" title="Eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                 </div>
@@ -1758,23 +2112,42 @@ if (!empty($errors)) {
                         </div>
                         <!-- VISTA MÓVIL - TARJETAS COMPACTAS -->
                         <div class="productos-grid-mobile" id="productosGridMobile">
-                            <?php foreach ($productos as $p): 
-                                $stockClass = $p['cantidad'] <= 0 ? 'stock-bajo' : ($p['cantidad'] <= 5 ? 'stock-bajo' : 'stock-alto');
-                                $stockText = $p['tipo_inventario'] == 'insumo' ? number_format($p['cantidad'], 2) . ' m' : number_format($p['cantidad'], 0) . ' pz';
+                            <?php foreach ($productos as $p):
+                                $esEspecial = (
+                                    ($p['tipo_inventario'] ?? '') === 'producto'
+                                    && (int)($p['stock_especial'] ?? 0) === 1
+                                );
+
+                                if ($esEspecial) {
+                                    $stockClass = 'stock-especial';
+                                    $stockText = 'Sin límite';
+                                } else {
+                                    $stockClass = $p['cantidad'] <= 5 ? 'stock-bajo' : 'stock-alto';
+                                    $stockText = $p['tipo_inventario'] == 'insumo'
+                                        ? number_format($p['cantidad'], 2) . ' m'
+                                        : number_format($p['cantidad'], 0) . ' pz';
+                                }
                             ?>
-                            <div class="producto-card-mobile" data-tipo="<?= $p['tipo_inventario'] ?>" data-tipo-codigo="<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>" data-nombre="<?= strtolower(htmlspecialchars($p['nombre'], ENT_QUOTES)) ?>" data-categoria="<?= strtolower(htmlspecialchars($p['categoria'] ?? '', ENT_QUOTES)) ?>" data-proveedor="<?= strtolower(htmlspecialchars($p['proveedor'] ?? 'sin proveedor', ENT_QUOTES)) ?>">
+                            <div class="producto-card-mobile"
+                                 data-tipo="<?= $p['tipo_inventario'] ?>"
+                                 data-tipo-codigo="<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>"
+                                 data-especial="<?= $esEspecial ? '1' : '0' ?>"
+                                 data-nombre="<?= strtolower(htmlspecialchars($p['nombre'], ENT_QUOTES)) ?>"
+                                 data-categoria="<?= strtolower(htmlspecialchars($p['categoria'] ?? '', ENT_QUOTES)) ?>"
+                                 data-proveedor="<?= strtolower(htmlspecialchars($p['proveedor'] ?? 'sin proveedor', ENT_QUOTES)) ?>">
                                 
                                 <!-- Fila 1: Tipo + Nombre + Stock -->
                                 <div class="card-row-top">
-                                    <span class="tipo-badge <?= $p['tipo_inventario'] == 'producto' ? 'tipo-producto' : 'tipo-insumo' ?>">
-                                        <i class="fas <?= $p['tipo_inventario'] == 'producto' ? 'fa-box' : 'fa-cubes' ?>"></i>
-                                        <?= $p['tipo_inventario'] == 'producto' ? 'Producto' : 'Insumo' ?>
+                                    <span class="tipo-badge <?= $p['tipo_inventario'] == 'producto' ? ($esEspecial ? 'tipo-especial' : 'tipo-producto') : 'tipo-insumo' ?>">
+                                        <i class="fas <?= $p['tipo_inventario'] == 'producto' ? ($esEspecial ? 'fa-infinity' : 'fa-box') : 'fa-cubes' ?>"></i>
+                                        <?= $p['tipo_inventario'] == 'producto' ? ($esEspecial ? 'Especial' : 'Producto') : 'Insumo' ?>
                                     </span>
                                     <span class="nombre-producto-mobile" title="<?= htmlspecialchars($p['nombre']) ?>">
                                         <?= htmlspecialchars(substr($p['nombre'], 0, 30)) ?>
                                     </span>
                                     <span class="stock-badge-mobile <?= $stockClass ?>">
-                                        <i class="fas fa-boxes"></i> <?= $stockText ?>
+                                        <i class="fas <?= $esEspecial ? 'fa-infinity' : 'fa-boxes' ?>"></i>
+                                        <?= $stockText ?>
                                     </span>
                                 </div>
                                 
@@ -1827,13 +2200,28 @@ if (!empty($errors)) {
                                             <i class="far fa-image"></i>
                                         </button>
                                         <?php endif; ?>
-                                        <button class="accion-btn agregar" onclick="abrirModalAgregarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
-                                            <i class="fas fa-plus"></i>
-                                        </button>
-                                        <button class="accion-btn ajustar" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
-                                            <i class="fas fa-sliders-h"></i>
-                                        </button>
-                                        <button class="accion-btn editar" onclick="editarProducto(<?= (int)$p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>', <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>)">
+                                        <?php if ($esEspecial): ?>
+                                            <button type="button" class="accion-btn agregar accion-bloqueada" disabled title="Desactiva Producto especial para agregar stock">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                            <button type="button" class="accion-btn ajustar accion-bloqueada" disabled title="Desactiva Producto especial para ajustar stock">
+                                                <i class="fas fa-sliders-h"></i>
+                                            </button>
+                                        <?php else: ?>
+                                            <button type="button" class="accion-btn agregar" onclick="abrirModalAgregarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                            <button type="button" class="accion-btn ajustar" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
+                                                <i class="fas fa-sliders-h"></i>
+                                            </button>
+                                        <?php endif; ?>
+
+                                        <button type="button" class="accion-btn editar" onclick="editarProducto(
+                                            <?= (int)$p['id'] ?>,
+                                            '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>',
+                                            <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>,
+                                            <?= $esEspecial ? 1 : 0 ?>
+                                        )">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button class="accion-btn eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
@@ -2078,14 +2466,46 @@ if (!empty($errors)) {
                                         </div>
                                         <div class="col-6">
                                             <div class="form-group mb-2" id="edit_precio_venta_group">
-                                                <label style="font-size: 0.75rem; font-weight: 600;">Precio venta</label>
+                                                <label style="font-size: 0.75rem; font-weight: 600;">Precio de venta capturado</label>
                                                 <div class="input-group input-group-sm">
                                                     <div class="input-group-prepend">
                                                         <span class="input-group-text" style="padding: 0 8px; font-size: 0.85rem;">$</span>
                                                     </div>
-                                                    <input type="number" step="0.01" id="edit_precio_venta" name="precio_venta" class="form-control form-control-sm" style="font-size: 0.85rem;">
+                                                    <input type="number"
+                                                           step="0.01"
+                                                           min="0"
+                                                           id="edit_precio_venta"
+                                                           name="precio_venta"
+                                                           class="form-control form-control-sm"
+                                                           style="font-size: 0.85rem;">
+                                                </div>
+                                                <input type="hidden" id="edit_precio_venta_tocado" name="precio_venta_tocado" value="0">
+                                                <div id="edit_precio_venta_preview" class="precio-final-preview">
+                                                    <i class="fas fa-calculator"></i>
+                                                    <span>Al modificarlo se aplicará 3% y se redondeará al peso entero.</span>
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="stock-especial-edit" id="edit_stock_especial_group">
+                                        <label class="switch-especial-label" for="edit_stock_especial">
+                                            <span class="switch-especial-copy">
+                                                <span class="switch-especial-title">
+                                                    <i class="fas fa-infinity"></i>
+                                                    Producto especial
+                                                </span>
+                                                <small>Sin cantidad fija</small>
+                                            </span>
+
+                                            <span class="switch-especial-control">
+                                                <input type="checkbox" id="edit_stock_especial" name="stock_especial" value="1">
+                                                <span class="switch-especial-slider"></span>
+                                            </span>
+                                        </label>
+
+                                        <div id="edit_stock_especial_aviso" class="stock-especial-aviso" hidden>
+                                            No usa existencias. Para agregar o ajustar stock, desactiva esta opción y guarda.
                                         </div>
                                     </div>
 
@@ -2100,7 +2520,7 @@ if (!empty($errors)) {
     <input type="hidden" id="edit_tipo_codigo_tocado" name="tipo_codigo_tocado" value="0">
     <small id="edit_tipo_codigo_legado_aviso" class="text-muted" style="display:none;">
         <i class="fas fa-lock mr-1"></i>
-        Este artículo usa un código histórico sin P. Su código y tipo quedan protegidos.
+        Este artículo conserva su código principal con ceros.
     </small>
 </div>
 
@@ -2504,12 +2924,131 @@ function calcularDiferencia(actual, nueva) {
     else span.innerHTML = `Diferencia: 0 (sin cambios)`;
 }
 
+
+function calcularPrecioVentaConTresPorciento(valor) {
+    const base = Math.max(0, Number(valor) || 0);
+
+    if (base <= 0) {
+        return 0;
+    }
+
+    return Math.round(base * 1.03);
+}
+
+function actualizarVistaPrecioVentaEditado() {
+    const input = document.getElementById('edit_precio_venta');
+    const tocado = document.getElementById('edit_precio_venta_tocado');
+    const preview = document.getElementById('edit_precio_venta_preview');
+
+    if (!input || !tocado || !preview) {
+        return;
+    }
+
+    const valor = Math.max(0, Number(input.value) || 0);
+
+    if (tocado.value !== '1') {
+        preview.classList.remove('precio-preview-activo');
+        preview.innerHTML = `
+            <i class="fas fa-info-circle"></i>
+            <span>Precio actual guardado: <strong>$${valor.toFixed(2)}</strong>. Al cambiarlo se aplicará 3%.</span>
+        `;
+        return;
+    }
+
+    const precioFinal = calcularPrecioVentaConTresPorciento(valor);
+    preview.classList.add('precio-preview-activo');
+    preview.innerHTML = `
+        <i class="fas fa-arrow-trend-up"></i>
+        <span>Precio final con 3%: <strong>$${precioFinal.toFixed(2)}</strong></span>
+    `;
+}
+
+function actualizarEstadoProductoEspecialModal(restaurarTipoAnterior = false) {
+    const check = document.getElementById('edit_stock_especial');
+    const aviso = document.getElementById('edit_stock_especial_aviso');
+    const tipoSelect = document.getElementById('edit_tipo_codigo');
+    const tipoRespaldo = document.getElementById('edit_tipo_codigo_respaldo');
+    const tipoForzado = document.getElementById('edit_tipo_codigo_forzado');
+    const tipoTocado = document.getElementById('edit_tipo_codigo_tocado');
+    const stockActual = document.getElementById('edit_cantidad_actual');
+    const tipoInventario = document.getElementById('edit_tipo_inventario')?.value || 'producto';
+
+    if (!check || tipoInventario !== 'producto') {
+        return;
+    }
+
+    if (check.checked) {
+        if (tipoSelect && !tipoSelect.disabled) {
+            tipoSelect.dataset.tipoAntesEspecial = normalizarTipoCodigoJS(tipoSelect.value, 'unico');
+        }
+
+        if (tipoSelect) {
+            tipoSelect.value = 'unico';
+            tipoSelect.disabled = true;
+        }
+
+        if (tipoRespaldo) tipoRespaldo.value = 'unico';
+        if (tipoForzado) tipoForzado.value = 'unico';
+        if (tipoTocado) tipoTocado.value = '1';
+        if (aviso) aviso.hidden = false;
+
+        if (stockActual) {
+            stockActual.innerHTML = '<i class="fas fa-infinity mr-1"></i> Sin cantidad fija';
+            stockActual.classList.add('stock-actual-especial');
+        }
+
+        return;
+    }
+
+    if (tipoSelect) {
+        tipoSelect.disabled = false;
+
+        if (restaurarTipoAnterior && tipoSelect.dataset.tipoAntesEspecial) {
+            tipoSelect.value = normalizarTipoCodigoJS(
+                tipoSelect.dataset.tipoAntesEspecial,
+                'unico'
+            );
+        }
+    }
+
+    const valorTipo = normalizarTipoCodigoJS(tipoSelect?.value || 'unico', 'unico');
+    if (tipoRespaldo) tipoRespaldo.value = valorTipo;
+    if (tipoForzado) tipoForzado.value = valorTipo;
+    if (tipoTocado && restaurarTipoAnterior) tipoTocado.value = '1';
+    if (aviso) aviso.hidden = true;
+
+    if (stockActual) {
+        const cantidadOriginal = Number(stockActual.dataset.cantidadOriginal || 0);
+        const unidadOriginal = stockActual.dataset.unidadOriginal || 'pz';
+        stockActual.textContent = unidadOriginal === 'm'
+            ? `${cantidadOriginal.toFixed(2)} m`
+            : `${Math.trunc(cantidadOriginal)} pz`;
+        stockActual.classList.remove('stock-actual-especial');
+    }
+}
+
 // Manejo de selects dinámicos
 document.addEventListener('DOMContentLoaded', function() {
     const categoriaSelect = document.getElementById('edit_categoria');
     const categoriaNueva = document.getElementById('edit_categoria_nueva');
     const proveedorSelect = document.getElementById('edit_proveedor');
     const proveedorNuevo = document.getElementById('edit_proveedor_nuevo');
+    const precioVentaInput = document.getElementById('edit_precio_venta');
+    const precioVentaTocado = document.getElementById('edit_precio_venta_tocado');
+    const stockEspecialCheck = document.getElementById('edit_stock_especial');
+
+    if (precioVentaInput && precioVentaTocado) {
+        precioVentaInput.addEventListener('input', function() {
+            precioVentaTocado.value = '1';
+            actualizarVistaPrecioVentaEditado();
+        });
+    }
+
+    if (stockEspecialCheck) {
+        stockEspecialCheck.addEventListener('change', function() {
+            actualizarEstadoProductoEspecialModal(true);
+        });
+    }
 
     if (categoriaSelect && categoriaNueva) {
         categoriaSelect.addEventListener('change', function() {
@@ -2555,12 +3094,26 @@ document.addEventListener('DOMContentLoaded', function() {
         formEditar.addEventListener('submit', function() {
             guardarPaginaActualEnStorage();
 
+            const stockEspecialCheck = document.getElementById('edit_stock_especial');
             const tipoCodigoSelect = document.getElementById('edit_tipo_codigo');
+
+            if (stockEspecialCheck?.checked && tipoCodigoSelect) {
+                tipoCodigoSelect.value = 'unico';
+            }
+
+            const precioVentaInput = document.getElementById('edit_precio_venta');
+            if (precioVentaInput && Number(precioVentaInput.value) < 0) {
+                precioVentaInput.value = '0';
+            }
+
+            const tipoCodigoSelectConfirmado = document.getElementById('edit_tipo_codigo');
             const tipoCodigoRespaldo = document.getElementById('edit_tipo_codigo_respaldo');
             const tipoCodigoForzado = document.getElementById('edit_tipo_codigo_forzado');
-            if (tipoCodigoSelect) {
-                const valorSeguro = normalizarTipoCodigoJS(tipoCodigoSelect.value, 'multiple');
-                tipoCodigoSelect.value = valorSeguro;
+            if (tipoCodigoSelectConfirmado) {
+                const valorSeguro = stockEspecialCheck?.checked
+                    ? 'unico'
+                    : normalizarTipoCodigoJS(tipoCodigoSelectConfirmado.value, 'unico');
+                tipoCodigoSelectConfirmado.value = valorSeguro;
                 if (tipoCodigoRespaldo) tipoCodigoRespaldo.value = valorSeguro;
                 if (tipoCodigoForzado) tipoCodigoForzado.value = valorSeguro;
                 const tipoCodigoTocado = document.getElementById('edit_tipo_codigo_tocado');
@@ -2607,7 +3160,7 @@ function obtenerTipoCodigoDesdeFila(id) {
     return fila?.getAttribute?.('data-tipo-codigo') || '';
 }
 
-function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
+function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0, stockEspecialActual = 0) {
     guardarPaginaActualEnStorage();
 
     fetch(`get_producto.php?id=${id}&t=${Date.now()}`, { cache: 'no-store' })
@@ -2633,16 +3186,41 @@ function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
                 document.getElementById('edit_id').value = p.id;
                 document.getElementById('edit_nombre').value = p.nombre;
                 document.getElementById('edit_precio_compra').value = p.precio_compra;
-                document.getElementById('edit_precio_venta').value = p.precio_venta;
-                
+
+                const precioVentaInputModal = document.getElementById('edit_precio_venta');
+                const precioVentaTocadoModal = document.getElementById('edit_precio_venta_tocado');
+
+                if (precioVentaInputModal) {
+                    precioVentaInputModal.value = Number(p.precio_venta || 0).toFixed(2);
+                }
+
+                if (precioVentaTocadoModal) {
+                    precioVentaTocadoModal.value = '0';
+                }
+
+                actualizarVistaPrecioVentaEditado();
+
+                const esProductoEspecial = Number(
+                    p.stock_especial ?? stockEspecialActual ?? 0
+                ) === 1;
+
+                const stockEspecialCheckModal = document.getElementById('edit_stock_especial');
+                if (stockEspecialCheckModal) {
+                    stockEspecialCheckModal.checked = esProductoEspecial;
+                }
+
                 const tipoCodigoSelect = document.getElementById('edit_tipo_codigo');
                 if (tipoCodigoSelect) {
                     const fallbackTipoCodigo = normalizarTipoCodigoJS(
                         tipoCodigoActual || obtenerTipoCodigoDesdeFila(id),
                         'multiple'
                     );
-                    const valorTipoCodigo = normalizarTipoCodigoJS(p.tipo_codigo, fallbackTipoCodigo);
+                    const valorTipoCodigo = esProductoEspecial
+                        ? 'unico'
+                        : normalizarTipoCodigoJS(p.tipo_codigo, fallbackTipoCodigo);
+
                     tipoCodigoSelect.value = valorTipoCodigo;
+                    tipoCodigoSelect.dataset.tipoAntesEspecial = valorTipoCodigo;
                     const tipoCodigoRespaldo = document.getElementById('edit_tipo_codigo_respaldo');
                     const tipoCodigoForzado = document.getElementById('edit_tipo_codigo_forzado');
                     if (tipoCodigoRespaldo) tipoCodigoRespaldo.value = valorTipoCodigo;
@@ -2650,12 +3228,14 @@ function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
                     const tipoCodigoTocado = document.getElementById('edit_tipo_codigo_tocado');
                     if (tipoCodigoTocado) tipoCodigoTocado.value = '0';
                     
-                    const esCodigoLegado = String(tieneCodigoLegado) === '1';
-                    tipoCodigoSelect.disabled = esCodigoLegado;
+                    const esCodigoEspecial = String(tieneCodigoLegado) === '1';
+                    // El valor principal protegido conserva sus ceros.
+                    // Mientras sea especial, el producto usa un único código.
+                    tipoCodigoSelect.disabled = esProductoEspecial;
 
                     const avisoLegado = document.getElementById('edit_tipo_codigo_legado_aviso');
                     if (avisoLegado) {
-                        avisoLegado.style.display = esCodigoLegado ? 'block' : 'none';
+                        avisoLegado.style.display = esCodigoEspecial ? 'block' : 'none';
                     }
 
                     tipoCodigoSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2664,8 +3244,24 @@ function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
                 
                 document.getElementById('edit_tipo_inventario').value = p.tipo_inventario;
                 
-                const stockText = p.tipo_inventario == 'insumo' ? parseFloat(p.cantidad).toFixed(2) + ' m' : parseInt(p.cantidad) + ' pz';
-                document.getElementById('edit_cantidad_actual').textContent = stockText;
+                const stockActualElemento = document.getElementById('edit_cantidad_actual');
+                const cantidadNumerica = Number(p.cantidad || 0);
+                const unidadStock = p.tipo_inventario === 'insumo' ? 'm' : 'pz';
+
+                if (stockActualElemento) {
+                    stockActualElemento.dataset.cantidadOriginal = String(cantidadNumerica);
+                    stockActualElemento.dataset.unidadOriginal = unidadStock;
+
+                    if (esProductoEspecial) {
+                        stockActualElemento.innerHTML = '<i class="fas fa-infinity mr-1"></i> Sin cantidad fija';
+                        stockActualElemento.classList.add('stock-actual-especial');
+                    } else {
+                        stockActualElemento.textContent = unidadStock === 'm'
+                            ? `${cantidadNumerica.toFixed(2)} m`
+                            : `${Math.trunc(cantidadNumerica)} pz`;
+                        stockActualElemento.classList.remove('stock-actual-especial');
+                    }
+                }
                 
                 if (p.imagen && p.imagen_exists) {
                     preview.src = p.imagen;
@@ -2740,12 +3336,16 @@ function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
                 const codigoGroup = document.getElementById('edit_tipo_codigo_group');
                 const atributosSection = document.getElementById('edit_atributos_section');
                 const adquisicionGroup = document.getElementById('edit_adquisicion_group');
-                
+                const stockEspecialGroup = document.getElementById('edit_stock_especial_group');
+
                 if (ventaGroup) ventaGroup.style.display = isProducto ? 'block' : 'none';
                 if (codigoGroup) codigoGroup.style.display = isProducto ? 'block' : 'none';
                 if (atributosSection) atributosSection.style.display = isProducto ? 'block' : 'none';
                 if (adquisicionGroup) adquisicionGroup.style.display = isProducto ? 'block' : 'none';
-                
+                if (stockEspecialGroup) stockEspecialGroup.style.display = isProducto ? 'block' : 'none';
+
+                actualizarEstadoProductoEspecialModal(false);
+
                 $('#modalEditar').modal('show');
             }
         })
@@ -2758,11 +3358,12 @@ function confirmarRegenerarCodigos() {
         title: 'Regenerar códigos',
         html: `
             <div style="text-align:left; line-height:1.5;">
-                Esto limpiará los códigos actuales de cada artículo activo y los volverá a crear según su configuración:<br><br>
-                <b>Código único:</b> dejará solo un código P000000XX.<br>
-                <b>Múltiple:</b> dejará un código por pieza actual en stock.<br><br>
-                <b>Códigos históricos sin P:</b> no se eliminan, renombran ni convierten.<br><br>
-                Esta acción ayuda a sincronizar los artículos con formato nuevo.
+                Esto sincronizará exactamente los códigos de cada artículo activo:<br><br>
+                <b>Código único:</b> dejará solamente un código principal.<br>
+                <b>Código múltiple:</b> dejará exactamente un código por pieza en stock.<br>
+                <b>Stock menor:</b> eliminará definitivamente los códigos sobrantes.<br><br>
+                <b>15 códigos especiales:</b> conservarán exactamente sus ceros como código principal.<br><br>
+                Esta acción también volverá a generar los archivos PNG.
             </div>
         `,
         icon: 'warning',

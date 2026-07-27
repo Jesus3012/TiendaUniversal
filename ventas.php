@@ -343,7 +343,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
         $erroresCarrito = [];
 
         $stmtProductoVenta = $conn->prepare("
-            SELECT id, nombre, cantidad, precio_venta, imagen, categoria
+            SELECT
+                id,
+                nombre,
+                cantidad,
+                precio_venta,
+                imagen,
+                categoria,
+                stock_especial
             FROM productos
             WHERE id = ?
               AND activo = 1
@@ -369,8 +376,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 continue;
             }
 
-            if ((int) $productoDb['cantidad'] < $cantidadSolicitada) {
-                $erroresCarrito[] = $productoDb['nombre'] . ' (stock disponible: ' . (int) $productoDb['cantidad'] . ')';
+            /*
+             * La única fuente de verdad es la bandera stock_especial:
+             * - stock_especial = 1: existencia ilimitada.
+             * - stock_especial = 0: producto con stock controlado, incluso si está en cero.
+             */
+            $esStockEspecial = (
+                (int) ($productoDb['stock_especial'] ?? 0) === 1
+            );
+
+            if (!$esStockEspecial && (int) $productoDb['cantidad'] < $cantidadSolicitada) {
+                $erroresCarrito[] = $productoDb['nombre']
+                    . ' (stock disponible: '
+                    . (int) $productoDb['cantidad']
+                    . ')';
                 continue;
             }
 
@@ -389,6 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 'nombre' => (string) $productoDb['nombre'],
                 'cantidad' => $cantidadSolicitada,
                 'stock' => (int) $productoDb['cantidad'],
+                'stock_especial' => $esStockEspecial ? 1 : 0,
                 'imagen' => (string) ($productoDb['imagen'] ?? ''),
                 'categoria' => (string) ($productoDb['categoria'] ?? ''),
                 'precio' => $precioBase,
@@ -431,12 +451,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
         } else {
             $errores = [];
             foreach ($carrito as $item) {
-                $result = $conn->query("SELECT cantidad FROM productos WHERE id={$item['id']}");
-                if ($result && $result->num_rows > 0) {
-                    $producto = $result->fetch_assoc();
-                    if ($producto['cantidad'] < $item['cantidad']) {
-                        $errores[] = $item['nombre'];
-                    }
+                $productoIdRevision = (int) ($item['id'] ?? 0);
+
+                $stmtRevisionStock = $conn->prepare("
+                    SELECT cantidad, stock_especial
+                    FROM productos
+                    WHERE id = ?
+                      AND activo = 1
+                      AND tipo_inventario = 'producto'
+                    LIMIT 1
+                ");
+
+                if (!$stmtRevisionStock) {
+                    $errores[] = (string) ($item['nombre'] ?? 'Producto');
+                    continue;
+                }
+
+                $stmtRevisionStock->bind_param('i', $productoIdRevision);
+                $stmtRevisionStock->execute();
+                $productoRevision = $stmtRevisionStock->get_result()->fetch_assoc();
+                $stmtRevisionStock->close();
+
+                if (!$productoRevision) {
+                    $errores[] = (string) ($item['nombre'] ?? 'Producto');
+                    continue;
+                }
+
+                $esEspecialRevision = (
+                    (int) ($productoRevision['stock_especial'] ?? 0) === 1
+                );
+
+                if (
+                    !$esEspecialRevision
+                    && (int) $productoRevision['cantidad'] < (int) $item['cantidad']
+                ) {
+                    $errores[] = (string) $item['nombre'];
                 }
             }
 
@@ -512,26 +561,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $stmt->execute();
                         $stmt->close();
 
-                        $stmtStock = $conn->prepare("
-                            UPDATE productos
-                            SET cantidad = cantidad - ?
-                            WHERE id = ?
-                              AND cantidad >= ?
-                        ");
-                        $stmtStock->bind_param(
-                            'iii',
-                            $item['cantidad'],
-                            $item['id'],
-                            $item['cantidad']
+                        $esStockEspecialItem = (
+                            (int) ($item['stock_especial'] ?? 0) === 1
                         );
-                        $stmtStock->execute();
 
-                        if ($stmtStock->affected_rows !== 1) {
+                        /*
+                         * Los productos especiales se registran en la venta,
+                         * pero nunca descuentan cantidad.
+                         */
+                        if (!$esStockEspecialItem) {
+                            $stmtStock = $conn->prepare("
+                                UPDATE productos
+                                SET cantidad = cantidad - ?
+                                WHERE id = ?
+                                  AND cantidad >= ?
+                                  AND stock_especial = 0
+                            ");
+
+                            if (!$stmtStock) {
+                                throw new RuntimeException(
+                                    'No fue posible preparar el descuento de stock de '
+                                    . $item['nombre']
+                                    . '.'
+                                );
+                            }
+
+                            $stmtStock->bind_param(
+                                'iii',
+                                $item['cantidad'],
+                                $item['id'],
+                                $item['cantidad']
+                            );
+                            $stmtStock->execute();
+
+                            if ($stmtStock->affected_rows !== 1) {
+                                $stmtStock->close();
+                                throw new RuntimeException(
+                                    'El stock de '
+                                    . $item['nombre']
+                                    . ' cambió antes de completar la venta.'
+                                );
+                            }
+
                             $stmtStock->close();
-                            throw new RuntimeException('El stock de ' . $item['nombre'] . ' cambió antes de completar la venta.');
                         }
-
-                        $stmtStock->close();
                     }
                     
                     require_once('includes/fpdf.php');
@@ -751,10 +824,24 @@ $carrito_json = json_encode($_SESSION['carrito']);
 $rol_usuario = $rol_actual;
 
 // Obtener productos para selección visual
-$productos_query = "SELECT id, nombre, precio_venta, cantidad as stock, imagen, categoria 
-                    FROM productos 
-                    WHERE cantidad > 0 
-                    ORDER BY nombre ASC";
+$productos_query = "
+    SELECT
+        id,
+        nombre,
+        precio_venta,
+        cantidad AS stock,
+        imagen,
+        categoria,
+        stock_especial
+    FROM productos
+    WHERE activo = 1
+      AND tipo_inventario = 'producto'
+      AND (
+          stock_especial = 1
+          OR cantidad > 0
+      )
+    ORDER BY nombre ASC
+";
 $productos_result = $conn->query($productos_query);
 $productos = [];
 if ($productos_result) {
@@ -810,7 +897,16 @@ if ($productos_result) {
                         <select id="filtroCategoriaModal">
                             <option value="">Todas las categorías</option>
                             <?php
-                            $cat_query = "SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria != '' AND cantidad > 0 ORDER BY categoria";
+                            $cat_query = "
+                                SELECT DISTINCT categoria
+                                FROM productos
+                                WHERE activo = 1
+                                  AND tipo_inventario = 'producto'
+                                  AND (stock_especial = 1 OR cantidad > 0)
+                                  AND categoria IS NOT NULL
+                                  AND categoria != ''
+                                ORDER BY categoria
+                            ";
                             $cat_result = $conn->query($cat_query);
                             if ($cat_result) {
                                 while($cat = $cat_result->fetch_assoc()) {
@@ -842,7 +938,16 @@ if ($productos_result) {
                 <select id="filtroCategoriaProductos">
                     <option value="">Todas las categorías</option>
                     <?php
-                    $cat_query2 = "SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria != '' AND cantidad > 0 ORDER BY categoria";
+                    $cat_query2 = "
+                        SELECT DISTINCT categoria
+                        FROM productos
+                        WHERE activo = 1
+                          AND tipo_inventario = 'producto'
+                          AND (stock_especial = 1 OR cantidad > 0)
+                          AND categoria IS NOT NULL
+                          AND categoria != ''
+                        ORDER BY categoria
+                    ";
                     $cat_result2 = $conn->query($cat_query2);
                     if ($cat_result2) {
                         while($cat = $cat_result2->fetch_assoc()) {
@@ -860,7 +965,8 @@ if ($productos_result) {
                          data-id="<?= $p['id'] ?>"
                          data-nombre="<?= htmlspecialchars($p['nombre']) ?>"
                          data-precio="<?= $p['precio_venta'] ?>"
-                         data-stock="<?= $p['stock'] ?>"
+                         data-stock="<?= (int) $p['stock'] ?>"
+                         data-stock-especial="<?= (int) ($p['stock_especial'] ?? 0) ?>"
                          data-imagen="<?= htmlspecialchars($p['imagen'] ?? '') ?>"
                          data-categoria="<?= htmlspecialchars($p['categoria'] ?? '') ?>"
                          onclick="agregarProductoCard(this)">
@@ -877,7 +983,13 @@ if ($productos_result) {
                         <div class="producto-precio-card">
                             $<?= number_format((float) $p['precio_venta'], 2) ?>
                         </div>
-                        <div class="producto-stock-card">Stock: <?= $p['stock'] ?></div>
+                        <div class="producto-stock-card">
+                            <?php if ((int) ($p['stock_especial'] ?? 0) === 1): ?>
+                                <i class="fas fa-infinity"></i> Disponible siempre
+                            <?php else: ?>
+                                Stock: <?= (int) $p['stock'] ?>
+                            <?php endif; ?>
+                        </div>
                         <button class="btn-agregar-card" onclick="event.stopPropagation(); agregarProductoCard(this.parentElement)">
                             <i class="fas fa-cart-plus me-1"></i> Agregar
                         </button>
@@ -1957,7 +2069,8 @@ function agregarProductoCard(element) {
         id: parseInt(element.dataset.id),
         nombre: element.dataset.nombre,
         precio: parseFloat(element.dataset.precio),
-        stock: parseInt(element.dataset.stock),
+        stock: parseInt(element.dataset.stock || '0', 10),
+        stock_especial: Number(element.dataset.stockEspecial || '0') === 1 ? 1 : 0,
         imagen: element.dataset.imagen || '',
         categoria: element.dataset.categoria || ''
     };
@@ -1970,6 +2083,7 @@ function agregarProductoCard(element) {
         precio: producto.precio,
         cantidad: 1,
         stock: producto.stock,
+        stock_especial: producto.stock_especial,
         imagen: producto.imagen,
         categoria: producto.categoria,
         icono: iconoData.icono,
@@ -1981,13 +2095,21 @@ function agregarProductoCard(element) {
 }
 
 function agregarAlCarrito(producto) {
-    const existente = carrito.find(p => p.id === producto.id);
+    const esEspecial = Number(producto.stock_especial) === 1;
+
+    producto.stock_especial = esEspecial ? 1 : 0;
+
+    const existente = carrito.find(p => Number(p.id) === Number(producto.id));
 
     if (existente) {
-        const nuevaCantidad = existente.cantidad + 1;
+        const existenteEspecial = Number(existente.stock_especial) === 1
+            || esEspecial;
 
-        if (nuevaCantidad <= producto.stock) {
-            existente.cantidad++;
+        const nuevaCantidad = (parseInt(existente.cantidad, 10) || 0) + 1;
+
+        if (existenteEspecial || nuevaCantidad <= Number(producto.stock)) {
+            existente.cantidad = nuevaCantidad;
+            existente.stock_especial = existenteEspecial ? 1 : 0;
 
             Swal.fire({
                 icon: 'success',
@@ -2001,45 +2123,50 @@ function agregarAlCarrito(producto) {
 
             guardarCarrito();
             renderCarrito();
-        } else {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Stock insuficiente',
-                text: `Solo hay ${producto.stock} disponibles`,
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 1800
-            });
+            return;
         }
-    } else {
-        if (producto.cantidad <= producto.stock) {
-            carrito.push(producto);
 
-            Swal.fire({
-                icon: 'success',
-                title: 'Agregado',
-                text: `${producto.nombre} agregado`,
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 1200
-            });
+        Swal.fire({
+            icon: 'warning',
+            title: 'Stock insuficiente',
+            text: `Solo hay ${producto.stock} disponibles`,
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1800
+        });
 
-            guardarCarrito();
-            renderCarrito();
-        } else {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Sin stock',
-                text: `No hay stock de ${producto.nombre}`,
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 1800
-            });
-        }
+        return;
     }
+
+    if (esEspecial || Number(producto.cantidad) <= Number(producto.stock)) {
+        producto.stock_especial = esEspecial ? 1 : 0;
+        carrito.push(producto);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Agregado',
+            text: `${producto.nombre} agregado`,
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1200
+        });
+
+        guardarCarrito();
+        renderCarrito();
+        return;
+    }
+
+    Swal.fire({
+        icon: 'warning',
+        title: 'Sin stock',
+        text: `No hay stock de ${producto.nombre}`,
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 1800
+    });
 }
 
 // ============ AGREGAR POR CÓDIGO DE BARRAS ============
@@ -2152,7 +2279,8 @@ async function agregarProducto(origen = 'manual') {
             nombre: data.nombre,
             precio: parseFloat(data.precio_venta),
             cantidad: 1,
-            stock: parseInt(data.stock),
+            stock: parseInt(data.stock || '0', 10),
+            stock_especial: Number(data.stock_especial || '0') === 1 ? 1 : 0,
             imagen: data.imagen || '',
             categoria: data.categoria || '',
             icono: iconoData.icono,
@@ -2229,6 +2357,15 @@ function renderCarrito() {
         const precioFinal = calcularPrecioMetodo(precioBase, metodo);
         const subtotal = precioFinal * (parseInt(item.cantidad) || 0);
         const tieneDescuento = precioFinal < precioBase;
+        const esEspecial = Number(item.stock_especial) === 1;
+        const textoStock = esEspecial
+            ? '<i class="fas fa-infinity"></i> Disponible siempre'
+            : `Stock: ${Number(item.stock) || 0}`;
+        const atributoMax = esEspecial
+            ? ''
+            : `max="${Number(item.stock) || 0}"`;
+
+        item.stock_especial = esEspecial ? 1 : 0;
 
         let imagenHtml = '';
 
@@ -2261,13 +2398,13 @@ function renderCarrito() {
                         <div>
                             <strong style="font-size:12px;">${escapeHtml(item.nombre)}</strong>
                             <br>
-                            <small style="font-size:9px;color:#64748b;">Stock: ${item.stock}</small>
+                            <small style="font-size:9px;color:${esEspecial ? '#7c3aed' : '#64748b'};">${textoStock}</small>
                         </div>
                     </div>
                 </td>
                 <td style="text-align:center;">
                     <input type="number" class="cantidad-input" value="${item.cantidad}"
-                           min="1" max="${item.stock}"
+                           min="1" ${atributoMax}
                            onchange="actualizarCantidad(${index}, this.value)">
                 </td>
                 <td style="text-align:center;">${precioHtml}</td>
@@ -2332,14 +2469,20 @@ function guardarCarrito() {
 }
 
 function actualizarCantidad(index, valor) {
-    const cantidad = parseInt(valor);
+    const cantidad = parseInt(valor, 10);
 
-    if (isNaN(cantidad) || cantidad < 1) {
+    if (
+        !Number.isInteger(cantidad)
+        || cantidad < 1
+        || !carrito[index]
+    ) {
         renderCarrito();
         return;
     }
 
-    if (cantidad > carrito[index].stock) {
+    const esEspecial = Number(carrito[index].stock_especial) === 1;
+
+    if (!esEspecial && cantidad > Number(carrito[index].stock)) {
         Swal.fire({
             icon: 'warning',
             title: 'Stock insuficiente',
@@ -2354,10 +2497,12 @@ function actualizarCantidad(index, valor) {
         return;
     }
 
+    carrito[index].stock_especial = esEspecial ? 1 : 0;
     carrito[index].cantidad = cantidad;
     guardarCarrito();
     renderCarrito();
 }
+
 
 function eliminarProducto(index) {
     Swal.fire({

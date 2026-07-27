@@ -59,11 +59,13 @@ function obtenerProveedores($conn) {
 }
 
 
-// ======================= FORMATO ÚNICO DE CÓDIGOS =======================
-// Regla nueva para que TODOS los códigos sigan con la letra P:
-// - Código único:    P00000048
-// - Código múltiple: P000048001, P000048002, P000048003...
-// Esto evita que los productos nuevos salgan como 4800001 o 5000001.
+// ======================= FORMATO NUEVO DE CÓDIGOS =======================
+// Todos los productos nuevos usan el ID real, sin ceros a la izquierda:
+// - Código único:    P200
+// - Código múltiple: P200, P200-2, P200-3...
+//
+// El primer código siempre es P + producto_id. Los consecutivos adicionales
+// solo se crean cuando el producto usa código múltiple.
 function normalizarTipoCodigoProducto($tipo_inventario, $tipo_codigo) {
     if ($tipo_inventario !== 'producto') {
         return 'multiple';
@@ -80,11 +82,31 @@ function normalizarCodigoBarra($codigo) {
 }
 
 function codigoUnicoProducto($producto_id) {
-    return 'P' . str_pad((string)(int)$producto_id, 8, '0', STR_PAD_LEFT);
+    return 'P' . (string)(int)$producto_id;
 }
 
 function codigoMultipleProducto($producto_id, $consecutivo) {
-    return 'P' . str_pad((string)(int)$producto_id, 6, '0', STR_PAD_LEFT) . str_pad((string)(int)$consecutivo, 3, '0', STR_PAD_LEFT);
+    $producto_id = (int)$producto_id;
+    $consecutivo = max(1, (int)$consecutivo);
+
+    // Primera pieza: P200. Las siguientes: P200-2, P200-3...
+    if ($consecutivo === 1) {
+        return codigoUnicoProducto($producto_id);
+    }
+
+    return codigoUnicoProducto($producto_id) . '-' . $consecutivo;
+}
+
+function aplicarTresPorcientoPrecioVenta($precio_base) {
+    $precio_base = round((float)$precio_base, 2);
+
+    if ($precio_base <= 0) {
+        return 0.00;
+    }
+
+    // Se aplica una sola vez y el resultado final se cierra al peso entero.
+    // Ejemplos: 301 x 1.03 = 310.03 -> 310; 299 x 1.03 = 307.97 -> 308.
+    return (float) round($precio_base * 1.03, 0, PHP_ROUND_HALF_UP);
 }
 
 function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1) {
@@ -306,7 +328,7 @@ function dibujarEtiquetaCodigoEnCanvas($img, $item, $topY, $generator, $fontRegu
     imagefilledrectangle($img, 0, $topY, $canvasW - 1, $bottomY, $white);
 
     $nombre = textoCortoPNG($item['nombre'] ?? '', 68);
-    $precio = '$' . number_format((float)($item['precio_venta'] ?? 0), 2);
+    $precio = '$' . number_format((float)($item['precio_venta'] ?? 0), 0);
     $codigo = (string)($item['codigo'] ?? '');
 
     $titulo = trim($nombre . '  ' . $precio);
@@ -384,7 +406,7 @@ function obtenerCodigosProductoParaPNG($conn, $producto_id) {
         FROM productos p
         JOIN codigos_barras cb ON p.id = cb.producto_id
         WHERE p.id = ? AND p.activo = 1 AND p.tipo_inventario = 'producto'
-        ORDER BY cb.codigo ASC");
+        ORDER BY cb.id ASC");
     if (!$stmt) {
         throw new Exception('Error consultando códigos para PNG: ' . $conn->error);
     }
@@ -520,7 +542,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $nombre = trim($_POST['nombre'] ?? '');
     $categoria = trim($_POST['categoria'] ?? 'General');
     $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
-    $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado'; // NUEVO CAMPO
+    $tipo_adquisicion = $_POST['tipo_adquisicion'] ?? 'pagado';
+    $stock_especial = (
+        $tipo_inventario === 'producto' &&
+        (string)($_POST['stock_especial'] ?? '0') === '1'
+    ) ? 1 : 0;
     
     $proveedor_nombre = '';
     if ($proveedor_id > 0) {
@@ -535,9 +561,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     
     if ($tipo_inventario === 'producto') {
         $cantidad = intval($_POST['cantidad'] ?? 0);
-        $precio_compra = floatval($_POST['precio_compra'] ?? 0);
-        $precio_venta = floatval($_POST['precio_venta'] ?? 0);
-        $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $_POST['tipo_codigo'] ?? 'multiple');
+        $precio_compra = round((float)($_POST['precio_compra'] ?? 0), 2);
+
+        // El campo recibido es el precio base. La BD guarda el precio final
+        // con 3% incluido. Ejemplo: 300.00 se guarda como 309.00.
+        $precio_venta_base = round((float)($_POST['precio_venta'] ?? 0), 2);
+        $precio_venta = aplicarTresPorcientoPrecioVenta($precio_venta_base);
+
+        $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $_POST['tipo_codigo'] ?? 'unico');
+
+        // Un artículo especial no maneja cantidad fija. En la BD se guarda 0 y
+        // stock_especial = 1. Como no existe un número de piezas conocido,
+        // siempre utiliza un único código P + ID del producto.
+        if ($stock_especial === 1) {
+            $cantidad = 0;
+            $tipo_codigo = 'unico';
+        }
         
         $atributos = [];
         $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
@@ -548,9 +587,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         $atributos_json = !empty($atributos) ? json_encode($atributos, JSON_UNESCAPED_UNICODE) : null;
     } else {
+        $stock_especial = 0;
         $cantidad = floatval($_POST['cantidad_insumo'] ?? 0);
-        $precio_compra = floatval($_POST['precio_compra_insumo'] ?? 0);
-        $precio_venta = 0;
+        $precio_compra = round((float)($_POST['precio_compra_insumo'] ?? 0), 2);
+        $precio_venta_base = 0.00;
+        $precio_venta = 0.00;
         $tipo_codigo = 'multiple';
         $atributos_json = null;
         
@@ -569,10 +610,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 
     if ($tipo_inventario === 'producto') {
-        if (!isset($_POST['cantidad']) || $_POST['cantidad'] === '') {
-            $errors[] = "La cantidad del producto es obligatoria.";
-        } elseif ($cantidad <= 0) {
-            $errors[] = "La cantidad debe ser mayor a 0.";
+        if ($stock_especial !== 1) {
+            if (!isset($_POST['cantidad']) || $_POST['cantidad'] === '') {
+                $errors[] = "La cantidad del producto es obligatoria.";
+            } elseif ($cantidad <= 0) {
+                $errors[] = "La cantidad debe ser mayor a 0.";
+            }
         }
         
         if (!isset($_POST['precio_compra']) || $_POST['precio_compra'] === '') {
@@ -582,9 +625,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         
         if (!isset($_POST['precio_venta']) || $_POST['precio_venta'] === '') {
-            $errors[] = "El precio de venta es obligatorio.";
-        } elseif ($precio_venta <= 0) {
-            $errors[] = "El precio de venta debe ser mayor a 0.";
+            $errors[] = "El precio de venta base es obligatorio.";
+        } elseif ($precio_venta_base <= 0) {
+            $errors[] = "El precio de venta base debe ser mayor a 0.";
         }
     } else {
         if (!isset($_POST['cantidad_insumo']) || $_POST['cantidad_insumo'] === '') {
@@ -639,8 +682,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $conn->begin_transaction();
             
             try {
-                $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssssiddsss", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion);
+                $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sssssdddsssi", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial);
                 
                 if (!$stmt->execute()) {
                     throw new Exception("Error al insertar producto: " . $conn->error);
@@ -650,8 +693,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 $stmt->close();
 
                 $cero = 0;
-                $stmt_historial = $conn->prepare("INSERT INTO historial_stock (producto_id, cantidad_anterior, cantidad_nueva, cantidad_agregada, tipo_movimiento, nota, usuario_id) VALUES (?, ?, ?, ?, 'entrada', 'Registro inicial de producto', ?)");
-                $stmt_historial->bind_param("idddi", $producto_id, $cero, $cantidad, $cantidad, $_SESSION['usuario_id']);
+                $nota_historial = $stock_especial === 1
+                    ? 'Registro inicial de artículo especial sin límite de stock'
+                    : 'Registro inicial de producto';
+
+                $stmt_historial = $conn->prepare("INSERT INTO historial_stock (producto_id, cantidad_anterior, cantidad_nueva, cantidad_agregada, tipo_movimiento, nota, usuario_id) VALUES (?, ?, ?, ?, 'entrada', ?, ?)");
+                $stmt_historial->bind_param("idddsi", $producto_id, $cero, $cantidad, $cantidad, $nota_historial, $_SESSION['usuario_id']);
                 
                 if (!$stmt_historial->execute()) {
                     throw new Exception("Error al registrar historial: " . $conn->error);
@@ -662,7 +709,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 if (!is_dir($codigos_dir)) mkdir($codigos_dir, 0777, true);
 
                 if ($tipo_inventario === 'producto') {
-                    generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_codigo, $tipo_inventario);
+                    generarCodigosBarras(
+                        $conn,
+                        $nombre,
+                        $producto_id,
+                        $stock_especial === 1 ? 1 : $cantidad,
+                        $stock_especial === 1 ? 'unico' : $tipo_codigo,
+                        $tipo_inventario
+                    );
                 }
                 
                 $conn->commit();
@@ -671,7 +725,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 Swal.fire({
                     icon: 'success',
                     title: 'Producto agregado',
-                    text: 'El producto se agregó correctamente.',
+                    html: 'El producto se agregó correctamente.<br><small>Precio final guardado: <b>$" . number_format($precio_venta, 0) . "</b> (incluye 3% y está redondeado).</small>' +
+                          '" . ($stock_especial === 1 ? "<br><small><b>Artículo especial:</b> sin límite de stock y con código único.</small>" : "") . "',
                     confirmButtonText: 'Aceptar',
                     confirmButtonColor: '#f97316'
                 }).then(() => {
@@ -754,7 +809,7 @@ function generarPDFCodigos($conn, $nombre, $producto_id, $cantidad, $tipo_codigo
         $espaciado_x = 45;
         $espaciado_y = 45;
 
-        $stmt = $conn->prepare("SELECT codigo FROM codigos_barras WHERE producto_id = ? ORDER BY codigo");
+        $stmt = $conn->prepare("SELECT codigo FROM codigos_barras WHERE producto_id = ? ORDER BY id ASC");
         $stmt->bind_param("i", $producto_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -804,97 +859,11 @@ if (!empty($errors)) {
     </script>";
 }
 ?>
-<link rel="stylesheet" href="css/productos.css">
+<link rel="stylesheet" href="css/productos.css?v=<?= time() ?>">
 
-<style>
-/* Estilos para los botones de tipo de adquisición */
-.adquisicion-toggle {
-    display: flex;
-    gap: 15px;
-    margin-top: 5px;
-}
 
-.btn-adquisicion {
-    flex: 1;
-    padding: 12px 20px;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 1rem;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    text-align: center;
-    border: 2px solid transparent;
-}
 
-.btn-adquisicion i {
-    font-size: 1.3rem;
-    margin-right: 8px;
-}
-
-.btn-adquisicion-pagado {
-    background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
-    color: #2e7d32;
-    border-color: #a5d6a7;
-}
-
-.btn-adquisicion-pagado.active {
-    background: linear-gradient(135deg, #4caf50, #388e3c);
-    color: white;
-    border-color: #2e7d32;
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-}
-
-.btn-adquisicion-concesion {
-    background: linear-gradient(135deg, #fff3e0, #ffe0b2);
-    color: #e65100;
-    border-color: #ffcc80;
-}
-
-.btn-adquisicion-concesion.active {
-    background: linear-gradient(135deg, #ff9800, #f57c00);
-    color: white;
-    border-color: #e65100;
-    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
-}
-
-.btn-adquisicion:hover {
-    transform: translateY(-2px);
-}
-
-.btn-adquisicion:active {
-    transform: translateY(0);
-}
-
-.tipo-adquisicion-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.tipo-adquisicion-badge.pagado {
-    background: #c8e6c9;
-    color: #2e7d32;
-}
-
-.tipo-adquisicion-badge.concesion {
-    background: #ffe0b2;
-    color: #e65100;
-}
-
-.info-adquisicion {
-    background: #f8fafc;
-    border-radius: 10px;
-    padding: 12px;
-    margin-top: 10px;
-    font-size: 0.8rem;
-    color: #475569;
-}
-</style>
-
-<div class="content-wrapper">
+<div class="content-wrapper nuevo-producto-page">
     <div class="container-fluid">
         
         <!-- BREADCRUMB -->
@@ -1015,11 +984,47 @@ if (!empty($errors)) {
                                     <!-- SECCIÓN PRODUCTO -->
                                     <div id="producto-section" class="form-section producto-section">
                                         <h5 class="text-success"><i class="fas fa-box mr-2"></i> Datos del Producto</h5>
-                                        
-                                        <div class="form-group">
-                                            <label>Cantidad <span class="text-danger">*</span></label>
-                                            <input type="number" name="cantidad" class="form-control" min="1" placeholder="Ej. 10" required>
+
+                                        <div class="row product-stock-row">
+                                            <div class="col-md-6">
+                                                <div class="form-group" id="cantidad_producto_group">
+                                                    <label>Cantidad <span class="text-danger">*</span></label>
+                                                    <div class="field-with-icon">
+                                                        <i class="fas fa-cubes"></i>
+                                                        <input
+                                                            type="number"
+                                                            name="cantidad"
+                                                            id="cantidad_producto"
+                                                            class="form-control"
+                                                            min="1"
+                                                            step="1"
+                                                            placeholder="Ej. 10"
+                                                            required
+                                                        >
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group" id="tipo_codigo_group">
+                                                    <label>Tipo de código</label>
+                                                    <select name="tipo_codigo" id="tipo_codigo_select" class="form-control">
+                                                        <option value="unico" selected>Codigo único</option>
+                                                        <option value="multiple">Codigo múltiple</option>
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        <label class="special-stock-toggle" id="special_stock_toggle" for="stock_especial">
+                                            <input type="checkbox" name="stock_especial" id="stock_especial" value="1">
+                                            <span class="special-stock-switch" aria-hidden="true"></span>
+                                            <span class="special-stock-text">
+                                                <strong>Producto especial</strong>
+                                                <small>Sin cantidad fija</small>
+                                            </span>
+                                            <i class="fas fa-infinity special-stock-icon" aria-hidden="true"></i>
+                                        </label>
 
                                         <div class="row">
                                             <div class="col-md-6">
@@ -1030,19 +1035,26 @@ if (!empty($errors)) {
                                             </div>
                                             <div class="col-md-6">
                                                 <div class="form-group">
-                                                    <label>Precio venta <span class="text-danger">*</span></label>
-                                                    <input type="number" step="0.01" name="precio_venta" class="form-control" placeholder="0.00" required>
+                                                    <label>Precio venta base <span class="text-danger">*</span></label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0.01"
+                                                        name="precio_venta"
+                                                        id="precio_venta_base"
+                                                        class="form-control"
+                                                        placeholder="0.00"
+                                                        required
+                                                    >
+                                                    <small class="text-muted">Se agrega el 3% y se redondea.</small>
+                                                    <div class="price-result-card">
+                                                        <span><i class="fas fa-calculator"></i> Precio final</span>
+                                                        <strong id="precio_venta_final">$0</strong>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div class="form-group">
-                                            <label>Tipo de código</label>
-                                            <select name="tipo_codigo" class="form-control">
-                                                <option value="multiple">Múltiple (uno por unidad)</option>
-                                                <option value="unico">Único (un código para todo)</option>
-                                            </select>
-                                        </div>
 
                                         <div class="card card-secondary mt-3">
                                             <div class="card-header">
@@ -1404,11 +1416,47 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
 });
 
 // ===== FORMULARIO =====
+function actualizarModoStock() {
+    const checkboxEspecial = document.getElementById('stock_especial');
+    const esEspecial = Boolean(checkboxEspecial?.checked);
+    const toggleEspecial = document.getElementById('special_stock_toggle');
+    const cantidadGroup = document.getElementById('cantidad_producto_group');
+    const cantidadInput = document.getElementById('cantidad_producto');
+    const tipoCodigoSelect = document.getElementById('tipo_codigo_select');
+
+    if (toggleEspecial) {
+        toggleEspecial.classList.toggle('active', esEspecial);
+    }
+
+    if (cantidadGroup && cantidadInput) {
+        cantidadGroup.classList.toggle('is-disabled', esEspecial);
+        cantidadInput.disabled = esEspecial;
+        cantidadInput.required = !esEspecial;
+        if (esEspecial) cantidadInput.value = '';
+    }
+
+    if (tipoCodigoSelect) {
+        if (esEspecial) {
+            if (!tipoCodigoSelect.dataset.valorAnterior) {
+                tipoCodigoSelect.dataset.valorAnterior = tipoCodigoSelect.value || 'unico';
+            }
+            tipoCodigoSelect.value = 'unico';
+            tipoCodigoSelect.disabled = true;
+        } else {
+            tipoCodigoSelect.disabled = false;
+            tipoCodigoSelect.value = tipoCodigoSelect.dataset.valorAnterior || tipoCodigoSelect.value || 'unico';
+            delete tipoCodigoSelect.dataset.valorAnterior;
+        }
+    }
+}
+
 function limpiarFormulario() {
     const form = document.getElementById('formProducto');
     form.reset();
     document.getElementById('previewImg').classList.add('d-none');
     seleccionarAdquisicion('pagado');
+    actualizarModoStock();
+    actualizarPrecioVentaConTresPorciento();
 }
 
 function previewImagen(event) {
@@ -1476,10 +1524,44 @@ function cambiarUnidadInsumo(tipo) {
     });
 }
 
+function actualizarPrecioVentaConTresPorciento() {
+    const inputBase = document.getElementById('precio_venta_base');
+    const salidaFinal = document.getElementById('precio_venta_final');
+
+    if (!inputBase || !salidaFinal) {
+        return;
+    }
+
+    const precioBase = Number.parseFloat(inputBase.value || '0');
+    const precioFinal = Number.isFinite(precioBase) && precioBase > 0
+        ? Math.round(precioBase * 1.03)
+        : 0;
+
+    salidaFinal.textContent = precioFinal.toLocaleString('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    });
+}
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     // Seleccionar pagado por defecto
     seleccionarAdquisicion('pagado');
+
+    const stockEspecial = document.getElementById('stock_especial');
+    if (stockEspecial) {
+        stockEspecial.addEventListener('change', actualizarModoStock);
+    }
+    actualizarModoStock();
+
+    const precioVentaBase = document.getElementById('precio_venta_base');
+    if (precioVentaBase) {
+        precioVentaBase.addEventListener('input', actualizarPrecioVentaConTresPorciento);
+        precioVentaBase.addEventListener('change', actualizarPrecioVentaConTresPorciento);
+        actualizarPrecioVentaConTresPorciento();
+    }
     
     <?php if ($tipo_seleccionado == 'insumo'): ?>
     const unidadPorDefecto = document.querySelector('input[name="tipo_unidad_insumo"]:checked');

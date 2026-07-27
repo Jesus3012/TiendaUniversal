@@ -111,6 +111,7 @@ function obtenerTodosProductos($conn) {
         $row['precio_venta'] = numeroSeguro($row['precio_venta'] ?? 0);
         $row['utilidad'] = numeroSeguro($row['utilidad'] ?? 0);
         $row['cantidad'] = numeroSeguro($row['cantidad'] ?? 0);
+        $row['stock_especial'] = ((int)($row['stock_especial'] ?? 0) === 1) ? 1 : 0;
 
         $row['tipo'] = 'producto';
         $productos[] = $row;
@@ -228,22 +229,58 @@ function jsonSeguro($data) {
 
 function obtenerEstadisticas($conn) {
     $stats = [];
-    
-    $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE activo = 1 AND tipo_inventario = 'producto'");
-    $stats['total_productos'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
-    
-    $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE activo = 1 AND tipo_inventario = 'insumo'");
-    $stats['total_insumos'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
-    
-    $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE cantidad <= 5 AND activo = 1");
-    $stats['stock_bajo'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
-    
-    $result = $conn->query("SELECT COUNT(*) as total FROM productos WHERE cantidad = 0 AND activo = 1");
-    $stats['sin_stock'] = (int) numeroSeguro($result->fetch_assoc()['total'] ?? 0);
-    
-    $result = $conn->query("SELECT SUM(precio_venta * cantidad) as total FROM productos WHERE activo = 1");
-    $stats['valor_total'] = numeroSeguro($result->fetch_assoc()['total'] ?? 0);
-    
+
+    $result = $conn->query("SELECT COUNT(*) AS total FROM productos WHERE activo = 1 AND tipo_inventario = 'producto'");
+    $stats['total_productos'] = (int) numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
+    $result = $conn->query("SELECT COUNT(*) AS total FROM productos WHERE activo = 1 AND tipo_inventario = 'producto' AND COALESCE(stock_especial, 0) = 1");
+    $stats['productos_especiales'] = (int) numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
+    $result = $conn->query("SELECT COUNT(*) AS total FROM productos WHERE activo = 1 AND tipo_inventario = 'insumo'");
+    $stats['total_insumos'] = (int) numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
+    /*
+     * Los productos especiales no participan en stock bajo ni agotados,
+     * porque su disponibilidad depende únicamente de stock_especial = 1.
+     * Los insumos continúan usando su cantidad normalmente.
+     */
+    $result = $conn->query("
+        SELECT COUNT(*) AS total
+        FROM productos
+        WHERE activo = 1
+          AND cantidad > 0
+          AND cantidad <= 5
+          AND (
+              tipo_inventario = 'insumo'
+              OR COALESCE(stock_especial, 0) = 0
+          )
+    ");
+    $stats['stock_bajo'] = (int) numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
+    $result = $conn->query("
+        SELECT COUNT(*) AS total
+        FROM productos
+        WHERE activo = 1
+          AND cantidad <= 0
+          AND (
+              tipo_inventario = 'insumo'
+              OR COALESCE(stock_especial, 0) = 0
+          )
+    ");
+    $stats['sin_stock'] = (int) numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
+    $result = $conn->query("
+        SELECT SUM(
+            CASE
+                WHEN tipo_inventario = 'producto' AND COALESCE(stock_especial, 0) = 1 THEN 0
+                ELSE COALESCE(precio_venta, 0) * GREATEST(COALESCE(cantidad, 0), 0)
+            END
+        ) AS total
+        FROM productos
+        WHERE activo = 1
+    ");
+    $stats['valor_total'] = numeroSeguro($result && ($row = $result->fetch_assoc()) ? ($row['total'] ?? 0) : 0);
+
     return $stats;
 }
 
@@ -567,22 +604,19 @@ unset($insumoTmp);
 
 <div class="content-wrapper">
     <div class="container-fluid">
-        
-        <!-- Breadcrumb -->
-        <div class="content-header">
-            <div class="container-fluid">
-                <div class="row mb-2">
-                    <div class="col-sm-6">
-                        <h1 class="m-0" style="font-size: 1.5rem; font-weight: 700;">
-                            <i class="fas fa-boxes" style="color: #f97316;"></i> Inventario
-                        </h1>
-                    </div>
-                </div>
-            </div>
+
+        <!-- ENCABEZADO CLÁSICO DEL INVENTARIO -->
+        <div class="inventory-title-classic">
+            <h1>
+                <span class="inventory-title-classic-icon">
+                    <i class="fas fa-boxes"></i>
+                </span>
+                Inventario
+            </h1>
         </div>
-        
-        <!-- BREADCRUMB BLANCO - INVENTARIO -->
-        <div class="custom-breadcrumb">
+
+        <!-- BREADCRUMB CLÁSICO -->
+        <div class="custom-breadcrumb inventory-breadcrumb-classic">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
@@ -602,56 +636,68 @@ unset($insumoTmp);
             </nav>
         </div>
 
-        <!-- Stats Boxes -->
-        <div class="row">
-            <div class="col-lg-3 col-6">
-                <div class="small-box bg-primary-custom">
-                    <div class="inner">
-                        <h3><?= number_format(numeroSeguro($stats['total_productos'] ?? 0), 0) ?></h3>
-                        <p>Productos</p>
+        <!-- TARJETAS DE ESTADÍSTICAS CLÁSICAS -->
+        <div class="row inventory-stats-classic">
+            <div class="col-xl-3 col-md-6">
+                <article class="inventory-stat-card stat-products">
+                    <div class="inventory-stat-copy">
+                        <strong><?= number_format(numeroSeguro($stats['total_productos'] ?? 0), 0) ?></strong>
+                        <span>Productos</span>
+                        <small>
+                            <?= number_format(numeroSeguro($stats['productos_especiales'] ?? 0), 0) ?>
+                            con disponibilidad ilimitada
+                        </small>
                     </div>
-                    <div class="icon">
+                    <div class="inventory-stat-icon">
                         <i class="fas fa-box"></i>
                     </div>
-                </div>
+                </article>
             </div>
-            <div class="col-lg-3 col-6">
-                <div class="small-box bg-success-custom">
-                    <div class="inner">
-                        <h3><?= number_format(numeroSeguro($stats['total_insumos'] ?? 0), 0) ?></h3>
-                        <p>Insumos</p>
+
+            <div class="col-xl-3 col-md-6">
+                <article class="inventory-stat-card stat-supplies">
+                    <div class="inventory-stat-copy">
+                        <strong><?= number_format(numeroSeguro($stats['total_insumos'] ?? 0), 0) ?></strong>
+                        <span>Insumos</span>
+                        <small>Materiales con cantidad controlada</small>
                     </div>
-                    <div class="icon">
+                    <div class="inventory-stat-icon">
                         <i class="fas fa-cubes"></i>
                     </div>
-                </div>
+                </article>
             </div>
-            <div class="col-lg-3 col-6">
-                <div class="small-box bg-warning-custom">
-                    <div class="inner">
-                        <h3><?= number_format(numeroSeguro($stats['stock_bajo'] ?? 0), 0) ?></h3>
-                        <p>Stock Bajo (≤5)</p>
+
+            <div class="col-xl-3 col-md-6">
+                <article class="inventory-stat-card stat-warning">
+                    <div class="inventory-stat-copy">
+                        <strong><?= number_format(numeroSeguro($stats['stock_bajo'] ?? 0), 0) ?></strong>
+                        <span>Stock bajo (≤5)</span>
+                        <small>
+                            <?= number_format(numeroSeguro($stats['sin_stock'] ?? 0), 0) ?>
+                            artículos agotados
+                        </small>
                     </div>
-                    <div class="icon">
+                    <div class="inventory-stat-icon">
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
-                </div>
+                </article>
             </div>
-            <div class="col-lg-3 col-6">
-                <div class="small-box bg-info-custom">
-                    <div class="inner">
-                        <h3>$<?= number_format(numeroSeguro($stats['valor_total'] ?? 0), 0) ?></h3>
-                        <p>Valor Inventario</p>
+
+            <div class="col-xl-3 col-md-6">
+                <article class="inventory-stat-card stat-value">
+                    <div class="inventory-stat-copy">
+                        <strong>$<?= number_format(numeroSeguro($stats['valor_total'] ?? 0), 0) ?></strong>
+                        <span>Valor inventario</span>
+                        <small>Solo existencias controladas</small>
                     </div>
-                    <div class="icon">
+                    <div class="inventory-stat-icon">
                         <i class="fas fa-dollar-sign"></i>
                     </div>
-                </div>
+                </article>
             </div>
         </div>
-        <br>
-        
-        <!-- Toolbar -->
+
+<!-- Toolbar -->
         <div class="toolbar">
             <div class="search-box">
                 <i class="fas fa-search"></i>
@@ -665,6 +711,9 @@ unset($insumoTmp);
                 </button>
                 <button class="filter-btn" data-filter="productos">
                     <i class="fas fa-box"></i> Productos
+                </button>
+                <button class="filter-btn filter-btn-special" data-filter="especiales">
+                    <i class="fas fa-infinity"></i> Especiales
                 </button>
                 <button class="filter-btn" data-filter="insumos">
                     <i class="fas fa-cubes"></i> Insumos
@@ -732,22 +781,43 @@ unset($insumoTmp);
         </div>
 
         <!-- Productos Section -->
-        <div class="card" id="productosCard">
+        <div class="card inventory-section-card" id="productosCard">
             <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-box" style="color: #3b82f6;"></i> Productos
-                    <span class="badge bg-primary ms-2" id="productosCount"><?= count($todosProductos) ?></span>
-                </h3>
+                <div class="inventory-section-heading">
+                    <div>
+                        <h3 class="card-title">
+                            <span class="section-heading-icon product"><i class="fas fa-box"></i></span>
+                            Productos
+                            <span class="section-count" id="productosCount"><?= count($todosProductos) ?></span>
+                        </h3>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row" id="productosGrid">
                     <?php foreach($todosProductos as $producto): 
                         $stock = numeroSeguro($producto['cantidad'] ?? 0);
-                        if($stock <= 0) { $stockClass = 'critical'; $stockStatus = 'Agotado'; }
-                        elseif($stock <= 5) { $stockClass = 'critical'; $stockStatus = 'Stock Crítico'; }
-                        elseif($stock <= 15) { $stockClass = 'low'; $stockStatus = 'Stock Bajo'; }
-                        else { $stockClass = 'normal'; $stockStatus = 'Stock Normal'; }
-                        $stockPercent = min(100, ($stock / 50) * 100);
+                        $esEspecial = ((int)($producto['stock_especial'] ?? 0) === 1);
+
+                        if ($esEspecial) {
+                            $stockClass = 'special';
+                            $stockStatus = 'Disponible siempre';
+                            $stockPercent = 100;
+                        } elseif($stock <= 0) {
+                            $stockClass = 'critical';
+                            $stockStatus = 'Agotado';
+                        } elseif($stock <= 5) {
+                            $stockClass = 'critical';
+                            $stockStatus = 'Stock crítico';
+                        } elseif($stock <= 15) {
+                            $stockClass = 'low';
+                            $stockStatus = 'Stock bajo';
+                        } else {
+                            $stockClass = 'normal';
+                            $stockStatus = 'Disponible';
+                        }
+
+                        $stockPercent = $esEspecial ? 100 : min(100, max(0, ($stock / 50) * 100));
                         $inicial = strtoupper(substr($producto['nombre'], 0, 2));
                     ?>
                     <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-3 producto-item"
@@ -758,6 +828,7 @@ unset($insumoTmp);
                         data-categoria="<?= strtolower(htmlspecialchars($producto['categoria'] ?? '')) ?>"
                         data-proveedor="<?= strtolower(htmlspecialchars($producto['proveedor'] ?? '')) ?>"
                         data-stock="<?= $stock ?>"
+                        data-stock-especial="<?= $esEspecial ? 1 : 0 ?>"
                         data-tipo="producto">
                         
                         <?php 
@@ -822,12 +893,12 @@ unset($insumoTmp);
                             $iconoProducto = 'fa-ring';
                             $iconoCard = 'fa-ring';
                         }
-                        
-                        // Determinar insignia según el stock
-                        $insigniaIcono = '';
-                        $insigniaTexto = '';
-                        if($stock <= 0) {
-                            $insigniaIcono = 'fa-skull';
+                        // Insignia visual: la bandera stock_especial es la única fuente de verdad.
+                        if ($esEspecial) {
+                            $insigniaIcono = 'fa-infinity';
+                            $insigniaTexto = 'ESPECIAL';
+                        } elseif($stock <= 0) {
+                            $insigniaIcono = 'fa-times-circle';
                             $insigniaTexto = 'AGOTADO';
                         } elseif($stock <= 5) {
                             $insigniaIcono = 'fa-exclamation-triangle';
@@ -841,7 +912,7 @@ unset($insumoTmp);
                         }
                         ?>
                         
-                        <div class="product-card producto <?= $colorClase ?>" style="border-top: 3px solid <?= $colorHex ?>;">
+                        <div class="product-card producto <?= $colorClase ?> <?= $esEspecial ? 'product-card-special' : '' ?>" style="--accent-color: <?= $esEspecial ? '#7c3aed' : $colorHex ?>;">
                             <div class="product-image">
                                 <?php if(!empty($producto['imagen']) && file_exists($producto['imagen'])): ?>
                                     <img src="<?= htmlspecialchars($producto['imagen']) ?>" alt="<?= htmlspecialchars($producto['nombre']) ?>">
@@ -853,14 +924,14 @@ unset($insumoTmp);
                                 <?php endif; ?>
                                 
                                 <!-- Badge de tipo de producto -->
-                                <div class="product-badge producto" style="background: <?= $colorHex ?>;">
-                                    <i class="fas <?= $iconoCard ?>"></i>
-                                    <span>Producto</span>
+                                <div class="product-badge <?= $esEspecial ? 'especial' : 'producto' ?>">
+                                    <i class="fas <?= $esEspecial ? 'fa-infinity' : $iconoCard ?>"></i>
+                                    <span><?= $esEspecial ? 'Especial' : 'Producto' ?></span>
                                 </div>
                                 
                                 <!-- Badge de estado de stock -->
-                                <?php if($stock <= 5): ?>
-                                <div class="stock-warning-badge" style="background: <?= $colorHex ?>;">
+                                <?php if($esEspecial || $stock <= 5): ?>
+                                <div class="stock-warning-badge <?= $esEspecial ? 'special' : '' ?>">
                                     <i class="fas <?= $insigniaIcono ?>"></i>
                                     <span><?= $insigniaTexto ?></span>
                                 </div>
@@ -878,7 +949,7 @@ unset($insumoTmp);
                                 
                                 <div class="product-meta">
                                     <?php if($producto['categoria']): ?>
-                                    <span class="meta-badge categoria" style="background: <?= $colorHex ?>20; color: <?= $colorHex ?>;">
+                                    <span class="meta-badge categoria">
                                         <i class="fas <?= $iconoCard ?>"></i> <?= htmlspecialchars($producto['categoria']) ?>
                                     </span>
                                     <?php endif; ?>
@@ -914,26 +985,28 @@ unset($insumoTmp);
                                     </div>
                                     <div class="price-item">
                                         <small><i class="fas fa-chart-line"></i> Utilidad</small>
-                                        <span class="price-value" style="color: <?= $colorHex ?>;">$<?= number_format(numeroSeguro($producto['utilidad'] ?? 0), 0) ?></span>
+                                        <span class="price-value utility-value">$<?= number_format(numeroSeguro($producto['utilidad'] ?? 0), 0) ?></span>
                                     </div>
                                 </div>
                                 
-                                <div class="stock-info">
-                                    <div class="d-flex justify-content-between align-items-center">
+                                <div class="stock-info <?= $esEspecial ? 'stock-info-special' : '' ?>">
+                                    <div class="stock-row">
                                         <span class="stock-status <?= $stockClass ?>">
-                                            <i class="fas <?= $stock <= 0 ? 'fa-skull' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle') ?>"></i>
+                                            <i class="fas <?= $esEspecial ? 'fa-infinity' : ($stock <= 0 ? 'fa-times-circle' : ($stock <= 5 ? 'fa-exclamation-triangle' : 'fa-check-circle')) ?>"></i>
                                             <?= $stockStatus ?>
                                         </span>
-                                        <span class="stock-number"><?= number_format(numeroSeguro($stock), 0) ?> unidades</span>
+                                        <span class="stock-number">
+                                            <?= $esEspecial ? '<i class="fas fa-infinity"></i> Sin límite' : number_format(numeroSeguro($stock), 0) . ' unidades' ?>
+                                        </span>
                                     </div>
-                                    <div class="progress-bar-custom">
+                                    <div class="progress-bar-custom" aria-hidden="true">
                                         <div class="progress-fill <?= $stockClass ?>" style="width: <?= $stockPercent ?>%"></div>
                                     </div>
                                 </div>
 
                                 <div class="barcode-open-hint <?= empty($producto['codigos_array']) ? 'empty' : '' ?>">
                                     <i class="fas fa-barcode"></i>
-                                    <span><?= empty($producto['codigos_array']) ? 'Sin códigos registrados' : 'Clic para ver códigos' ?></span>
+                                    <span><?= empty($producto['codigos_array']) ? 'Sin código registrado' : 'Ver código de barras' ?></span>
                                 </div>
                             </div>
                         </div>
@@ -945,16 +1018,27 @@ unset($insumoTmp);
                     <h5>No hay productos</h5>
                     <p>No se encontraron productos con los filtros seleccionados</p>
                 </div>
+
+                <div class="inventory-pagination" id="productosPagination" hidden>
+                    <div class="inventory-pagination-info" id="productosPaginationInfo"></div>
+                    <div class="inventory-pagination-controls" id="productosPaginationControls" aria-label="Paginación de productos"></div>
+                </div>
             </div>
         </div>
 
         <!-- Insumos Section -->
-        <div class="card" id="insumosCard">
+        <div class="card inventory-section-card" id="insumosCard">
             <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-cubes" style="color: #22c55e;"></i> Insumos y Materiales
-                    <span class="badge bg-success ms-2" id="insumosCount"><?= count($todosInsumos) ?></span>
-                </h3>
+                <div class="inventory-section-heading">
+                    <div>
+                        <h3 class="card-title">
+                            <span class="section-heading-icon supply"><i class="fas fa-cubes"></i></span>
+                            Insumos y materiales
+                            <span class="section-count supply" id="insumosCount"><?= count($todosInsumos) ?></span>
+                        </h3>
+                        <p>Materiales con existencias controladas y unidad de consumo.</p>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row" id="insumosGrid">
@@ -1054,6 +1138,11 @@ unset($insumoTmp);
                     <h5>No hay insumos</h5>
                     <p>No se encontraron insumos con los filtros seleccionados</p>
                 </div>
+
+                <div class="inventory-pagination" id="insumosPagination" hidden>
+                    <div class="inventory-pagination-info" id="insumosPaginationInfo"></div>
+                    <div class="inventory-pagination-controls" id="insumosPaginationControls" aria-label="Paginación de insumos"></div>
+                </div>
             </div>
         </div>
 
@@ -1120,6 +1209,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const activeFiltersList = document.getElementById('activeFiltersList');
     const clearAllFilters = document.getElementById('clearAllFilters');
     const filtersCount = document.getElementById('filtersCount');
+    const productosPagination = document.getElementById('productosPagination');
+    const productosPaginationInfo = document.getElementById('productosPaginationInfo');
+    const productosPaginationControls = document.getElementById('productosPaginationControls');
+    const insumosPagination = document.getElementById('insumosPagination');
+    const insumosPaginationInfo = document.getElementById('insumosPaginationInfo');
+    const insumosPaginationControls = document.getElementById('insumosPaginationControls');
+
+    const estadoPaginacion = {
+        productos: { pagina: 1 },
+        insumos: { pagina: 1 }
+    };
+
+    let vistaActual = 'grid';
     
     // Obtener todos los items
     const productos = document.querySelectorAll('.producto-item');
@@ -1240,7 +1342,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!barcodeModal || !barcodeList) return;
 
         const articulo = item.dataset.articulo || item.dataset.nombre || 'Artículo';
-        const tipo = item.dataset.tipo === 'insumo' ? 'Insumo' : 'Producto';
+        const esEspecial = Number(item.dataset.stockEspecial || '0') === 1;
+        const tipo = item.dataset.tipo === 'insumo'
+            ? 'Insumo'
+            : (esEspecial ? 'Producto especial' : 'Producto');
         const codigos = normalizarCodigos(item.dataset.codigos || '[]');
 
         if (barcodeModalTitle) {
@@ -1353,6 +1458,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let valorMostrar = valor;
                 if (categoria === 'tipo') {
                     if (valor === 'productos') valorMostrar = 'Solo productos';
+                    else if (valor === 'especiales') valorMostrar = 'Productos especiales';
                     else if (valor === 'insumos') valorMostrar = 'Solo insumos';
                     else if (valor === 'stockBajo') valorMostrar = 'Stock bajo (≤5)';
                     else if (valor === 'sinStock') valorMostrar = 'Sin stock';
@@ -1365,7 +1471,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (categoria === 'tipo') filtros.tipo = 'todos';
                     else filtros[categoria] = '';
                     actualizarUIFiltros();
-                    aplicarFiltros();
+                    aplicarFiltros(true);
                 });
                 activeFiltersList.appendChild(tag);
             });
@@ -1413,7 +1519,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (searchInput) searchInput.value = '';
         if (clearSearch) clearSearch.style.display = 'none';
         actualizarUIFiltros();
-        aplicarFiltros();
+        aplicarFiltros(true);
     }
     
     // Evaluar si un item debe ser visible
@@ -1426,6 +1532,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const proveedor = (item.dataset.proveedor || '').toLowerCase();
         const tipo = item.dataset.tipo || '';
         const stock = parseFloat(item.dataset.stock) || 0;
+        const esEspecial = Number(item.dataset.stockEspecial || '0') === 1;
         
         // Filtro de búsqueda
         if (filtros.busqueda) {
@@ -1441,14 +1548,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'productos':
                     visible = tipo === 'producto';
                     break;
+                case 'especiales':
+                    visible = tipo === 'producto' && esEspecial;
+                    break;
                 case 'insumos':
                     visible = tipo === 'insumo';
                     break;
                 case 'stockBajo':
-                    visible = stock > 0 && stock <= 5;
+                    visible = !esEspecial && stock > 0 && stock <= 5;
                     break;
                 case 'sinStock':
-                    visible = stock === 0;
+                    visible = !esEspecial && stock <= 0;
                     break;
             }
             if (!visible) return false;
@@ -1469,31 +1579,143 @@ document.addEventListener('DOMContentLoaded', function() {
         return visible;
     }
     
-    // Aplicar todos los filtros
-    function aplicarFiltros() {
-        let prodVisibles = 0;
-        let insVisibles = 0;
-        
-        // Filtrar productos
-        productos.forEach(producto => {
-            const visible = evaluarItem(producto);
-            producto.style.display = visible ? '' : 'none';
-            if (visible) prodVisibles++;
+    // Paginación real para productos e insumos.
+    function obtenerElementosPorPagina() {
+        if (window.innerWidth <= 575) return vistaActual === 'list' ? 5 : 6;
+        if (window.innerWidth <= 991) return vistaActual === 'list' ? 6 : 8;
+        return vistaActual === 'list' ? 8 : 12;
+    }
+
+    function reiniciarPaginacion() {
+        estadoPaginacion.productos.pagina = 1;
+        estadoPaginacion.insumos.pagina = 1;
+    }
+
+    function crearSecuenciaPaginas(paginaActual, totalPaginas) {
+        if (totalPaginas <= 7) {
+            return Array.from({ length: totalPaginas }, (_, index) => index + 1);
+        }
+
+        const paginas = [1];
+        const inicio = Math.max(2, paginaActual - 1);
+        const fin = Math.min(totalPaginas - 1, paginaActual + 1);
+
+        if (inicio > 2) paginas.push('ellipsis-start');
+        for (let pagina = inicio; pagina <= fin; pagina++) paginas.push(pagina);
+        if (fin < totalPaginas - 1) paginas.push('ellipsis-end');
+
+        paginas.push(totalPaginas);
+        return paginas;
+    }
+
+    function renderizarPaginacion(tipo, itemsFiltrados) {
+        const esProductos = tipo === 'productos';
+        const todosItems = esProductos ? productos : insumos;
+        const contenedor = esProductos ? productosPagination : insumosPagination;
+        const info = esProductos ? productosPaginationInfo : insumosPaginationInfo;
+        const controles = esProductos ? productosPaginationControls : insumosPaginationControls;
+        const elementosPorPagina = obtenerElementosPorPagina();
+        const totalItems = itemsFiltrados.length;
+        const totalPaginas = Math.max(1, Math.ceil(totalItems / elementosPorPagina));
+        const estado = estadoPaginacion[tipo];
+
+        estado.pagina = Math.min(Math.max(1, estado.pagina), totalPaginas);
+
+        todosItems.forEach(item => {
+            item.style.display = 'none';
         });
-        
-        // Filtrar insumos
-        insumos.forEach(insumo => {
-            const visible = evaluarItem(insumo);
-            insumo.style.display = visible ? '' : 'none';
-            if (visible) insVisibles++;
+
+        const inicio = (estado.pagina - 1) * elementosPorPagina;
+        const fin = Math.min(inicio + elementosPorPagina, totalItems);
+
+        itemsFiltrados.slice(inicio, fin).forEach(item => {
+            item.style.display = '';
         });
-        
-        // Actualizar contadores
-        if (productosCount) productosCount.textContent = prodVisibles;
-        if (insumosCount) insumosCount.textContent = insVisibles;
-        
-        // Mostrar/ocultar secciones según filtro de tipo
-        if (filtros.tipo === 'productos') {
+
+        if (!contenedor || !info || !controles) return;
+
+        if (totalItems === 0) {
+            contenedor.hidden = true;
+            info.textContent = '';
+            controles.innerHTML = '';
+            return;
+        }
+
+        contenedor.hidden = false;
+        const etiqueta = esProductos ? 'productos' : 'insumos';
+        info.innerHTML = `Mostrando <strong>${inicio + 1}–${fin}</strong> de <strong>${totalItems}</strong> ${etiqueta}`;
+
+        const boton = (contenido, pagina, deshabilitado = false, activo = false, etiquetaAria = '') => `
+            <button type="button"
+                    class="inventory-page-btn${activo ? ' active' : ''}"
+                    data-page="${pagina}"
+                    ${deshabilitado ? 'disabled' : ''}
+                    ${etiquetaAria ? `aria-label="${etiquetaAria}"` : ''}>
+                ${contenido}
+            </button>`;
+
+        let html = boton(
+            '<i class="fas fa-chevron-left"></i>',
+            estado.pagina - 1,
+            estado.pagina === 1,
+            false,
+            'Página anterior'
+        );
+
+        crearSecuenciaPaginas(estado.pagina, totalPaginas).forEach(valor => {
+            if (typeof valor === 'string') {
+                html += '<span class="inventory-page-ellipsis">…</span>';
+                return;
+            }
+
+            html += boton(
+                String(valor),
+                valor,
+                false,
+                valor === estado.pagina,
+                `Página ${valor}`
+            );
+        });
+
+        html += boton(
+            '<i class="fas fa-chevron-right"></i>',
+            estado.pagina + 1,
+            estado.pagina === totalPaginas,
+            false,
+            'Página siguiente'
+        );
+
+        controles.innerHTML = html;
+        controles.querySelectorAll('.inventory-page-btn[data-page]').forEach(control => {
+            control.addEventListener('click', function() {
+                if (this.disabled) return;
+
+                const nuevaPagina = Number(this.dataset.page || 1);
+                if (!Number.isInteger(nuevaPagina) || nuevaPagina < 1 || nuevaPagina > totalPaginas) return;
+
+                estado.pagina = nuevaPagina;
+                renderizarPaginacion(tipo, itemsFiltrados);
+
+                const card = esProductos ? productosCard : insumosCard;
+                if (card) {
+                    const top = card.getBoundingClientRect().top + window.pageYOffset - 85;
+                    window.scrollTo({ top, behavior: 'smooth' });
+                }
+            });
+        });
+    }
+
+    // Aplicar filtros y después mostrar únicamente la página correspondiente.
+    function aplicarFiltros(reiniciar = false) {
+        if (reiniciar) reiniciarPaginacion();
+
+        const productosFiltrados = Array.from(productos).filter(evaluarItem);
+        const insumosFiltrados = Array.from(insumos).filter(evaluarItem);
+
+        if (productosCount) productosCount.textContent = productosFiltrados.length;
+        if (insumosCount) insumosCount.textContent = insumosFiltrados.length;
+
+        if (filtros.tipo === 'productos' || filtros.tipo === 'especiales') {
             if (productosCard) productosCard.style.display = 'block';
             if (insumosCard) insumosCard.style.display = 'none';
         } else if (filtros.tipo === 'insumos') {
@@ -1503,19 +1725,26 @@ document.addEventListener('DOMContentLoaded', function() {
             if (productosCard) productosCard.style.display = 'block';
             if (insumosCard) insumosCard.style.display = 'block';
         }
-        
-        // Mostrar mensajes de vacío
+
         if (productosEmpty) {
-            productosEmpty.style.display = (prodVisibles === 0 && filtros.tipo !== 'insumos') ? 'block' : 'none';
+            productosEmpty.style.display = productosFiltrados.length === 0 && filtros.tipo !== 'insumos'
+                ? 'block'
+                : 'none';
         }
+
         if (insumosEmpty) {
-            insumosEmpty.style.display = (insVisibles === 0 && filtros.tipo !== 'productos') ? 'block' : 'none';
+            insumosEmpty.style.display = insumosFiltrados.length === 0 && !['productos', 'especiales'].includes(filtros.tipo)
+                ? 'block'
+                : 'none';
         }
-        
+
+        renderizarPaginacion('productos', productosFiltrados);
+        renderizarPaginacion('insumos', insumosFiltrados);
+
         actualizarContadorFiltros();
         actualizarBadgesActivos();
     }
-    
+
     // ========== EVENTOS ==========
     
     // Búsqueda con debounce
@@ -1525,7 +1754,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (clearSearch) clearSearch.style.display = this.value ? 'block' : 'none';
             searchTimeout = setTimeout(() => {
                 filtros.busqueda = this.value;
-                aplicarFiltros();
+                aplicarFiltros(true);
             }, 300);
         });
     }
@@ -1536,7 +1765,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (searchInput) searchInput.value = '';
             filtros.busqueda = '';
             this.style.display = 'none';
-            aplicarFiltros();
+            aplicarFiltros(true);
             if (searchInput) searchInput.focus();
         });
     }
@@ -1546,7 +1775,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             filtros.tipo = this.dataset.filter;
             actualizarUIFiltros();
-            aplicarFiltros();
+            aplicarFiltros(true);
         });
     });
     
@@ -1565,7 +1794,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             actualizarUIFiltros();
-            aplicarFiltros();
+            aplicarFiltros(true);
         });
     });
     
@@ -1576,18 +1805,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Cambiar vista (grid / lista)
+    // Cambiar vista y volver a paginar con el tamaño adecuado.
     viewBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             viewBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            if (this.dataset.view === 'grid') {
-                if (productosGrid) productosGrid.classList.remove('list-view');
-                if (insumosGrid) insumosGrid.classList.remove('list-view');
-            } else {
-                if (productosGrid) productosGrid.classList.add('list-view');
-                if (insumosGrid) insumosGrid.classList.add('list-view');
-            }
+
+            vistaActual = this.dataset.view === 'list' ? 'list' : 'grid';
+            const usarLista = vistaActual === 'list';
+
+            if (productosGrid) productosGrid.classList.toggle('list-view', usarLista);
+            if (insumosGrid) insumosGrid.classList.toggle('list-view', usarLista);
+
+            aplicarFiltros(true);
         });
     });
     
@@ -1596,9 +1826,15 @@ document.addEventListener('DOMContentLoaded', function() {
         clearAllFilters.addEventListener('click', limpiarTodosFiltros);
     }
     
+    let resizeInventarioTimer = null;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeInventarioTimer);
+        resizeInventarioTimer = setTimeout(() => aplicarFiltros(false), 180);
+    });
+
     // Inicializar
     actualizarUIFiltros();
-    aplicarFiltros();
+    aplicarFiltros(true);
 });
 </script>
 

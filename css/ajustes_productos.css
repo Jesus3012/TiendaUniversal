@@ -874,3 +874,588 @@
         padding: 0;
     }
 }
+
+
+/* =====================================================
+   PRODUCTOS ESPECIALES Y EDICIÓN DE PRECIO
+===================================================== */
+.badge-producto-especial {
+    background: #ede9fe;
+    color: #6d28d9;
+    border: 1px solid #c4b5fd;
+}
+
+.badge-especial {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.producto-especial-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 21px;
+    height: 21px;
+    margin-left: 5px;
+    border-radius: 50%;
+    background: #ede9fe;
+    color: #7c3aed;
+    font-size: 0.65rem;
+    vertical-align: middle;
+}
+
+.btn-stock-bloqueado,
+.btn-stock-bloqueado:disabled {
+    opacity: 0.38 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    filter: grayscale(0.35);
+}
+
+.stock-actual-especial {
+    color: #7c3aed !important;
+    font-size: 1rem !important;
+}
+
+.stock-especial-edit {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid #ddd6fe;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #faf5ff, #ffffff);
+}
+
+.switch-especial-label {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 !important;
+    cursor: pointer;
+}
+
+.switch-especial-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.switch-especial-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #4c1d95;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.switch-especial-title i {
+    color: #7c3aed;
+}
+
+.switch-especial-copy small {
+    margin-top: 2px;
+    color: #7c3aed;
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.switch-especial-control {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex: 0 0 44px;
+}
+
+.switch-especial-control input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.switch-especial-slider {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: 0.2s ease;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.switch-especial-slider::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.25);
+    transition: 0.2s ease;
+}
+
+.switch-especial-control input:checked + .switch-especial-slider {
+    background: #7c3aed;
+}
+
+.switch-especial-control input:checked + .switch-especial-slider::before {
+    transform: translateX(20px);
+}
+
+.switch-especial-control input:focus-visible + .switch-especial-slider {
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+}
+
+.stock-especial-aviso {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #ede9fe;
+    color: #6d28d9;
+    font-size: 0.68rem;
+    line-height: 1.4;
+}
+
+.precio-final-preview {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    margin-top: 6px;
+    padding: 6px 9px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.precio-final-preview i {
+    color: #94a3b8;
+}
+
+.precio-final-preview.precio-preview-activo {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.precio-final-preview.precio-preview-activo i {
+    color: #16a34a;
+}
+
+@media (max-width: 768px) {
+    .tipo-especial {
+        background: #ede9fe;
+        color: #6d28d9;
+    }
+
+    .stock-especial {
+        background: #ede9fe;
+        color: #6d28d9;
+    }
+
+    .accion-btn.accion-bloqueada,
+    .accion-btn.accion-bloqueada:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        filter: grayscale(0.4);
+    }
+
+    .switch-especial-label {
+        align-items: center;
+    }
+}
+
+/* =====================================================
+   AJUSTE FINAL RESPONSIVO
+   - Toolbar en una sola línea en escritorio
+   - Tabla compacta sin textos partidos
+   - Acciones siempre en una sola fila
+===================================================== */
+
+/* ---------- Barra superior de filtros ---------- */
+.toolbar-filtros {
+    display: grid !important;
+    grid-template-columns:
+        max-content
+        minmax(190px, 1fr)
+        minmax(190px, 250px)
+        max-content;
+    align-items: center !important;
+    justify-content: stretch !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 16px !important;
+}
+
+.filtros-botones {
+    display: inline-flex !important;
+    align-items: center;
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    min-width: 0;
+}
+
+.btn-filtro-tabla {
+    min-height: 40px;
+    padding: 7px 14px !important;
+    border-radius: 12px !important;
+    font-size: 0.76rem !important;
+    white-space: nowrap;
+}
+
+.buscador {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+}
+
+.buscador input {
+    width: 100%;
+    height: 42px;
+    padding: 8px 36px 8px 14px;
+    border-radius: 12px;
+    text-overflow: ellipsis;
+}
+
+.filtro-proveedor-wrap {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 250px;
+}
+
+#filtroProveedor {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    padding-right: 34px;
+    text-overflow: ellipsis;
+}
+
+.btn-limpiar-filtros {
+    width: auto !important;
+    min-width: 132px !important;
+    height: 42px !important;
+    padding: 0 15px !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
+    font-size: 0.76rem !important;
+    white-space: nowrap !important;
+}
+
+/* ---------- Tabla de escritorio ---------- */
+@media (min-width: 769px) {
+    .table-responsive {
+        width: 100%;
+        overflow-x: hidden !important;
+    }
+
+    #tablaInventario {
+        width: 100% !important;
+        table-layout: fixed;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    #tablaInventario thead th,
+    #tablaInventario tbody td {
+        padding: 10px 7px !important;
+        line-height: 1.2;
+        vertical-align: middle;
+        white-space: nowrap !important;
+    }
+
+    #tablaInventario thead th {
+        font-size: clamp(0.66rem, 0.75vw, 0.78rem) !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #tablaInventario tbody td {
+        font-size: clamp(0.68rem, 0.76vw, 0.8rem) !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Anchos equilibrados para que la tabla no se rompa */
+    #tablaInventario th:nth-child(1),
+    #tablaInventario td:nth-child(1) {
+        width: 10%;
+    }
+
+    #tablaInventario th:nth-child(2),
+    #tablaInventario td:nth-child(2) {
+        width: 14%;
+    }
+
+    #tablaInventario th:nth-child(3),
+    #tablaInventario td:nth-child(3) {
+        width: 9%;
+    }
+
+    #tablaInventario th:nth-child(4),
+    #tablaInventario td:nth-child(4) {
+        width: 10%;
+    }
+
+    #tablaInventario th:nth-child(5),
+    #tablaInventario td:nth-child(5) {
+        width: 6%;
+    }
+
+    #tablaInventario th:nth-child(6),
+    #tablaInventario td:nth-child(6) {
+        width: 9%;
+    }
+
+    #tablaInventario th:nth-child(7),
+    #tablaInventario td:nth-child(7),
+    #tablaInventario th:nth-child(8),
+    #tablaInventario td:nth-child(8) {
+        width: 7%;
+    }
+
+    #tablaInventario th:nth-child(9),
+    #tablaInventario td:nth-child(9) {
+        width: 10%;
+    }
+
+    #tablaInventario th:nth-child(10),
+    #tablaInventario td:nth-child(10) {
+        width: 6%;
+    }
+
+    #tablaInventario th:nth-child(11),
+    #tablaInventario td:nth-child(11) {
+        width: 12%;
+    }
+
+    #tablaInventario td:nth-child(2),
+    #tablaInventario td:nth-child(3),
+    #tablaInventario td:nth-child(4) {
+        max-width: 0;
+    }
+
+    #tablaInventario td:nth-child(5),
+    #tablaInventario td:nth-child(6),
+    #tablaInventario td:nth-child(7),
+    #tablaInventario td:nth-child(8),
+    #tablaInventario td:nth-child(9),
+    #tablaInventario td:nth-child(10),
+    #tablaInventario td:nth-child(11) {
+        text-align: center !important;
+    }
+
+    /* Badges compactos y siempre en una línea */
+    #tablaInventario .badge-tipo,
+    #tablaInventario .badge-info,
+    #tablaInventario .badge-success,
+    #tablaInventario .badge-warning,
+    #tablaInventario .badge-danger,
+    #tablaInventario .badge-secondary,
+    #tablaInventario .badge-adquisicion,
+    #tablaInventario .badge-especial {
+        max-width: 100%;
+        padding: 4px 8px !important;
+        font-size: clamp(0.6rem, 0.65vw, 0.69rem) !important;
+        line-height: 1.15;
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+    }
+
+    #tablaInventario .badge-adquisicion {
+        display: inline-flex;
+        flex-wrap: nowrap !important;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    #tablaInventario .producto-especial-mini {
+        width: 18px;
+        height: 18px;
+        margin-left: 3px;
+        font-size: 0.58rem;
+    }
+
+    #tablaInventario .img-thumbnail {
+        width: 34px !important;
+        height: 34px !important;
+        padding: 2px;
+    }
+
+    /* Acciones en una sola línea */
+    #tablaInventario td:last-child {
+        overflow: visible !important;
+        white-space: nowrap !important;
+    }
+
+    #tablaInventario .btn-group {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: nowrap !important;
+        gap: 2px;
+        white-space: nowrap;
+    }
+
+    #tablaInventario .btn-group .btn {
+        width: 29px;
+        min-width: 29px;
+        height: 29px;
+        padding: 0 !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px !important;
+        font-size: 0.68rem !important;
+    }
+
+    #tablaInventario .btn-group .btn + .btn {
+        margin-left: 0;
+    }
+}
+
+/* ---------- Escritorios medianos ---------- */
+@media (min-width: 769px) and (max-width: 1280px) {
+    .content-wrapper {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .toolbar-filtros {
+        grid-template-columns:
+            max-content
+            minmax(160px, 1fr)
+            minmax(170px, 215px)
+            max-content;
+        gap: 7px !important;
+        padding: 10px !important;
+    }
+
+    .btn-filtro-tabla {
+        padding: 7px 10px !important;
+    }
+
+    .btn-filtro-tabla i {
+        margin-right: 4px;
+    }
+
+    .btn-limpiar-filtros {
+        min-width: 112px !important;
+        padding: 0 11px !important;
+    }
+
+    #tablaInventario thead th,
+    #tablaInventario tbody td {
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+    }
+
+    #tablaInventario .badge-tipo,
+    #tablaInventario .badge-info,
+    #tablaInventario .badge-adquisicion,
+    #tablaInventario .badge-especial {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+
+    #tablaInventario .btn-group .btn {
+        width: 27px;
+        min-width: 27px;
+        height: 27px;
+    }
+}
+
+/* ---------- Tabletas: toolbar ordenado en dos filas ---------- */
+@media (min-width: 769px) and (max-width: 980px) {
+    .toolbar-filtros {
+        grid-template-columns: minmax(0, 1fr) minmax(180px, 230px) max-content;
+    }
+
+    .filtros-botones {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    .btn-filtro-tabla {
+        flex: 1 1 0;
+        justify-content: center;
+    }
+
+    #tablaInventario .btn-group .btn {
+        width: 25px;
+        min-width: 25px;
+        height: 25px;
+        font-size: 0.62rem !important;
+    }
+}
+
+/* ---------- Móvil: controles compactos y bien alineados ---------- */
+@media (max-width: 768px) {
+    .toolbar-filtros {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 9px !important;
+        padding: 10px !important;
+    }
+
+    .filtros-botones {
+        grid-column: 1 / -1;
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 7px !important;
+    }
+
+    .btn-filtro-tabla {
+        width: 100%;
+        min-width: 0;
+        padding: 7px 6px !important;
+        justify-content: center;
+    }
+
+    .buscador {
+        grid-column: 1 / -1;
+    }
+
+    .filtro-proveedor-wrap {
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    .btn-limpiar-filtros {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .toolbar-filtros {
+        grid-template-columns: 1fr !important;
+    }
+
+    .filtro-proveedor-wrap,
+    .btn-limpiar-filtros {
+        grid-column: 1;
+    }
+
+    .btn-limpiar-filtros {
+        min-height: 40px;
+    }
+}

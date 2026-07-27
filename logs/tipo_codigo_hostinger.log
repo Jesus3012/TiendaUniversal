@@ -6,3 +6,17 @@
 [2026-07-24 22:37:00] BD despues de update | {"id":156,"tipo_codigo_final":"multiple","tipo_codigo_guardado":"multiple"}
 [2026-07-24 22:37:26] POST update producto | {"id":156,"tipo_codigo_actual_bd":"multiple","post_tipo_codigo":"unico","post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico"}
 [2026-07-24 22:37:26] BD despues de update | {"id":156,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
+[2026-07-27 19:27:28] POST update producto | {"id":157,"tipo_codigo_actual_bd":"unico","post_tipo_codigo":"multiple","post_tipo_codigo_respaldo":"multiple","post_tipo_codigo_forzado":"multiple","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"multiple","tiene_codigo_legado":0}
+[2026-07-27 19:27:28] BD despues de update | {"id":157,"tipo_codigo_final":"multiple","tipo_codigo_guardado":"multiple"}
+[2026-07-27 19:27:57] POST update producto | {"id":157,"tipo_codigo_actual_bd":"multiple","post_tipo_codigo":"unico","post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico","tiene_codigo_legado":0}
+[2026-07-27 19:27:57] BD despues de update | {"id":157,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
+[2026-07-27 19:28:44] POST update producto | {"id":157,"tipo_codigo_actual_bd":"unico","post_tipo_codigo":"unico","post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico","tiene_codigo_legado":0}
+[2026-07-27 19:28:44] BD despues de update | {"id":157,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
+[2026-07-27 19:36:07] POST update producto | {"id":157,"tipo_codigo_actual_bd":"unico","post_tipo_codigo":"multiple","post_tipo_codigo_respaldo":"multiple","post_tipo_codigo_forzado":"multiple","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"multiple","tiene_codigo_legado":0}
+[2026-07-27 19:36:07] BD despues de update | {"id":157,"tipo_codigo_final":"multiple","tipo_codigo_guardado":"multiple"}
+[2026-07-27 19:36:29] POST update producto | {"id":157,"tipo_codigo_actual_bd":"multiple","post_tipo_codigo":"unico","post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico","tiene_codigo_legado":0}
+[2026-07-27 19:36:29] BD despues de update | {"id":157,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
+[2026-07-27 21:29:53] POST update producto | {"id":158,"tipo_codigo_actual_bd":"unico","post_tipo_codigo":"unico","post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico","stock_especial_anterior":1,"stock_especial_nuevo":0,"precio_venta_tocado":0,"precio_venta_guardado":10,"tiene_codigo_legado":0}
+[2026-07-27 21:29:53] BD despues de update | {"id":158,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
+[2026-07-27 21:38:06] POST update producto | {"id":158,"tipo_codigo_actual_bd":"unico","post_tipo_codigo":null,"post_tipo_codigo_respaldo":"unico","post_tipo_codigo_forzado":"unico","post_tipo_codigo_tocado":"1","tipo_codigo_decidido":"unico","stock_especial_anterior":0,"stock_especial_nuevo":1,"precio_venta_tocado":1,"precio_venta_guardado":10,"tiene_codigo_legado":0}
+[2026-07-27 21:38:06] BD despues de update | {"id":158,"tipo_codigo_final":"unico","tipo_codigo_guardado":"unico"}
