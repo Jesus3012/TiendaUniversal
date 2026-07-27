@@ -329,12 +329,19 @@
 /* FILTROS */
 
 .filter-toolbar {
-    padding: 15px;
+    padding: 16px 20px;
     display: grid;
-    grid-template-columns: 1.35fr repeat(3, 1fr);
-    gap: 12px;
+    grid-template-columns:
+        minmax(280px, 1.45fr)
+        repeat(4, minmax(165px, 1fr));
+    align-items: center;
+    gap: 10px;
     background: #fff;
     border-bottom: 1px solid var(--gray-200);
+}
+
+.filter-toolbar > .filter-control {
+    min-width: 0;
 }
 
 .filter-control {
@@ -344,19 +351,27 @@
 .filter-control input,
 .filter-control select {
     width: 100%;
-    height: 42px;
+    min-width: 0;
+    height: 44px;
     border: 1px solid var(--gray-300);
-    border-radius: 40px;
-    padding: 0 14px;
+    border-radius: 14px;
+    padding: 0 13px;
     background: #fff;
     color: var(--gray-800);
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 0.82rem;
+    font-weight: 600;
     outline: none;
+    text-overflow: ellipsis;
+}
+
+.filter-control select {
+    cursor: pointer;
+    padding-right: 32px;
 }
 
 .search-control input {
     padding-left: 42px;
+    font-weight: 500;
 }
 
 .search-control i {
@@ -744,13 +759,34 @@
     }
 }
 
+@media (max-width: 1399px) and (min-width: 1200px) {
+    .filter-toolbar {
+        grid-template-columns:
+            minmax(250px, 1.35fr)
+            repeat(4, minmax(145px, 1fr));
+        gap: 8px;
+        padding-inline: 14px;
+    }
+
+    .filter-control input,
+    .filter-control select {
+        font-size: 0.78rem;
+        padding-left: 11px;
+        padding-right: 28px;
+    }
+
+    .search-control input {
+        padding-left: 39px;
+    }
+}
+
 @media (max-width: 1199px) {
     .filter-toolbar {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .search-control {
-        grid-column: span 2;
+        grid-column: 1 / -1;
     }
 
     .productos-grid {

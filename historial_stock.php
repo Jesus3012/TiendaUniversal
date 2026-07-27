@@ -1,18 +1,59 @@
 <?php
 ob_start();
-session_start();
 date_default_timezone_set('America/Mexico_City');
 
-require_once 'includes/db.php';
-require_once 'includes/csrf.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/permisos.php';
+require_once __DIR__ . '/includes/csrf.php';
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
-    header("Location: login.php");
+/*
+|--------------------------------------------------------------------------
+| Protección del historial de stock
+|--------------------------------------------------------------------------
+| Administrador y superadministrador pueden acceder. Una sesión válida con
+| otro rol se dirige a sin_permiso.php y no se trata como sesión cerrada.
+*/
+
+$usuario_id_sesion = function_exists('permisos_usuario_id')
+    ? permisos_usuario_id()
+    : (int) (
+        $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? 0
+    );
+
+$rol_actual = function_exists('permisos_normalizar_rol')
+    ? permisos_normalizar_rol($_SESSION['rol'] ?? '')
+    : strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$roles_permitidos = [
+    'administrador',
+    'super_administrador',
+];
+
+if ($usuario_id_sesion <= 0) {
+    header('Location: login.php?expired=1');
     exit;
 }
 
-include 'includes/header.php';
-include 'includes/navbar.php';
+if (!in_array($rol_actual, $roles_permitidos, true)) {
+    header('Location: sin_permiso.php?modulo=historial_stock.php');
+    exit;
+}
+
+/*
+ * Mantener compatibles las claves de sesión utilizadas en archivos antiguos.
+ */
+$_SESSION['usuario_id'] = $usuario_id_sesion;
+$_SESSION['id_usuario'] = $usuario_id_sesion;
+$_SESSION['id'] = $usuario_id_sesion;
+$_SESSION['rol'] = $rol_actual;
+$_SESSION['last_activity'] = time();
+
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/navbar.php';
 
 // Configuración de paginación
 $registros_por_pagina = isset($_GET['por_pagina']) ? $_GET['por_pagina'] : 25;
@@ -627,4 +668,4 @@ $(document).ready(function() {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

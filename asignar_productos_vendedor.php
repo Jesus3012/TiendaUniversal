@@ -1,16 +1,57 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED);
-session_start();
 
-require_once 'includes/db.php';
-require_once 'includes/csrf.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/permisos.php';
+require_once __DIR__ . '/includes/csrf.php';
 
-if (!isset($_SESSION['usuario_id']) || ($_SESSION['rol'] ?? '') !== 'administrador') {
-    header('Location: login.php');
+/*
+|--------------------------------------------------------------------------
+| Protección del módulo de asignación de productos
+|--------------------------------------------------------------------------
+| Administrador y superadministrador pueden gestionar las asignaciones.
+| Una sesión válida con otro rol va a sin_permiso.php, no al login.
+*/
+
+$adminId = function_exists('permisos_usuario_id')
+    ? permisos_usuario_id()
+    : (int) (
+        $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? 0
+    );
+
+$rolActual = function_exists('permisos_normalizar_rol')
+    ? permisos_normalizar_rol($_SESSION['rol'] ?? '')
+    : strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$rolesPermitidos = [
+    'administrador',
+    'super_administrador',
+];
+
+if ($adminId <= 0) {
+    header('Location: login.php?expired=1');
     exit;
 }
 
-$adminId = (int)$_SESSION['usuario_id'];
+if (!in_array($rolActual, $rolesPermitidos, true)) {
+    header('Location: sin_permiso.php?modulo=asignar_productos_vendedor.php');
+    exit;
+}
+
+/*
+ * Mantener compatibles las distintas claves de sesión utilizadas
+ * por archivos antiguos del sistema.
+ */
+$_SESSION['usuario_id'] = $adminId;
+$_SESSION['id_usuario'] = $adminId;
+$_SESSION['id'] = $adminId;
+$_SESSION['rol'] = $rolActual;
+$_SESSION['last_activity'] = time();
+
 $errors = [];
 
 function e($value) {
@@ -283,8 +324,8 @@ foreach ($vendedores as $v) {
     }
 }
 
-include 'includes/header.php';
-include 'includes/navbar.php';
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/navbar.php';
 ?>
 
 <link rel="stylesheet" href="css/asignar_productos_vendedor.css?v=<?= time() ?>">
@@ -483,6 +524,14 @@ include 'includes/navbar.php';
                                     <option value="concesion">Concesión</option>
                                 </select>
                             </div>
+
+                            <div class="filter-control">
+                                <select id="filtroAsignacion">
+                                    <option value="">Estado de asignación</option>
+                                    <option value="seleccionados">Solo seleccionados</option>
+                                    <option value="no_seleccionados">No seleccionados</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="selection-summary">
@@ -662,6 +711,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const filtroProveedor = document.getElementById('filtroProveedor');
     const filtroCategoria = document.getElementById('filtroCategoria');
     const filtroAdquisicion = document.getElementById('filtroAdquisicion');
+    const filtroAsignacion = document.getElementById('filtroAsignacion');
 
     const items = Array.from(document.querySelectorAll('.producto-item'));
     const contadorAsignados = document.getElementById('contadorAsignados');
@@ -775,14 +825,33 @@ document.addEventListener('DOMContentLoaded', function () {
         const prov = (filtroProveedor?.value || '').trim().toLowerCase();
         const cat = (filtroCategoria?.value || '').trim().toLowerCase();
         const tipo = (filtroAdquisicion?.value || '').trim().toLowerCase();
+        const estadoAsignacion = (filtroAsignacion?.value || '').trim().toLowerCase();
 
         filtrados = items.filter(item => {
+            const input = item.querySelector('input[name="productos[]"]');
+            const estaSeleccionado = Boolean(input?.checked);
+            const estaBloqueado = Boolean(input?.disabled);
+
             const matchSearch = !q || item.dataset.search.includes(q);
             const matchProv = !prov || item.dataset.proveedor === prov;
             const matchCat = !cat || item.dataset.categoria === cat;
             const matchTipo = !tipo || item.dataset.adquisicion === tipo;
 
-            return matchSearch && matchProv && matchCat && matchTipo;
+            let matchAsignacion = true;
+
+            if (estadoAsignacion === 'seleccionados') {
+                matchAsignacion = estaSeleccionado && !estaBloqueado;
+            } else if (estadoAsignacion === 'no_seleccionados') {
+                matchAsignacion = !estaSeleccionado && !estaBloqueado;
+            }
+
+            return (
+                matchSearch
+                && matchProv
+                && matchCat
+                && matchTipo
+                && matchAsignacion
+            );
         });
 
         if (resetPage) paginaActual = 1;
@@ -798,12 +867,41 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.querySelectorAll('input[name="productos[]"]').forEach(input => {
-        input.addEventListener('change', actualizarTarjetas);
+        input.addEventListener('change', function () {
+            actualizarTarjetas();
+
+            /*
+             * Si está activo el filtro de asignación, la tarjeta se muestra
+             * u oculta inmediatamente después de marcarla o desmarcarla.
+             */
+            if (filtroAsignacion?.value) {
+                aplicarFiltros(false);
+            }
+        });
     });
 
-    [buscar, filtroProveedor, filtroCategoria, filtroAdquisicion].forEach(el => {
-        if (el) el.addEventListener('input', () => aplicarFiltros(true));
-        if (el) el.addEventListener('change', () => aplicarFiltros(true));
+    /*
+     * Actualización inmediata:
+     * - el buscador responde mientras se escribe;
+     * - los selectores responden al cambiar su opción.
+     */
+    if (buscar) {
+        buscar.addEventListener('input', function () {
+            aplicarFiltros(true);
+        });
+    }
+
+    [
+        filtroProveedor,
+        filtroCategoria,
+        filtroAdquisicion,
+        filtroAsignacion
+    ].forEach(select => {
+        if (!select) return;
+
+        select.addEventListener('change', function () {
+            aplicarFiltros(true);
+        });
     });
 
     if (productosPorPagina) {
@@ -844,6 +942,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             actualizarTarjetas();
 
+            if (filtroAsignacion?.value) {
+                aplicarFiltros(false);
+            }
+
             if (typeof Swal !== 'undefined') {
                 Swal.fire({
                     icon: 'success',
@@ -863,6 +965,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (filtroProveedor) filtroProveedor.value = '';
             if (filtroCategoria) filtroCategoria.value = '';
             if (filtroAdquisicion) filtroAdquisicion.value = '';
+            if (filtroAsignacion) filtroAsignacion.value = '';
 
             document.querySelectorAll('input[name="productos[]"]').forEach(i => {
                 if (!i.disabled) i.checked = false;

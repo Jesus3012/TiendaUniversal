@@ -308,7 +308,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       </div>
 
       <div class="mobile-nav-links">
-          <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i> Panel administrativo</a>
+          <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i> Inicio</a>
           <?php if (!$es_super_admin): ?>
           <a href="dashboard_vendedor.php" data-modulo="panel_vendedor" data-permitido="<?php echo navbar_modulo_permitido('panel_vendedor') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-gauge-high"></i> Panel vendedor</a>
           <?php endif; ?>
@@ -368,7 +368,7 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
     </div>
 
     <div class="nav-links">
-        <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i><span>Panel administrativo</span></a>
+        <a href="dashboard_admin.php" data-modulo="panel_admin" data-permitido="<?php echo navbar_modulo_permitido('panel_admin') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_admin.php'); ?>"><i class="fas fa-house"></i><span>Inicio</span></a>
         <?php if (!$es_super_admin): ?>
         <a href="dashboard_vendedor.php" data-modulo="panel_vendedor" data-permitido="<?php echo navbar_modulo_permitido('panel_vendedor') ? '1' : '0'; ?>" class="<?php echo navbar_clase_activa('dashboard_vendedor.php'); ?>"><i class="fas fa-gauge-high"></i><span>Panel vendedor</span></a>
         <?php endif; ?>

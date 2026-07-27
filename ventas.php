@@ -155,6 +155,82 @@ function abrir_cajon_dinero(): array
     ];
 }
 
+
+// ==========================================================
+// PRECIOS SEGÚN MÉTODO DE PAGO
+// - Tarjeta: conserva el precio base.
+// - Efectivo/transferencia: aplica el descuento configurado.
+// - El precio unitario final se redondea al peso entero más cercano.
+// ==========================================================
+function pos_configuracion_precios(mysqli $conn): array
+{
+    $config = [
+        'descuento_efectivo' => 3.00,
+        'descuento_transferencia' => 3.00,
+        'redondear_entero' => 1,
+        'activo' => 1,
+    ];
+
+    try {
+        $result = $conn->query("
+            SELECT descuento_efectivo,
+                   descuento_transferencia,
+                   redondear_entero,
+                   activo
+            FROM configuracion_precios_pago
+            WHERE id = 1
+            LIMIT 1
+        ");
+
+        if ($result && ($row = $result->fetch_assoc())) {
+            $config['descuento_efectivo'] = max(0, min(100, (float) $row['descuento_efectivo']));
+            $config['descuento_transferencia'] = max(0, min(100, (float) $row['descuento_transferencia']));
+            $config['redondear_entero'] = (int) $row['redondear_entero'] === 1 ? 1 : 0;
+            $config['activo'] = (int) $row['activo'] === 1 ? 1 : 0;
+        }
+    } catch (Throwable $e) {
+        // Permite que el POS siga funcionando antes de ejecutar la migración.
+        cajon_log('Configuración de precios no disponible; se usó 3% por defecto. ' . $e->getMessage());
+    }
+
+    return $config;
+}
+
+function pos_descuento_por_metodo(string $metodoPago, array $config): float
+{
+    if (($config['activo'] ?? 1) !== 1) {
+        return 0.00;
+    }
+
+    if ($metodoPago === 'efectivo') {
+        return (float) ($config['descuento_efectivo'] ?? 0);
+    }
+
+    if ($metodoPago === 'transferencia') {
+        return (float) ($config['descuento_transferencia'] ?? 0);
+    }
+
+    return 0.00;
+}
+
+function pos_precio_por_metodo(float $precioBase, string $metodoPago, array $config): float
+{
+    $precioBase = max(0, $precioBase);
+    $porcentaje = pos_descuento_por_metodo($metodoPago, $config);
+    $precioFinal = $precioBase * (1 - ($porcentaje / 100));
+
+    if (($config['redondear_entero'] ?? 1) === 1) {
+        $precioFinal = round($precioFinal, 0, PHP_ROUND_HALF_UP);
+    }
+
+    return max(0, (float) $precioFinal);
+}
+
+$posConfigPrecios = pos_configuracion_precios($conn);
+$posDescuentoEfectivo = (float) $posConfigPrecios['descuento_efectivo'];
+$posDescuentoTransferencia = (float) $posConfigPrecios['descuento_transferencia'];
+$posRedondearEntero = (int) $posConfigPrecios['redondear_entero'] === 1;
+
 // Validar sesión y roles autorizados para el punto de venta.
 $usuario_id_sesion = (int) ($_SESSION['usuario_id'] ?? 0);
 $rol_actual = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
@@ -237,16 +313,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
         $referencia_pago = null;
     }
 
-    $id_vendedor = $_SESSION['usuario_id'];
+    $id_vendedor = (int) $_SESSION['usuario_id'];
+    $metodosPermitidos = ['efectivo', 'transferencia', 'tarjeta_debito', 'tarjeta_credito'];
 
-    if (empty($carrito)) {
+    if (!in_array($metodo_pago, $metodosPermitidos, true)) {
+        $_SESSION['alerta'] = [
+            'tipo' => 'error',
+            'titulo' => 'Método no válido',
+            'mensaje' => 'Selecciona un método de pago válido.'
+        ];
+        header("Location: " . $_SERVER['PHP_SELF']);
+        exit;
+    }
+
+    if (empty($carrito) || !is_array($carrito)) {
         $_SESSION['alerta'] = ['tipo' => 'error', 'titulo' => 'Carrito vacío', 'mensaje' => 'Agrega al menos un producto antes de registrar la venta.'];
         header("Location: " . $_SERVER['PHP_SELF']);
         exit;
     } else {
-        $total = 0;
-        foreach ($carrito as $item) $total += $item['precio'] * $item['cantidad'];
-        $cambio = $monto_pagado - $total;
+        /*
+         * No se confía en el precio enviado por JavaScript.
+         * Se vuelve a consultar cada producto y se calcula el precio real en servidor.
+         */
+        $carritoValidado = [];
+        $totalBase = 0.00;
+        $total = 0.00;
+        $descuentoTotal = 0.00;
+        $descuentoPorcentajeVenta = pos_descuento_por_metodo((string) $metodo_pago, $posConfigPrecios);
+        $erroresCarrito = [];
+
+        $stmtProductoVenta = $conn->prepare("
+            SELECT id, nombre, cantidad, precio_venta, imagen, categoria
+            FROM productos
+            WHERE id = ?
+              AND activo = 1
+              AND tipo_inventario = 'producto'
+            LIMIT 1
+        ");
+
+        foreach ($carrito as $itemRecibido) {
+            $productoId = (int) ($itemRecibido['id'] ?? 0);
+            $cantidadSolicitada = (int) ($itemRecibido['cantidad'] ?? 0);
+
+            if ($productoId <= 0 || $cantidadSolicitada <= 0) {
+                $erroresCarrito[] = 'Se recibió un artículo o cantidad no válida.';
+                continue;
+            }
+
+            $stmtProductoVenta->bind_param('i', $productoId);
+            $stmtProductoVenta->execute();
+            $productoDb = $stmtProductoVenta->get_result()->fetch_assoc();
+
+            if (!$productoDb) {
+                $erroresCarrito[] = 'Un producto ya no está disponible.';
+                continue;
+            }
+
+            if ((int) $productoDb['cantidad'] < $cantidadSolicitada) {
+                $erroresCarrito[] = $productoDb['nombre'] . ' (stock disponible: ' . (int) $productoDb['cantidad'] . ')';
+                continue;
+            }
+
+            $precioBase = (float) $productoDb['precio_venta'];
+            $precioUnitario = pos_precio_por_metodo($precioBase, (string) $metodo_pago, $posConfigPrecios);
+            $descuentoUnitario = max(0, $precioBase - $precioUnitario);
+            $subtotalBase = $precioBase * $cantidadSolicitada;
+            $subtotalFinal = $precioUnitario * $cantidadSolicitada;
+
+            $totalBase += $subtotalBase;
+            $total += $subtotalFinal;
+            $descuentoTotal += ($subtotalBase - $subtotalFinal);
+
+            $carritoValidado[] = [
+                'id' => (int) $productoDb['id'],
+                'nombre' => (string) $productoDb['nombre'],
+                'cantidad' => $cantidadSolicitada,
+                'stock' => (int) $productoDb['cantidad'],
+                'imagen' => (string) ($productoDb['imagen'] ?? ''),
+                'categoria' => (string) ($productoDb['categoria'] ?? ''),
+                'precio' => $precioBase,
+                'precio_base' => $precioBase,
+                'precio_unitario' => $precioUnitario,
+                'descuento_porcentaje' => $descuentoPorcentajeVenta,
+                'descuento_unitario' => $descuentoUnitario,
+                'subtotal_base' => $subtotalBase,
+                'subtotal' => $subtotalFinal,
+            ];
+        }
+
+        $stmtProductoVenta->close();
+
+        if (!empty($erroresCarrito) || empty($carritoValidado)) {
+            $_SESSION['alerta'] = [
+                'tipo' => 'error',
+                'titulo' => 'Revisa el carrito',
+                'mensaje' => implode("\n", array_unique($erroresCarrito))
+            ];
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
+        }
+
+        $carrito = $carritoValidado;
+        $totalBase = round($totalBase, 2);
+        $total = round($total, 2);
+        $descuentoTotal = round($descuentoTotal, 2);
+
+        if ($monto_pagado <= 0) {
+            $monto_pagado = $total;
+        }
+
+        $cambio = round($monto_pagado - $total, 2);
 
         if ($cambio < 0) {
             $_SESSION['alerta'] = ['tipo' => 'error', 'titulo' => 'Monto insuficiente', 'mensaje' => 'El monto pagado no cubre el total.'];
@@ -293,16 +469,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                     foreach ($carrito as $item) {
                         $stmt = $conn->prepare("
                             INSERT INTO ventas (
-                                id_producto, cantidad_vendida, correo_cliente, folio_ticket, 
-                                id_vendedor, metodo_pago, referencia_pago, ticket_pdf
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                id_producto,
+                                cantidad_vendida,
+                                correo_cliente,
+                                folio_ticket,
+                                id_vendedor,
+                                metodo_pago,
+                                referencia_pago,
+                                ticket_pdf,
+                                precio_base,
+                                precio_unitario,
+                                descuento_porcentaje,
+                                descuento_monto,
+                                subtotal
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
-                        
+
                         $referencia_safe = $referencia_pago ?? '';
                         $nombre_ticket = 'ticket_' . $folio . '.pdf';
-                        
+                        $precioBaseItem = (float) $item['precio_base'];
+                        $precioUnitarioItem = (float) $item['precio_unitario'];
+                        $descuentoPorcentajeItem = (float) $item['descuento_porcentaje'];
+                        $descuentoMontoItem = (float) ($item['subtotal_base'] - $item['subtotal']);
+                        $subtotalItem = (float) $item['subtotal'];
+
                         $stmt->bind_param(
-                            "iissssss",
+                            "iississsddddd",
                             $item['id'],
                             $item['cantidad'],
                             $correo_cliente,
@@ -310,12 +502,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                             $id_vendedor,
                             $metodo_pago,
                             $referencia_safe,
-                            $nombre_ticket
+                            $nombre_ticket,
+                            $precioBaseItem,
+                            $precioUnitarioItem,
+                            $descuentoPorcentajeItem,
+                            $descuentoMontoItem,
+                            $subtotalItem
                         );
                         $stmt->execute();
                         $stmt->close();
-                        
-                        $conn->query("UPDATE productos SET cantidad = cantidad - {$item['cantidad']} WHERE id={$item['id']}");
+
+                        $stmtStock = $conn->prepare("
+                            UPDATE productos
+                            SET cantidad = cantidad - ?
+                            WHERE id = ?
+                              AND cantidad >= ?
+                        ");
+                        $stmtStock->bind_param(
+                            'iii',
+                            $item['cantidad'],
+                            $item['id'],
+                            $item['cantidad']
+                        );
+                        $stmtStock->execute();
+
+                        if ($stmtStock->affected_rows !== 1) {
+                            $stmtStock->close();
+                            throw new RuntimeException('El stock de ' . $item['nombre'] . ' cambió antes de completar la venta.');
+                        }
+
+                        $stmtStock->close();
                     }
                     
                     require_once('includes/fpdf.php');
@@ -389,17 +605,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         if (strlen($nombreProducto) > 18) {
                             $nombreProducto = substr($nombreProducto, 0, 16) . '..';
                         }
-                        $importe = $p['precio'] * $p['cantidad'];
-                        
+
+                        $importe = (float) $p['subtotal'];
+                        $precioTicket = (float) $p['precio_unitario'];
+
                         $pdf->Cell(38, 4, $nombreProducto, 0, 0, 'L');
                         $pdf->Cell(10, 4, $p['cantidad'], 0, 0, 'C');
-                        $pdf->Cell(10, 4, '$' . number_format($p['precio'], 2), 0, 0, 'C');
+                        $pdf->Cell(10, 4, '$' . number_format($precioTicket, 2), 0, 0, 'C');
                         $pdf->Cell(12, 4, '$' . number_format($importe, 2), 0, 1, 'R');
                     }
 
                     $pdf->Ln(2);
                     $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
                     $pdf->Ln(2);
+
+                    if ($descuentoTotal > 0) {
+                        $pdf->SetFont('Arial', '', 7);
+                        $pdf->Cell(48, 4, 'Precio base:', 0, 0, 'R');
+                        $pdf->Cell(22, 4, '$' . number_format($totalBase, 2), 0, 1, 'R');
+                        $pdf->Cell(48, 4, 'Ahorro por forma de pago:', 0, 0, 'R');
+                        $pdf->Cell(22, 4, '-$' . number_format($descuentoTotal, 2), 0, 1, 'R');
+                    }
 
                     $pdf->SetFont('Arial', 'B', 9);
                     $pdf->Cell(48, 5, 'TOTAL:', 0, 0, 'R');
@@ -456,20 +682,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                     $productosAlerta = [];
                     foreach ($carrito as $itemAlerta) {
                         $cantidadAlerta = (int) ($itemAlerta['cantidad'] ?? 0);
-                        $precioAlerta = (float) ($itemAlerta['precio'] ?? 0);
+                        $precioAlerta = (float) ($itemAlerta['precio_unitario'] ?? $itemAlerta['precio'] ?? 0);
                         $productosAlerta[] = [
                             'id' => (int) ($itemAlerta['id'] ?? 0),
                             'nombre' => (string) ($itemAlerta['nombre'] ?? ''),
                             'cantidad' => $cantidadAlerta,
                             'precio' => $precioAlerta,
-                            'importe' => $precioAlerta * $cantidadAlerta
+                            'precio_base' => (float) ($itemAlerta['precio_base'] ?? $precioAlerta),
+                            'importe' => (float) ($itemAlerta['subtotal'] ?? ($precioAlerta * $cantidadAlerta))
                         ];
                     }
                     
                     $_SESSION['carrito'] = [];
                     
-                    $mensaje = "Venta registrada correctamente.
-Cambio: $" . number_format($cambio, 2);
+                    $mensaje = "Venta registrada correctamente.";
+                    if ($descuentoTotal > 0) {
+                        $mensaje .= "\nAhorro por forma de pago: $" . number_format($descuentoTotal, 2);
+                    }
+                    $mensaje .= "\nCambio: $" . number_format($cambio, 2);
                     if ($ticketEnviado) $mensaje .= "
 Ticket enviado a $correo_cliente";
 
@@ -486,6 +716,9 @@ El sistema intentará abrir el cajón en la PC del cajero.";
                         'folio' => $folio,
                         'fecha' => date('d/m/Y H:i:s'),
                         'productos' => $productosAlerta,
+                        'total_base' => (float) $totalBase,
+                        'descuento_total' => (float) $descuentoTotal,
+                        'descuento_porcentaje' => (float) $descuentoPorcentajeVenta,
                         'total' => (float) $total,
                         'monto_pagado' => (float) $monto_pagado,
                         'cambio' => (float) $cambio,
@@ -641,7 +874,9 @@ if ($productos_result) {
                         <div class="producto-nombre-card" title="<?= htmlspecialchars($p['nombre']) ?>">
                             <?= htmlspecialchars(mb_substr($p['nombre'], 0, 22)) ?>
                         </div>
-                        <div class="producto-precio-card">$<?= number_format($p['precio_venta'], 2) ?></div>
+                        <div class="producto-precio-card">
+                            $<?= number_format((float) $p['precio_venta'], 2) ?>
+                        </div>
                         <div class="producto-stock-card">Stock: <?= $p['stock'] ?></div>
                         <button class="btn-agregar-card" onclick="event.stopPropagation(); agregarProductoCard(this.parentElement)">
                             <i class="fas fa-cart-plus me-1"></i> Agregar
@@ -744,6 +979,8 @@ if ($productos_result) {
                     </div>
                 </div>
 
+                <div id="resumenDescuentoPago" class="pos-descuento-pago" hidden></div>
+
                 <div class="form-group mb-3 pos-correo">
                     <label class="small-label"><i class="fas fa-envelope me-2"></i> Correo del cliente</label>
                     <input type="email" class="form-control form-control-sm" name="correo_cliente" id="correo_cliente" placeholder="cliente@ejemplo.com">
@@ -767,8 +1004,11 @@ if ($productos_result) {
                             <input type="radio" name="metodo_pago" value="transferencia">
                             <div class="check-indicator"><i class="fas fa-check-circle"></i></div>
                             <div class="metodo-content">
-                                <img src="https://cdn-icons-png.flaticon.com/512/2331/2331947.png" class="icono-metodo-color" alt="transferencia">
-                                <span>Transf.</span>
+                                <div class="icono-transferencia-pos" aria-hidden="true">
+                                    <i class="fas fa-university"></i>
+                                    <i class="fas fa-exchange-alt"></i>
+                                </div>
+                                <span>Transferencia</span>
                             </div>
                         </label>
 
@@ -831,6 +1071,9 @@ const ALERTA_SESION = <?= json_encode($alerta ?? null, JSON_UNESCAPED_UNICODE) ?
 const POS_STORAGE_ACTIVA = 'pos_venta_activa';
 const POS_STORAGE_PENDIENTES = 'pos_ventas_pendientes';
 const CAJON_LOCAL_URL = 'http://127.0.0.1:8787/abrir-cajon';
+const POS_DESCUENTO_EFECTIVO = <?= json_encode($posDescuentoEfectivo) ?>;
+const POS_DESCUENTO_TRANSFERENCIA = <?= json_encode($posDescuentoTransferencia) ?>;
+const POS_REDONDEAR_ENTERO = <?= $posRedondearEntero ? 'true' : 'false' ?>;
 let ventaEnProceso = false;
 let buscandoProducto = false;
 let timerCodigo = null; // conservado por compatibilidad; el auto-agregado ahora usa codigoScannerTimer.
@@ -1221,12 +1464,49 @@ function limpiarVentaActivaLocal() {
     localStorage.removeItem(POS_STORAGE_ACTIVA);
 }
 
-function calcularTotalCarrito(items) {
-    return (items || []).reduce((sum, item) => sum + ((parseFloat(item.precio) || 0) * (parseInt(item.cantidad) || 0)), 0);
+function obtenerMetodoPagoActual() {
+    return document.querySelector('input[name="metodo_pago"]:checked')?.value || 'efectivo';
+}
+
+function obtenerDescuentoMetodo(metodo = obtenerMetodoPagoActual()) {
+    if (metodo === 'efectivo') return Number(POS_DESCUENTO_EFECTIVO) || 0;
+    if (metodo === 'transferencia') return Number(POS_DESCUENTO_TRANSFERENCIA) || 0;
+    return 0;
+}
+
+function calcularPrecioMetodo(precioBase, metodo = obtenerMetodoPagoActual()) {
+    const base = Math.max(0, Number(precioBase) || 0);
+    const porcentaje = obtenerDescuentoMetodo(metodo);
+    let precio = base * (1 - (porcentaje / 100));
+
+    if (POS_REDONDEAR_ENTERO) {
+        precio = Math.round(precio);
+    }
+
+    return Math.max(0, precio);
+}
+
+function calcularTotalesCarrito(items = carrito, metodo = obtenerMetodoPagoActual()) {
+    return (items || []).reduce((totales, item) => {
+        const cantidad = Math.max(0, parseInt(item.cantidad) || 0);
+        const precioBase = Math.max(0, parseFloat(item.precio_base ?? item.precio) || 0);
+        const precioFinal = calcularPrecioMetodo(precioBase, metodo);
+        const subtotalBase = precioBase * cantidad;
+        const subtotalFinal = precioFinal * cantidad;
+
+        totales.base += subtotalBase;
+        totales.final += subtotalFinal;
+        totales.descuento += Math.max(0, subtotalBase - subtotalFinal);
+        return totales;
+    }, { base: 0, final: 0, descuento: 0 });
+}
+
+function calcularTotalCarrito(items, metodo = obtenerMetodoPagoActual()) {
+    return calcularTotalesCarrito(items, metodo).final;
 }
 
 function resumenVenta(data) {
-    const total = calcularTotalCarrito(data.carrito || []);
+    const total = calcularTotalCarrito(data.carrito || [], data.metodo_pago || 'efectivo');
     const productos = (data.carrito || []).length;
     const fecha = data.fecha ? new Date(data.fecha).toLocaleString() : 'Sin fecha';
     const nombre = data.nombre || `Venta ${fecha}`;
@@ -1268,6 +1548,16 @@ function aplicarVentaGuardada(data) {
         if (auth) auth.value = data.folio_autorizacion || '';
 
         renderCarrito();
+
+        if (monto) {
+            const totalActual = parseFloat(document.getElementById('total')?.value) || 0;
+            monto.value = data.monto_pagado !== '' && data.monto_pagado != null
+                ? data.monto_pagado
+                : totalActual.toFixed(2);
+            monto.dataset.totalSincronizado = totalActual.toFixed(2);
+            calcularCambio();
+        }
+
         guardarCarrito();
         guardarVentaActivaLocal();
         enfocarCodigo();
@@ -1897,6 +2187,10 @@ async function agregarProducto(origen = 'manual') {
 // ============ CARRITO ============
 function renderCarrito() {
     const body = document.getElementById('carritoBody');
+    const totalInput = document.getElementById('total');
+    const cambioInput = document.getElementById('cambio');
+    const montoPagado = document.getElementById('monto_pagado');
+    const resumenDescuento = document.getElementById('resumenDescuentoPago');
 
     if (!body) return;
 
@@ -1910,53 +2204,75 @@ function renderCarrito() {
             </tr>
         `;
 
-        document.getElementById('total').value = '0.00';
-        document.getElementById('cambio').value = '0.00';
+        if (totalInput) totalInput.value = '0.00';
+        if (montoPagado) {
+            montoPagado.value = '0.00';
+            montoPagado.dataset.totalSincronizado = '0.00';
+        }
+        if (cambioInput) cambioInput.value = '0.00';
+        if (resumenDescuento) {
+            resumenDescuento.hidden = true;
+            resumenDescuento.innerHTML = '';
+        }
+        ajustarTamanoImportesPOS();
         return;
     }
 
+    const metodo = obtenerMetodoPagoActual();
+    const porcentaje = obtenerDescuentoMetodo(metodo);
+    const totales = calcularTotalesCarrito(carrito, metodo);
     let html = '';
-    let total = 0;
     let contador = 1;
 
     carrito.forEach((item, index) => {
-        const subtotal = item.precio * item.cantidad;
-        total += subtotal;
+        const precioBase = Math.max(0, Number(item.precio_base ?? item.precio) || 0);
+        const precioFinal = calcularPrecioMetodo(precioBase, metodo);
+        const subtotal = precioFinal * (parseInt(item.cantidad) || 0);
+        const tieneDescuento = precioFinal < precioBase;
 
         let imagenHtml = '';
 
         if (item.imagen && item.imagen !== '' && item.imagen !== 'uploads/noimage.png' && !item.imagen.includes('no-image')) {
-            imagenHtml = `<img src="${item.imagen}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 6px;">`;
+            imagenHtml = `<img src="${escapeHtml(item.imagen)}" style="width:32px;height:32px;object-fit:cover;border-radius:6px;" alt="">`;
         } else {
             const icono = item.icono || 'fas fa-box';
             imagenHtml = `
-                <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f8fafc; border-radius: 6px;">
-                    <i class="${icono}" style="color: #f97316;"></i>
+                <div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:6px;">
+                    <i class="${icono}" style="color:#f97316;"></i>
                 </div>
             `;
         }
 
+        const precioHtml = tieneDescuento
+            ? `
+                <div class="precio-pos-aplicado">
+                    <small>$${precioBase.toFixed(2)}</small>
+                    <strong>$${precioFinal.toFixed(2)}</strong>
+                </div>
+              `
+            : `<strong>$${precioFinal.toFixed(2)}</strong>`;
+
         html += `
             <tr>
-                <td style="text-align: center; font-size: 12px;">${contador++}</td>
+                <td style="text-align:center;font-size:12px;">${contador++}</td>
                 <td>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
                         ${imagenHtml}
                         <div>
-                            <strong style="font-size: 12px;">${escapeHtml(item.nombre)}</strong>
+                            <strong style="font-size:12px;">${escapeHtml(item.nombre)}</strong>
                             <br>
-                            <small style="font-size: 9px; color: #64748b;">Stock: ${item.stock}</small>
+                            <small style="font-size:9px;color:#64748b;">Stock: ${item.stock}</small>
                         </div>
                     </div>
                 </td>
-                <td style="text-align: center;">
+                <td style="text-align:center;">
                     <input type="number" class="cantidad-input" value="${item.cantidad}"
                            min="1" max="${item.stock}"
                            onchange="actualizarCantidad(${index}, this.value)">
                 </td>
-                <td style="text-align: center;"><strong>$${item.precio.toFixed(2)}</strong></td>
-                <td style="text-align: center;"><strong style="color: #16a34a;">$${subtotal.toFixed(2)}</strong></td>
-                <td style="text-align: center;">
+                <td style="text-align:center;">${precioHtml}</td>
+                <td style="text-align:center;"><strong style="color:#16a34a;">$${subtotal.toFixed(2)}</strong></td>
+                <td style="text-align:center;">
                     <button type="button" class="btn-eliminar" onclick="eliminarProducto(${index})" title="Eliminar">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -1966,7 +2282,39 @@ function renderCarrito() {
     });
 
     body.innerHTML = html;
-    document.getElementById('total').value = total.toFixed(2);
+
+    if (totalInput) {
+        totalInput.value = totales.final.toFixed(2);
+    }
+
+    if (resumenDescuento) {
+        if (totales.descuento > 0) {
+            resumenDescuento.hidden = false;
+            resumenDescuento.innerHTML = `
+                <i class="fas fa-tags"></i>
+                <span>
+                    <strong>${porcentaje.toFixed(2).replace(/\.00$/, '')}% aplicado por ${metodo === 'efectivo' ? 'pago en efectivo' : 'transferencia'}.</strong>
+                    Precio base: $${totales.base.toFixed(2)} · Ahorro: $${totales.descuento.toFixed(2)}
+                </span>
+            `;
+        } else {
+            resumenDescuento.hidden = true;
+            resumenDescuento.innerHTML = '';
+        }
+    }
+
+    if (montoPagado) {
+        const totalAnterior = Number(montoPagado.dataset.totalSincronizado);
+        const totalCambio = !Number.isFinite(totalAnterior)
+            || Math.abs(totalAnterior - totales.final) > 0.001;
+
+        if (montoPagado.value === '' || totalCambio) {
+            montoPagado.value = totales.final.toFixed(2);
+        }
+
+        montoPagado.dataset.totalSincronizado = totales.final.toFixed(2);
+    }
+
     calcularCambio();
 }
 
@@ -2042,6 +2390,24 @@ function eliminarProducto(index) {
     });
 }
 
+function ajustarTamanoImportesPOS() {
+    ['total', 'monto_pagado', 'cambio'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+
+        const valor = String(input.value || '0.00').trim();
+        const longitud = valor.length;
+
+        input.classList.remove('importe-pos-largo', 'importe-pos-muy-largo');
+
+        if (longitud >= 10) {
+            input.classList.add('importe-pos-muy-largo');
+        } else if (longitud >= 8) {
+            input.classList.add('importe-pos-largo');
+        }
+    });
+}
+
 function calcularCambio() {
     const total = parseFloat(document.getElementById('total').value) || 0;
     const pago = parseFloat(document.getElementById('monto_pagado').value) || 0;
@@ -2053,7 +2419,19 @@ function calcularCambio() {
         cambioInput.value = cambio.toFixed(2);
         cambioInput.style.color = cambio < 0 ? '#ef4444' : '#16a34a';
     }
+
+    ajustarTamanoImportesPOS();
 }
+
+const montoPagadoVisible = document.getElementById('monto_pagado');
+if (montoPagadoVisible) {
+    montoPagadoVisible.addEventListener('input', ajustarTamanoImportesPOS);
+    montoPagadoVisible.addEventListener('focus', function() {
+        this.select();
+    });
+}
+
+window.addEventListener('resize', ajustarTamanoImportesPOS);
 
 // ============ MÉTODOS DE PAGO ============
 function mostrarCamposPago(mantenerScroll = false) {
@@ -2072,8 +2450,10 @@ function mostrarCamposPago(mantenerScroll = false) {
                     <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0;">
                         <i class="fas fa-money-bill-wave" style="font-size: 22px; color: #16a34a;"></i>
                         <div>
-                            <strong style="font-size: 14px; color: #166534;">Pago en efectivo</strong>
-                            <p style="font-size: 12px; color: #6b7280; margin: 0;">No requiere referencia</p>
+                            <strong style="font-size:14px;color:#166534;">Pago en efectivo</strong>
+                            <p style="font-size:12px;color:#6b7280;margin:0;">
+                                Se aplica ${Number(POS_DESCUENTO_EFECTIVO).toFixed(2).replace(/\.00$/, '')}% y se redondea el precio al peso entero.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2083,9 +2463,13 @@ function mostrarCamposPago(mantenerScroll = false) {
         case 'transferencia':
             html = `
                 <div class="form-group mb-3">
-                    <label><i class="fas fa-hashtag me-1"></i> Folio de transferencia *</label>
-                    <input type="text" class="form-control pos-input" name="referencia_pago" id="folio_transferencia" required placeholder="Ej: TRX87439210" maxlength="20" oninput="formatearFolioTransferencia(this); guardarVentaActivaLocal();">
-                    <small class="text-muted">Máx. 20 caracteres</small>
+                    <label><i class="fas fa-receipt me-1"></i> Folio de transferencia <span class="text-muted">(opcional)</span></label>
+                    <input type="text" class="form-control pos-input" name="referencia_pago" id="folio_transferencia" placeholder="Ej: TRX87439210" maxlength="20" oninput="formatearFolioTransferencia(this); guardarVentaActivaLocal();">
+                    <small class="text-muted">Puedes dejarlo vacío si no cuentas con el folio.</small>
+                    <div class="pos-aviso-transferencia">
+                        <i class="fas fa-tags"></i>
+                        Se aplica ${Number(POS_DESCUENTO_TRANSFERENCIA).toFixed(2).replace(/\.00$/, '')}% y se redondea el precio al peso entero.
+                    </div>
                 </div>
                 <div class="text-center mb-2">
                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="mostrarDatosBancarios()" style="border-radius: 12px;">
@@ -2454,23 +2838,6 @@ async function confirmarVenta() {
             document.getElementById('monto_pagado')?.focus();
         });
         return;
-    }
-
-    if (metodo === 'transferencia') {
-        const folio = document.getElementById('folio_transferencia')?.value.trim();
-
-        if (!folio || folio.length < 5) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Folio requerido',
-                text: 'Ingresa el folio de la transferencia',
-                confirmButtonColor: '#f97316',
-                confirmButtonText: 'Completar'
-            }).then(() => {
-                document.getElementById('folio_transferencia')?.focus();
-            });
-            return;
-        }
     }
 
     ventaEnProceso = true;
@@ -3014,6 +3381,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const montoPagado = document.getElementById('monto_pagado');
     if (montoPagado) {
+        const seleccionarMontoCompleto = function() {
+            setTimeout(() => {
+                try {
+                    this.select();
+                } catch (e) {}
+            }, 0);
+        };
+
+        montoPagado.addEventListener('focus', seleccionarMontoCompleto);
+        montoPagado.addEventListener('click', seleccionarMontoCompleto);
         montoPagado.addEventListener('input', calcularCambio);
         montoPagado.addEventListener('input', guardarVentaActivaLocal);
         montoPagado.addEventListener('blur', () => programarEnfoqueEscaner(150));
@@ -3057,6 +3434,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             mostrarCamposPago(true);
+            renderCarrito();
             guardarVentaActivaLocal();
 
             // Regresamos al modo escáner sin mover la pantalla.
@@ -3079,4 +3457,4 @@ document.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('resize', function() {
     setTimeout(ajustarUnaFilaMas, 100);
 });
-</script>v
+</script>

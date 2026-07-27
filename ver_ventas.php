@@ -1,4 +1,7 @@
 <?php
+/* Zona horaria oficial del sistema. */
+date_default_timezone_set('America/Mexico_City');
+
 include 'includes/db.php';
 include('includes/header.php');
 include('includes/navbar.php');
@@ -7,6 +10,75 @@ include('includes/navbar.php');
 $filtroProveedor = $_GET['proveedor'] ?? '';
 $filtroInicio = $_GET['fecha_inicio'] ?? '';
 $filtroFin = $_GET['fecha_fin'] ?? '';
+
+$zonaHorariaSistema = new DateTimeZone('America/Mexico_City');
+$ahoraSistema = new DateTimeImmutable('now', $zonaHorariaSistema);
+$fechaMaximaServidor = $ahoraSistema->format('Y-m-d');
+
+/*
+ * El navegador enviará fecha_local con la fecha real de México.
+ * Esto evita que un servidor adelantado por UTC habilite el día siguiente.
+ */
+$fechaLocalNavegador = trim((string) ($_GET['fecha_local'] ?? ''));
+
+$fechaLocalValida = preg_match(
+    '/^\d{4}-\d{2}-\d{2}$/',
+    $fechaLocalNavegador
+) === 1;
+
+$fechaMaximaFiltro = (
+    $fechaLocalValida
+    && $fechaLocalNavegador <= $fechaMaximaServidor
+)
+    ? $fechaLocalNavegador
+    : $fechaMaximaServidor;
+
+/**
+ * Acepta únicamente fechas reales con formato Y-m-d y nunca posteriores
+ * al día actual. Esto protege también las fechas enviadas manualmente
+ * desde la URL, no solamente las seleccionadas en el navegador.
+ */
+function normalizarFechaReporte($valor, $fechaMaxima)
+{
+    $valor = trim((string) $valor);
+
+    if ($valor === '') {
+        return '';
+    }
+
+    $fecha = DateTime::createFromFormat('!Y-m-d', $valor);
+    $errores = DateTime::getLastErrors();
+
+    if (
+        !$fecha
+        || (
+            is_array($errores)
+            && (
+                ($errores['warning_count'] ?? 0) > 0
+                || ($errores['error_count'] ?? 0) > 0
+            )
+        )
+        || $fecha->format('Y-m-d') !== $valor
+    ) {
+        return '';
+    }
+
+    if ($valor > $fechaMaxima) {
+        return $fechaMaxima;
+    }
+
+    return $valor;
+}
+
+$filtroInicio = normalizarFechaReporte(
+    $filtroInicio,
+    $fechaMaximaFiltro
+);
+
+$filtroFin = normalizarFechaReporte(
+    $filtroFin,
+    $fechaMaximaFiltro
+);
 
 // ============================================
 // CONSULTA PRINCIPAL - AGRUPADA POR PROVEEDOR Y PRODUCTO
@@ -214,17 +286,45 @@ if ($resultado && $resultado->num_rows > 0) {
 // Proveedores para filtro
 $listaProveedores = $conn->query("SELECT DISTINCT proveedor FROM productos WHERE proveedor != '' ORDER BY proveedor");
 
-// Obtener todas las fechas con ventas para el calendario
-$sqlFechasVentas = "
-    SELECT DISTINCT DATE(v.fecha_venta) as fecha
+// Obtener las fechas y proveedores que realmente tuvieron ventas de productos.
+// Este mapa alimenta el calendario y permite elegir proveedor al pulsar un día.
+$sqlActividadVentasCalendario = "
+    SELECT
+        DATE(v.fecha_venta) AS fecha,
+        p.proveedor,
+        SUM(v.cantidad_vendida) AS productos_vendidos
     FROM ventas v
-    ORDER BY fecha DESC
+    INNER JOIN productos p ON v.id_producto = p.id
+    WHERE p.tipo_inventario = 'producto'
+    GROUP BY DATE(v.fecha_venta), p.proveedor
+    ORDER BY fecha DESC, p.proveedor ASC
 ";
-$resultadoFechas = $conn->query($sqlFechasVentas);
+
+$resultadoActividadCalendario = $conn->query($sqlActividadVentasCalendario);
 $fechasVentas = [];
-if ($resultadoFechas) {
-    while ($row = $resultadoFechas->fetch_assoc()) {
-        $fechasVentas[] = $row['fecha'];
+$proveedoresVentasPorFecha = [];
+
+if ($resultadoActividadCalendario) {
+    while ($row = $resultadoActividadCalendario->fetch_assoc()) {
+        $fechaVenta = (string) $row['fecha'];
+        $proveedorVenta = trim((string) ($row['proveedor'] ?? ''));
+
+        if (!in_array($fechaVenta, $fechasVentas, true)) {
+            $fechasVentas[] = $fechaVenta;
+        }
+
+        if ($proveedorVenta === '') {
+            continue;
+        }
+
+        if (!isset($proveedoresVentasPorFecha[$fechaVenta])) {
+            $proveedoresVentasPorFecha[$fechaVenta] = [];
+        }
+
+        $proveedoresVentasPorFecha[$fechaVenta][] = [
+            'proveedor' => $proveedorVenta,
+            'productos_vendidos' => (int) $row['productos_vendidos']
+        ];
     }
 }
 
@@ -256,6 +356,12 @@ foreach ($ventasAgrupadas as $v) {
 $hayDatosTablaProductos = count($productos) > 0;
 $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
 ?>
+
+<!-- Calendario profesional para los filtros de fecha -->
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"
+>
 
 <link rel="stylesheet" href="css/ver_ventas.css?v=<?= time() ?>">
 
@@ -432,16 +538,60 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                 </div>
             </div>
            
+
+
+            <!-- CALENDARIO DE ACTIVIDAD -->
+            <section class="activity-calendar-card mb-4" id="calendarioVentasSection">
+                <header class="activity-calendar-header">
+                    <div class="activity-calendar-heading">
+                        <div class="activity-calendar-icon"><i class="fas fa-calendar-check"></i></div>
+                        <div>
+                            <span class="activity-calendar-eyebrow">Actividad comercial</span>
+                            <h3>Calendario de ventas y reportes</h3>
+                            <p>Selecciona un día con ventas. Si hubo más de un proveedor, podrás elegir cuál consultar.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="calendar-clear-btn" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
+                        <i class="fas fa-trash-alt"></i><span>Limpiar reportes</span>
+                    </button>
+                </header>
+                <div class="activity-calendar-body">
+                    <div class="calendar-main-panel">
+                        <div class="calendar-container"><div id="calendario"></div></div>
+                    </div>
+                    <aside class="calendar-sidebar">
+                        <div class="calendar-summary-card">
+                            <div class="calendar-side-title"><i class="fas fa-chart-bar"></i><div><strong>Resumen de actividad</strong><small>Datos visibles en el calendario</small></div></div>
+                            <div class="calendar-stats-grid">
+                                <div class="calendar-stat stat-sales"><span class="calendar-stat-icon"><i class="fas fa-shopping-cart"></i></span><strong id="diasVentas">0</strong><small>Días con ventas</small></div>
+                                <div class="calendar-stat stat-reports"><span class="calendar-stat-icon"><i class="fas fa-file-pdf"></i></span><strong id="diasReportes">0</strong><small>Días con reportes</small></div>
+                                <div class="calendar-stat stat-active"><span class="calendar-stat-icon"><i class="fas fa-bolt"></i></span><strong id="diasActivos">0</strong><small>Días activos</small></div>
+                            </div>
+                        </div>
+                        <div class="calendar-legend-card">
+                            <div class="calendar-side-title"><i class="fas fa-palette"></i><div><strong>Cómo leerlo</strong><small>Colores de actividad</small></div></div>
+                            <div class="calendar-legend-list">
+                                <div class="calendar-legend-item"><span class="legend-dot venta"></span><div><strong>Ventas</strong><small>Hubo movimientos de venta</small></div></div>
+                                <div class="calendar-legend-item"><span class="legend-dot reporte"></span><div><strong>Reportes</strong><small>Se generó al menos un PDF</small></div></div>
+                                <div class="calendar-legend-item"><span class="legend-dot ambos"></span><div><strong>Actividad completa</strong><small>Ventas y reportes el mismo día</small></div></div>
+                            </div>
+                        </div>
+                        <div class="calendar-tip-card"><i class="fas fa-mouse-pointer"></i><p>Presiona un día con ventas. Con un proveedor se filtra de inmediato; con varios se mostrará un selector.</p></div>
+                    </aside>
+                </div>
+            </section>
+
+
+
             <!-- FILTROS EN TIEMPO REAL -->
-            <div class="card card-outline card-primary shadow-sm mb-4">
+            <div class="card card-outline card-primary shadow-sm mb-4 filtros-ventas-card" id="filtrosVentas">
                 <div class="card-header">
                     <h3 class="card-title font-weight-bold">
                         <i class="fas fa-filter mr-2"></i>Filtros de búsqueda
                     </h3>
                 </div>
-
                 <div class="card-body">
-                    <div class="row">
+                    <div class="row align-items-end">
                         <div class="col-12 col-md-4 mb-2">
                             <label class="text-muted">Proveedor</label>
                             <select name="proveedor" id="filtroProveedor" class="form-control">
@@ -453,31 +603,786 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                                 <?php endwhile; ?>
                             </select>
                         </div>
+                        <div class="col-12 col-sm-6 col-md-3 mb-2">
+                            <label
+                                for="filtroFechaInicio"
+                                class="text-muted fecha-filter-label"
+                            >
+                                Fecha inicio
+                            </label>
 
-                        <div class="col-6 col-md-3 mb-2">
-                            <label class="text-muted">Fecha inicio</label>
-                            <input type="date" name="fecha_inicio" id="filtroFechaInicio" value="<?= htmlspecialchars($filtroInicio) ?>" class="form-control">
-                        </div>
+                            <div class="date-picker-field">
+                                <i
+                                    class="far fa-calendar-alt date-picker-icon"
+                                    aria-hidden="true"
+                                ></i>
 
-                        <div class="col-6 col-md-3 mb-2">
-                            <label class="text-muted">Fecha fin</label>
-                            <input type="date" name="fecha_fin" id="filtroFechaFin" value="<?= htmlspecialchars($filtroFin) ?>" class="form-control">
-                        </div>
-
-                        <div class="col-12 col-md-2">
-                            <div class="form-group">
-                                <label class="text-muted">&nbsp;</label>
-                                <div class="d-flex gap-2">
-                                    <a href="?" id="limpiarFiltrosBtn" class="btn btn-outline-secondary btn-block">
-                                        <i class="fas fa-eraser mr-1"></i> Limpiar
-                                    </a>
-                                </div>
+                                <input
+                                    type="text"
+                                    name="fecha_inicio"
+                                    id="filtroFechaInicio"
+                                    value="<?= htmlspecialchars($filtroInicio) ?>"
+                                    data-valor-original="<?= htmlspecialchars($filtroInicio) ?>"
+                                    data-fecha-maxima="<?= htmlspecialchars($fechaMaximaFiltro) ?>"
+                                    class="form-control input-fecha-custom"
+                                    placeholder="Selecciona la fecha inicial"
+                                    autocomplete="off"
+                                    aria-label="Fecha inicial del reporte"
+                                >
                             </div>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-md-3 mb-2">
+                            <label
+                                for="filtroFechaFin"
+                                class="text-muted fecha-filter-label"
+                            >
+                                Fecha fin
+                            </label>
+
+                            <div class="date-picker-field">
+                                <i
+                                    class="far fa-calendar-alt date-picker-icon"
+                                    aria-hidden="true"
+                                ></i>
+
+                                <input
+                                    type="text"
+                                    name="fecha_fin"
+                                    id="filtroFechaFin"
+                                    value="<?= htmlspecialchars($filtroFin) ?>"
+                                    data-valor-original="<?= htmlspecialchars($filtroFin) ?>"
+                                    data-fecha-maxima="<?= htmlspecialchars($fechaMaximaFiltro) ?>"
+                                    class="form-control input-fecha-custom"
+                                    placeholder="Selecciona la fecha final"
+                                    autocomplete="off"
+                                    aria-label="Fecha final del reporte"
+                                >
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-2 mb-2">
+                            <a href="?" id="limpiarFiltrosBtn" class="btn btn-outline-secondary btn-block">
+                                <i class="fas fa-eraser mr-1"></i> Limpiar
+                            </a>
+                        </div>
+                        <div class="col-12">
+                            <div
+                                id="estadoRangoFechas"
+                                class="date-filter-status"
+                                aria-live="polite"
+                            ></div>
+                            <small
+                                class="date-filter-limit"
+                                id="fechaLimiteTexto"
+                            >
+                                Calculando fecha disponible…
+                            </small>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
+            <div class="filtro-loading" id="filtroLoading" aria-hidden="true">
+                <div class="filter-loading-card">
+                    <span class="filter-loading-spinner"></span>
+                    <div>
+                        <strong>Actualizando reporte</strong>
+                        <small>Consultando el rango seleccionado…</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flatpickr: calendario visual de Fecha inicio / Fecha fin -->
+            <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/es.js"></script>
+
+            <script>
+            (function () {
+                'use strict';
+
+                let timerFechas = null;
+                let navegando = false;
+                let timerRescate = null;
+                let calendarioInicio = null;
+                let calendarioFin = null;
+
+                const fechaMaximaServidor =
+                    <?= json_encode($fechaMaximaFiltro) ?>;
+
+                function obtenerFechaHoyMexico() {
+                    const partes = new Intl.DateTimeFormat(
+                        'en-CA',
+                        {
+                            timeZone: 'America/Mexico_City',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                        }
+                    ).formatToParts(new Date());
+
+                    const valores = {};
+
+                    partes.forEach(function (parte) {
+                        if (parte.type !== 'literal') {
+                            valores[parte.type] = parte.value;
+                        }
+                    });
+
+                    return [
+                        valores.year,
+                        valores.month,
+                        valores.day
+                    ].join('-');
+                }
+
+                function formatoFechaVisible(fechaIso) {
+                    const partes = fechaIso.split('-');
+
+                    if (partes.length !== 3) {
+                        return fechaIso;
+                    }
+
+                    return [
+                        partes[2],
+                        partes[1],
+                        partes[0]
+                    ].join('/');
+                }
+
+                /*
+                 * Esta es la fuente real para el calendario.
+                 * No depende de la zona horaria configurada en Apache o PHP.
+                 */
+                const fechaMaximaPermitida =
+                    obtenerFechaHoyMexico();
+
+                function refs() {
+                    return {
+                        proveedor:
+                            document.getElementById('filtroProveedor'),
+                        inicio:
+                            document.getElementById('filtroFechaInicio'),
+                        fin:
+                            document.getElementById('filtroFechaFin'),
+                        limpiar:
+                            document.getElementById('limpiarFiltrosBtn'),
+                        estado:
+                            document.getElementById('estadoRangoFechas'),
+                        loading:
+                            document.getElementById('filtroLoading'),
+                        limite:
+                            document.getElementById('fechaLimiteTexto')
+                    };
+                }
+
+                function estado(texto, tipo) {
+                    const el = refs().estado;
+
+                    if (!el) {
+                        return;
+                    }
+
+                    el.textContent = texto || '';
+                    el.className = 'date-filter-status';
+
+                    if (texto && tipo) {
+                        el.classList.add('is-' + tipo);
+                    }
+                }
+
+                function bloquear() {
+                    const el = refs().loading;
+
+                    if (!el) {
+                        return;
+                    }
+
+                    el.classList.add('active');
+                    el.setAttribute('aria-hidden', 'false');
+                }
+
+                function desbloquear() {
+                    navegando = false;
+
+                    const el = refs().loading;
+
+                    if (el) {
+                        el.classList.remove('active');
+                        el.setAttribute('aria-hidden', 'true');
+                    }
+
+                    if (timerRescate) {
+                        clearTimeout(timerRescate);
+                        timerRescate = null;
+                    }
+                }
+
+                function ir(url) {
+                    /*
+                     * PHP usará esta misma fecha para validar el rango.
+                     */
+                    url.searchParams.set(
+                        'fecha_local',
+                        fechaMaximaPermitida
+                    );
+
+                    const destino = url.toString();
+
+                    /*
+                     * Si no hay cambios en la URL, no se deja el módulo
+                     * bloqueado ni se muestra el overlay indefinidamente.
+                     */
+                    if (destino === window.location.href) {
+                        desbloquear();
+                        return;
+                    }
+
+                    if (navegando) {
+                        return;
+                    }
+
+                    navegando = true;
+                    bloquear();
+
+                    /*
+                     * Seguro contra bloqueos en local, producción,
+                     * caché del navegador o Service Worker.
+                     */
+                    timerRescate = setTimeout(function () {
+                        desbloquear();
+
+                        estado(
+                            'La actualización tardó demasiado. Intenta nuevamente.',
+                            'warning'
+                        );
+                    }, 8000);
+
+                    window.location.assign(destino);
+                }
+
+                function aplicarProveedor() {
+                    const r = refs();
+                    const url = new URL(window.location.href);
+                    const valor =
+                        (r.proveedor?.value || '').trim();
+
+                    if (valor) {
+                        url.searchParams.set('proveedor', valor);
+                    } else {
+                        url.searchParams.delete('proveedor');
+                    }
+
+                    ir(url);
+                }
+
+                function aplicarFechas() {
+                    const r = refs();
+
+                    const inicio =
+                        (r.inicio?.value || '').trim();
+
+                    const fin =
+                        (r.fin?.value || '').trim();
+
+                    const completas =
+                        inicio !== '' && fin !== '';
+
+                    const vacias =
+                        inicio === '' && fin === '';
+
+                    /*
+                     * Una sola fecha nunca genera una consulta.
+                     * Se espera a que el usuario termine el rango.
+                     */
+                    if (!completas && !vacias) {
+                        estado(
+                            'Selecciona también la otra fecha para actualizar.',
+                            'info'
+                        );
+                        return;
+                    }
+
+                    if (
+                        completas
+                        && (
+                            inicio > fechaMaximaPermitida
+                            || fin > fechaMaximaPermitida
+                        )
+                    ) {
+                        estado(
+                            'Solo puedes seleccionar fechas de hoy hacia atrás.',
+                            'error'
+                        );
+                        return;
+                    }
+
+                    if (completas && inicio > fin) {
+                        estado(
+                            'La fecha final debe ser igual o posterior a la inicial.',
+                            'error'
+                        );
+                        return;
+                    }
+
+                    estado('', '');
+
+                    const url = new URL(window.location.href);
+
+                    if (vacias) {
+                        url.searchParams.delete('fecha_inicio');
+                        url.searchParams.delete('fecha_fin');
+                    } else {
+                        url.searchParams.set(
+                            'fecha_inicio',
+                            inicio
+                        );
+
+                        url.searchParams.set(
+                            'fecha_fin',
+                            fin
+                        );
+                    }
+
+                    ir(url);
+                }
+
+                function programarFechas() {
+                    if (timerFechas) {
+                        clearTimeout(timerFechas);
+                    }
+
+                    /*
+                     * Pequeña espera después de seleccionar la segunda fecha.
+                     * Evita dos solicitudes consecutivas.
+                     */
+                    timerFechas = setTimeout(
+                        aplicarFechas,
+                        700
+                    );
+                }
+
+                function agregarAccionesCalendario(
+                    instancia,
+                    tipo
+                ) {
+                    const contenedor =
+                        instancia.calendarContainer;
+
+                    if (
+                        !contenedor
+                        || contenedor.querySelector(
+                            '.ventas-flatpickr-actions'
+                        )
+                    ) {
+                        return;
+                    }
+
+                    contenedor.classList.add(
+                        'ventas-flatpickr-calendar'
+                    );
+
+                    const acciones =
+                        document.createElement('div');
+
+                    acciones.className =
+                        'ventas-flatpickr-actions';
+
+                    const botonBorrar =
+                        document.createElement('button');
+
+                    botonBorrar.type = 'button';
+                    botonBorrar.className =
+                        'flatpickr-action-btn is-clear';
+
+                    botonBorrar.innerHTML =
+                        '<i class="fas fa-eraser"></i>'
+                        + '<span>Borrar</span>';
+
+                    botonBorrar.addEventListener(
+                        'click',
+                        function (event) {
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            instancia.clear(true);
+                            instancia.close();
+
+                            estado(
+                                'Selecciona ambas fechas para aplicar el rango.',
+                                'info'
+                            );
+                        }
+                    );
+
+                    const botonHoy =
+                        document.createElement('button');
+
+                    botonHoy.type = 'button';
+                    botonHoy.className =
+                        'flatpickr-action-btn is-today';
+
+                    botonHoy.innerHTML =
+                        '<i class="fas fa-calendar-day"></i>'
+                        + '<span>Hoy</span>';
+
+                    botonHoy.addEventListener(
+                        'click',
+                        function (event) {
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            instancia.setDate(
+                                fechaMaximaPermitida,
+                                true,
+                                'Y-m-d'
+                            );
+
+                            instancia.close();
+                        }
+                    );
+
+                    const etiqueta =
+                        document.createElement('span');
+
+                    etiqueta.className =
+                        'flatpickr-action-label';
+
+                    etiqueta.textContent =
+                        tipo === 'inicio'
+                            ? 'Fecha inicial'
+                            : 'Fecha final';
+
+                    acciones.appendChild(etiqueta);
+                    acciones.appendChild(botonBorrar);
+                    acciones.appendChild(botonHoy);
+
+                    contenedor.appendChild(acciones);
+                }
+
+                function inicializarCalendarios() {
+                    const r = refs();
+
+                    if (
+                        !r.inicio
+                        || !r.fin
+                        || typeof flatpickr !== 'function'
+                    ) {
+                        return false;
+                    }
+
+                    const localeEs =
+                        window.flatpickr?.l10ns?.es
+                        || 'default';
+
+                    const configuracionBase = {
+                        locale: localeEs,
+                        dateFormat: 'Y-m-d',
+                        altInput: true,
+                        altFormat: 'd/m/Y',
+                        allowInput: false,
+                        clickOpens: true,
+                        disableMobile: true,
+                        maxDate: fechaMaximaPermitida,
+                        monthSelectorType: 'static',
+                        shorthandCurrentMonth: false,
+                        animate: true,
+                        position: 'auto center',
+                        altInputClass:
+                            'form-control input-fecha-custom '
+                            + 'flatpickr-input-visible',
+                        prevArrow:
+                            '<i class="fas fa-chevron-left"></i>',
+                        nextArrow:
+                            '<i class="fas fa-chevron-right"></i>'
+                    };
+
+                    calendarioInicio = flatpickr(
+                        r.inicio,
+                        {
+                            ...configuracionBase,
+
+                            defaultDate:
+                                r.inicio.dataset.valorOriginal
+                                || null,
+
+                            onReady:
+                                function (
+                                    selectedDates,
+                                    dateStr,
+                                    instance
+                                ) {
+                                    agregarAccionesCalendario(
+                                        instance,
+                                        'inicio'
+                                    );
+                                },
+
+                            onChange:
+                                function (
+                                    selectedDates,
+                                    dateStr
+                                ) {
+                                    estado('', '');
+
+                                    if (calendarioFin) {
+                                        calendarioFin.set(
+                                            'minDate',
+                                            dateStr || null
+                                        );
+                                    }
+
+                                    /*
+                                     * Si ya había una fecha final menor,
+                                     * se limpia para evitar un rango inválido.
+                                     */
+                                    if (
+                                        dateStr
+                                        && r.fin.value
+                                        && r.fin.value < dateStr
+                                        && calendarioFin
+                                    ) {
+                                        calendarioFin.clear(false);
+                                    }
+
+                                    programarFechas();
+                                }
+                        }
+                    );
+
+                    calendarioFin = flatpickr(
+                        r.fin,
+                        {
+                            ...configuracionBase,
+
+                            defaultDate:
+                                r.fin.dataset.valorOriginal
+                                || null,
+
+                            minDate:
+                                r.inicio.value || null,
+
+                            onReady:
+                                function (
+                                    selectedDates,
+                                    dateStr,
+                                    instance
+                                ) {
+                                    agregarAccionesCalendario(
+                                        instance,
+                                        'fin'
+                                    );
+                                },
+
+                            onChange:
+                                function (
+                                    selectedDates,
+                                    dateStr
+                                ) {
+                                    estado('', '');
+
+                                    if (calendarioInicio) {
+                                        calendarioInicio.set(
+                                            'maxDate',
+                                            dateStr
+                                                || fechaMaximaPermitida
+                                        );
+                                    }
+
+                                    programarFechas();
+                                }
+                        }
+                    );
+
+                    /*
+                     * Sincronización inicial de ambos calendarios.
+                     */
+                    if (
+                        r.inicio.value
+                        && calendarioFin
+                    ) {
+                        calendarioFin.set(
+                            'minDate',
+                            r.inicio.value
+                        );
+                    }
+
+                    if (
+                        r.fin.value
+                        && calendarioInicio
+                    ) {
+                        calendarioInicio.set(
+                            'maxDate',
+                            r.fin.value
+                        );
+                    }
+
+                    return true;
+                }
+
+                function iniciarFallbackNativo() {
+                    const r = refs();
+
+                    /*
+                     * Solo se usa si Flatpickr no pudo cargarse.
+                     */
+                    if (r.inicio) {
+                        r.inicio.type = 'date';
+                        r.inicio.max =
+                            fechaMaximaPermitida;
+
+                        r.inicio.addEventListener(
+                            'change',
+                            programarFechas
+                        );
+                    }
+
+                    if (r.fin) {
+                        r.fin.type = 'date';
+                        r.fin.max =
+                            fechaMaximaPermitida;
+
+                        r.fin.addEventListener(
+                            'change',
+                            programarFechas
+                        );
+                    }
+                }
+
+                function iniciar() {
+                    const r = refs();
+
+                    desbloquear();
+
+                    if (r.limite) {
+                        r.limite.textContent =
+                            'Fechas disponibles hasta '
+                            + formatoFechaVisible(
+                                fechaMaximaPermitida
+                            );
+                    }
+
+                    /*
+                     * Si el servidor entregó accidentalmente el día siguiente,
+                     * se corrige antes de construir Flatpickr.
+                     */
+                    [r.inicio, r.fin].forEach(function (input) {
+                        if (!input) {
+                            return;
+                        }
+
+                        if (
+                            input.value
+                            && input.value > fechaMaximaPermitida
+                        ) {
+                            input.value = fechaMaximaPermitida;
+                        }
+
+                        if (
+                            input.dataset.valorOriginal
+                            && input.dataset.valorOriginal
+                                > fechaMaximaPermitida
+                        ) {
+                            input.dataset.valorOriginal =
+                                fechaMaximaPermitida;
+                        }
+
+                        input.dataset.fechaMaxima =
+                            fechaMaximaPermitida;
+                    });
+
+                    /*
+                     * Guarda la fecha real en la URL sin provocar una recarga.
+                     * Los siguientes filtros también la enviarán a PHP.
+                     */
+                    const urlActual =
+                        new URL(window.location.href);
+
+                    if (
+                        urlActual.searchParams.get('fecha_local')
+                        !== fechaMaximaPermitida
+                    ) {
+                        urlActual.searchParams.set(
+                            'fecha_local',
+                            fechaMaximaPermitida
+                        );
+
+                        window.history.replaceState(
+                            {},
+                            '',
+                            urlActual.toString()
+                        );
+                    }
+
+                    if (r.proveedor) {
+                        r.proveedor.addEventListener(
+                            'change',
+                            aplicarProveedor
+                        );
+                    }
+
+                    const flatpickrDisponible =
+                        inicializarCalendarios();
+
+                    if (!flatpickrDisponible) {
+                        iniciarFallbackNativo();
+                    }
+
+                    if (r.limpiar) {
+                        r.limpiar.addEventListener(
+                            'click',
+                            function (event) {
+                                event.preventDefault();
+
+                                if (timerFechas) {
+                                    clearTimeout(timerFechas);
+                                }
+
+                                const url =
+                                    new URL(window.location.href);
+
+                                url.searchParams.delete(
+                                    'proveedor'
+                                );
+
+                                url.searchParams.delete(
+                                    'fecha_inicio'
+                                );
+
+                                url.searchParams.delete(
+                                    'fecha_fin'
+                                );
+
+                                ir(url);
+                            }
+                        );
+                    }
+                }
+
+                document.addEventListener(
+                    'DOMContentLoaded',
+                    iniciar
+                );
+
+                /*
+                 * Evita que el overlay se conserve al regresar
+                 * mediante el botón Atrás del navegador.
+                 */
+                window.addEventListener(
+                    'pageshow',
+                    desbloquear
+                );
+
+                window.addEventListener(
+                    'pagehide',
+                    function () {
+                        if (timerFechas) {
+                            clearTimeout(timerFechas);
+                        }
+                    }
+                );
+            })();
+            </script>
+
             <!-- TABLA PRODUCTOS CON PAGINACIÓN Y ORDENAMIENTO -->
             <div class="card card-outline card-warning shadow-sm mt-4">
                 <div class="card-header d-flex flex-column flex-md-row align-items-md-center">
@@ -701,94 +1606,6 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
                 <?php endif; ?>
             </div>
 
-            <!-- CALENDARIO DE ACTIVIDAD MEJORADO -->
-            <div class="card card-outline card-info shadow-sm mt-4">
-                <div class="card-header">
-                    <h3 class="card-title font-weight-bold">
-                        <i class="fas fa-calendar-alt mr-2"></i>
-                        Calendario de Actividad
-                    </h3>
-                    <div class="card-tools">
-                        <button type="button" class="btn btn-tool" id="limpiarHistorialBtn" title="Limpiar historial de reportes">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Calendario - 8 columnas para más espacio -->
-                        <div class="col-lg-8 col-md-12">
-                            <div class="calendar-container">
-                                <div id="calendario"></div>
-                            </div>
-                        </div>
-                        
-                        <!-- Panel lateral - 4 columnas compacto SIN ESPACIO EN BLANCO -->
-                        <div class="col-lg-4 col-md-12">
-                            <div class="calendar-sidebar">
-                                <!-- Leyenda -->
-                                <div class="info-box">
-                                    <div class="info-box-content w-100">
-                                        <h6 class="mb-3"><i class="fas fa-chart-simple mr-2 text-info"></i>Leyenda</h6>
-                                        <div class="legend-item">
-                                            <div class="legend-color venta"></div>
-                                            <span><strong>Ventas</strong> - Días con ventas</span>
-                                        </div>
-                                        <div class="legend-item">
-                                            <div class="legend-color reporte"></div>
-                                            <span><strong>Reportes</strong> - Días con reportes</span>
-                                        </div>
-                                        <div class="legend-item">
-                                            <div class="legend-color ambos"></div>
-                                            <span><strong>Ambos</strong> - Ventas y reportes</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Estadísticas -->
-                                <div class="info-box">
-                                    <div class="info-box-content w-100">
-                                        <h6 class="mb-3"><i class="fas fa-chart-bar mr-2 text-info"></i>Estadísticas</h6>
-                                        <div class="row">
-                                            <div class="col-4">
-                                                <div class="stats-card">
-                                                    <p class="stats-number text-success" id="diasVentas">0</p>
-                                                    <p class="stats-label">Ventas</p>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="stats-card">
-                                                    <p class="stats-number text-danger" id="diasReportes">0</p>
-                                                    <p class="stats-label">Reportes</p>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="stats-card">
-                                                    <p class="stats-number text-primary" id="diasActivos">0</p>
-                                                    <p class="stats-label">Dias activos</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Info adicional - esta caja se estirará para ocupar el espacio restante -->
-                                <div class="info-box" style="flex: 1;">
-                                    <div class="info-box-content w-100">
-                                        <small class="text-muted">
-                                            <center>
-                                            <i class="fas fa-info-circle mr-1"></i>
-                                            Los días con reportes se guardan automáticamente al generar un PDF.
-                                            </center>
-                                        </small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- GRAFICA CON MÁS INFORMACIÓN -->
             <?php if (!empty($productos) && ($totalGanancia > 0 || $totalProveedor > 0)): ?>
             <div class="card card-outline card-info shadow-sm mt-4">
@@ -871,6 +1688,61 @@ $hayDatosTablaDeuda = count($ventasAgrupadas) > 0;
 
 <!-- FullCalendar CSS y JS -->
 <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+<style>
+#calendario .fc-day-venta,
+#calendario .fc-day-ambos {
+    cursor: pointer;
+}
+
+#calendario .fc-day-selected-report {
+    outline: 3px solid #1e3a8a;
+    outline-offset: -3px;
+}
+
+#calendario .fc-day-selected-report .fc-daygrid-day-number::after {
+    content: 'Filtrado';
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #1e3a8a;
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.2;
+    vertical-align: middle;
+}
+
+@media (max-width: 575.98px) {
+    #calendario .fc-day-selected-report .fc-daygrid-day-number::after {
+        content: '';
+        width: 6px;
+        height: 6px;
+        margin-left: 4px;
+        padding: 0;
+    }
+}
+
+
+/* Calendario superior + confirmación visual del filtro elegido. */
+#calendarioVentasSection {
+    margin-top: 0 !important;
+}
+
+#filtrosVentas.calendar-filter-applied {
+    outline: 3px solid rgba(30, 58, 138, 0.18);
+    box-shadow: 0 0 0 5px rgba(30, 58, 138, 0.08) !important;
+    transition: outline-color .25s ease, box-shadow .25s ease;
+}
+
+.swal2-select {
+    width: min(100%, 420px) !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+</style>
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/es.js'></script>
 
@@ -888,7 +1760,258 @@ const closeDropdownBtn = document.getElementById('closeDropdownBtn');
 
 // Variables para el calendario
 let calendar = null;
-let fechasVentasPHP = <?= json_encode($fechasVentas) ?>;
+let fechasVentasPHP = <?= json_encode($fechasVentas, JSON_UNESCAPED_UNICODE) ?>;
+const proveedoresVentasPorFechaPHP =
+    <?= json_encode(
+        $proveedoresVentasPorFecha,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    ) ?>;
+
+function fechaCalendarioLocal(fecha) {
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function obtenerFechaHoyMexicoCalendario() {
+    const partes = new Intl.DateTimeFormat(
+        'en-CA',
+        {
+            timeZone: 'America/Mexico_City',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }
+    ).formatToParts(new Date());
+
+    const valores = {};
+
+    partes.forEach(function (parte) {
+        if (parte.type !== 'literal') {
+            valores[parte.type] = parte.value;
+        }
+    });
+
+    return `${valores.year}-${valores.month}-${valores.day}`;
+}
+
+const hoyLocalCalendario =
+    obtenerFechaHoyMexicoCalendario();
+
+const fechaInicialCalendarioServidor =
+    <?= json_encode(
+        $filtroInicio !== ''
+            ? $filtroInicio
+            : ($filtroFin !== '' ? $filtroFin : '')
+    ) ?>;
+
+const fechaInicialCalendario = (
+    fechaInicialCalendarioServidor
+    && fechaInicialCalendarioServidor <= hoyLocalCalendario
+)
+    ? fechaInicialCalendarioServidor
+    : hoyLocalCalendario;
+
+const fechaFiltroUnSoloDia =
+    <?= json_encode(
+        $filtroInicio !== ''
+        && $filtroInicio === $filtroFin
+            ? $filtroInicio
+            : ''
+    ) ?>;
+
+function actualizarInputsConDiaCalendario(fechaStr) {
+    const inicio = document.getElementById('filtroFechaInicio');
+    const fin = document.getElementById('filtroFechaFin');
+
+    if (inicio) {
+        if (inicio._flatpickr) {
+            inicio._flatpickr.setDate(fechaStr, false, 'Y-m-d');
+        } else {
+            inicio.value = fechaStr;
+        }
+    }
+
+    if (fin) {
+        if (fin._flatpickr) {
+            fin._flatpickr.setDate(fechaStr, false, 'Y-m-d');
+        } else {
+            fin.value = fechaStr;
+        }
+    }
+}
+
+function textoProveedorCalendario(proveedor) {
+    return proveedor || 'Todos los proveedores';
+}
+
+function obtenerProveedoresDelDia(fechaStr) {
+    const registros = proveedoresVentasPorFechaPHP[fechaStr];
+
+    if (!Array.isArray(registros)) {
+        return [];
+    }
+
+    return registros.filter(function (registro) {
+        return registro
+            && typeof registro.proveedor === 'string'
+            && registro.proveedor.trim() !== '';
+    });
+}
+
+async function elegirProveedorDelDia(fechaStr) {
+    const proveedoresDia = obtenerProveedoresDelDia(fechaStr);
+
+    if (proveedoresDia.length === 0) {
+        return '';
+    }
+
+    if (proveedoresDia.length === 1) {
+        return proveedoresDia[0].proveedor;
+    }
+
+    const proveedorActual =
+        new URL(window.location.href).searchParams.get('proveedor') || '';
+
+    const opciones = {
+        __todos__: `Todos los proveedores (${proveedoresDia.length})`
+    };
+
+    proveedoresDia.forEach(function (registro) {
+        const cantidad = Number(registro.productos_vendidos || 0);
+        const detalleCantidad = cantidad === 1
+            ? '1 producto vendido'
+            : `${cantidad.toLocaleString('es-MX')} productos vendidos`;
+
+        opciones[registro.proveedor] =
+            `${registro.proveedor} — ${detalleCantidad}`;
+    });
+
+    const valorInicial = proveedoresDia.some(function (registro) {
+        return registro.proveedor === proveedorActual;
+    })
+        ? proveedorActual
+        : '__todos__';
+
+    const fechaVisible = fechaStr.split('-').reverse().join('/');
+
+    const resultado = await Swal.fire({
+        title: 'Selecciona un proveedor',
+        html:
+            `<p class="mb-2">El <strong>${fechaVisible}</strong> hubo ventas de `
+            + `<strong>${proveedoresDia.length} proveedores</strong>.</p>`
+            + '<small class="text-muted">El reporte se actualizará únicamente con la opción elegida.</small>',
+        icon: 'question',
+        input: 'select',
+        inputOptions: opciones,
+        inputValue: valorInicial,
+        inputPlaceholder: 'Elige un proveedor',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-filter mr-1"></i> Ver ventas',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#1e3a8a',
+        cancelButtonColor: '#6c757d',
+        reverseButtons: true,
+        width: '500px',
+        inputValidator: function (valor) {
+            return valor ? undefined : 'Selecciona una opción para continuar.';
+        }
+    });
+
+    if (!resultado.isConfirmed) {
+        return null;
+    }
+
+    return resultado.value === '__todos__'
+        ? ''
+        : resultado.value;
+}
+
+function aplicarDiaVentaDesdeCalendario(fechaStr, proveedorSeleccionado) {
+    if (!fechaStr || fechaStr > hoyLocalCalendario) {
+        return;
+    }
+
+    const proveedor = typeof proveedorSeleccionado === 'string'
+        ? proveedorSeleccionado.trim()
+        : '';
+
+    actualizarInputsConDiaCalendario(fechaStr);
+
+    const selectorProveedor =
+        document.getElementById('filtroProveedor');
+
+    if (selectorProveedor) {
+        const opcionDisponible = Array.from(
+            selectorProveedor.options
+        ).some(function (opcion) {
+            return opcion.value === proveedor;
+        });
+
+        if (opcionDisponible) {
+            selectorProveedor.value = proveedor;
+        }
+    }
+
+    const estado = document.getElementById('estadoRangoFechas');
+    if (estado) {
+        estado.textContent =
+            'Mostrando ventas del '
+            + fechaStr.split('-').reverse().join('/')
+            + ' · '
+            + textoProveedorCalendario(proveedor);
+        estado.className = 'date-filter-status is-info';
+    }
+
+    const urlActual = new URL(window.location.href);
+    const url = new URL(window.location.href);
+
+    url.searchParams.set('fecha_inicio', fechaStr);
+    url.searchParams.set('fecha_fin', fechaStr);
+    url.searchParams.set('fecha_local', hoyLocalCalendario);
+
+    if (proveedor) {
+        url.searchParams.set('proveedor', proveedor);
+    } else {
+        url.searchParams.delete('proveedor');
+    }
+
+    const fechaActualInicio =
+        urlActual.searchParams.get('fecha_inicio') || '';
+    const fechaActualFin =
+        urlActual.searchParams.get('fecha_fin') || '';
+    const proveedorActual =
+        urlActual.searchParams.get('proveedor') || '';
+
+    if (
+        fechaActualInicio === fechaStr
+        && fechaActualFin === fechaStr
+        && proveedorActual === proveedor
+    ) {
+        const filtros = document.getElementById('filtrosVentas');
+        if (filtros) {
+            filtros.classList.add('calendar-filter-applied');
+            filtros.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+
+            window.setTimeout(function () {
+                filtros.classList.remove('calendar-filter-applied');
+            }, 1800);
+        }
+        return;
+    }
+
+    const loading = document.getElementById('filtroLoading');
+    if (loading) {
+        loading.classList.add('active');
+        loading.setAttribute('aria-hidden', 'false');
+    }
+
+    window.location.assign(url.toString());
+}
 
 // ===== FUNCIONES PARA LA ALERTA DEL PRODUCTO ESPECIAL =====
 function cerrarAlertaProductoEspecial() {
@@ -993,11 +2116,15 @@ document.addEventListener('keydown', (e) => {
 // Función para cargar eventos en el calendario
 function cargarEventosCalendario() {
     if (!calendar) return;
-    
-    // Limpiar eventos existentes
+
     calendar.removeAllEvents();
-    
-    // Obtener datos
+
+    document.querySelectorAll('#calendario .fc-daygrid-day').forEach(function (celda) {
+        celda.classList.remove('fc-day-venta', 'fc-day-reporte', 'fc-day-ambos');
+        celda.style.cursor = '';
+        celda.removeAttribute('data-title');
+    });
+
     const fechasVentas = fechasVentasPHP.map(f => f.split('T')[0]);
     const fechasReportes = JSON.parse(localStorage.getItem('diasReportes') || '[]');
     const reportesPorFecha = JSON.parse(localStorage.getItem('reportesPorFecha') || '{}');
@@ -1041,9 +2168,12 @@ function cargarEventosCalendario() {
     });
     
     // Actualizar contadores
-    document.getElementById('diasVentas').textContent = contVentas;
-    document.getElementById('diasReportes').textContent = contReportes;
-    document.getElementById('diasActivos').textContent = eventosMap.size;
+    const diasVentasEl = document.getElementById('diasVentas');
+    const diasReportesEl = document.getElementById('diasReportes');
+    const diasActivosEl = document.getElementById('diasActivos');
+    if (diasVentasEl) diasVentasEl.textContent = contVentas;
+    if (diasReportesEl) diasReportesEl.textContent = contReportes;
+    if (diasActivosEl) diasActivosEl.textContent = eventosMap.size;
     
     // Aplicar clases a las celdas después de renderizar
     setTimeout(() => {
@@ -1072,6 +2202,18 @@ function cargarEventosCalendario() {
                     if (cellDate === fechaBuscar) {
                         cell.classList.add(celdaClass);
                         cell.setAttribute('data-title', tooltip);
+
+                        if (valor.venta) {
+                            cell.style.cursor = 'pointer';
+                            cell.setAttribute(
+                                'aria-label',
+                                tooltip + '. Presiona para filtrar este día.'
+                            );
+                        }
+
+                        if (fechaBuscar === fechaFiltroUnSoloDia) {
+                            cell.classList.add('fc-day-selected-report');
+                        }
                     }
                 });
             }
@@ -1086,21 +2228,29 @@ document.addEventListener('DOMContentLoaded', function() {
     if (calendarEl) {
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
+            initialDate: fechaInicialCalendario,
             locale: 'es',
             headerToolbar: {
                 left: 'prev,next',
                 center: 'title',
                 right: 'today'
             },
-            buttonText: {
-                today: 'Hoy'
-            },
+            buttonText: { today: 'Hoy' },
+            dayHeaderFormat: { weekday: 'short' },
             height: 'auto',
-            firstDay: 1,
             contentHeight: 'auto',
-            aspectRatio: 1.5,
+            firstDay: 1,
+            fixedWeekCount: false,
+            showNonCurrentDates: true,
+            dayMaxEvents: true,
+            handleWindowResize: true,
+            windowResizeDelay: 180,
+            aspectRatio: 1.42,
+            datesSet: function () {
+                setTimeout(cargarEventosCalendario, 40);
+            },
             dayCellDidMount: function(info) {
-                const fechaStr = info.date.toISOString().split('T')[0];
+                const fechaStr = fechaCalendarioLocal(info.date);
                 const fechasVentasSet = new Set(fechasVentasPHP.map(f => f.split('T')[0]));
                 const reportes = JSON.parse(localStorage.getItem('diasReportes') || '[]');
                 
@@ -1117,10 +2267,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     info.el.classList.add('fc-day-reporte');
                     info.el.setAttribute('data-title', 'Día con reportes');
                 }
+
+                if (tieneVenta) {
+                    info.el.style.cursor = 'pointer';
+                    info.el.setAttribute(
+                        'aria-label',
+                        'Día con ventas. Presiona para actualizar el reporte.'
+                    );
+                }
+
+                if (fechaStr === fechaFiltroUnSoloDia) {
+                    info.el.classList.add('fc-day-selected-report');
+                }
             },
-            dateClick: function(info) {
+            dateClick: async function(info) {
                 const fecha = info.date;
-                const fechaStr = fecha.toISOString().split('T')[0];
+                const fechaStr = fechaCalendarioLocal(fecha);
                 const fechaLocal = fecha.toLocaleDateString('es-ES', {
                     weekday: 'long',
                     year: 'numeric',
@@ -1133,6 +2295,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 const fechasVentasSet = new Set(fechasVentasPHP.map(f => f.split('T')[0]));
                 const tieneVenta = fechasVentasSet.has(fechaStr);
                 const tieneReporte = reportesFecha.length > 0;
+
+                /*
+                 * Los días con venta funcionan como acceso directo al filtro.
+                 * Se conserva el proveedor actual y se consulta únicamente ese día,
+                 * por lo que PHP vuelve a calcular KPIs, tablas, gráfica y PDFs.
+                 */
+                if (tieneVenta) {
+                    const proveedorElegido =
+                        await elegirProveedorDelDia(fechaStr);
+
+                    if (proveedorElegido === null) {
+                        return;
+                    }
+
+                    aplicarDiaVentaDesdeCalendario(
+                        fechaStr,
+                        proveedorElegido
+                    );
+                    return;
+                }
                 
                 let icono = 'info';
                 let titulo = '';
@@ -1218,17 +2400,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         calendar.render();
-        
-        setTimeout(() => {
+
+        requestAnimationFrame(function () {
+            calendar.updateSize();
             cargarEventosCalendario();
-        }, 200);
+        });
+
+        setTimeout(function () {
+            calendar.updateSize();
+            cargarEventosCalendario();
+        }, 220);
     }
 });
 
 // Función para registrar un día de reporte
 function registrarDiaReporte(tipoGenerado) {
     const hoy = new Date();
-    const fechaStr = hoy.toISOString().split('T')[0];
+    const fechaStr = fechaCalendarioLocal(hoy);
     
     let reportesGuardados = JSON.parse(localStorage.getItem('diasReportes') || '[]');
     if (!reportesGuardados.includes(fechaStr)) {
@@ -1734,7 +2922,7 @@ function generarPDF(tipo) {
     // No es necesario repetirlas aquí, ya están definidas arriba
 
     // Generar nombres de archivo - SOLO DEFINIR VARIABLES, NO FUNCIONES
-    $fechaActual = date('Y-m-d'); // Solo fecha, sin hora
+    $fechaActual = $ahoraSistema->format('Y-m-d'); // Fecha de México
     $horaActual = date('H-i-s');
     $usuario_nombre = $_SESSION['nombre'] ?? 'Sistema';
     $usuario_id = $_SESSION['usuario_id'] ?? 0;
@@ -3079,110 +4267,6 @@ document.addEventListener('DOMContentLoaded', function() {
             'tablaDeuda', 'tablaDeudaBody', 'deudaPorPagina', 'paginacionDeuda',
             { desde: 'deudaDesde', hasta: 'deudaHasta', total: 'deudaTotal' }
         );
-    }
-});
-
-// ==================== FILTROS EN TIEMPO REAL CORREGIDOS ====================
-// Función para aplicar filtros con prevención de múltiples envíos
-let filtroTimeout = null;
-let isApplyingFilter = false;
-
-function aplicarFiltrosEnTiempoReal() {
-    // Prevenir múltiples aplicaciones simultáneas
-    if (isApplyingFilter) return;
-    
-    const proveedor = document.getElementById('filtroProveedor')?.value || '';
-    const fechaInicio = document.getElementById('filtroFechaInicio')?.value || '';
-    const fechaFin = document.getElementById('filtroFechaFin')?.value || '';
-    
-    let url = new URL(window.location.href);
-    let hasChanges = false;
-    
-    if (proveedor && proveedor !== '') {
-        if (url.searchParams.get('proveedor') !== proveedor) {
-            url.searchParams.set('proveedor', proveedor);
-            hasChanges = true;
-        }
-    } else {
-        if (url.searchParams.has('proveedor')) {
-            url.searchParams.delete('proveedor');
-            hasChanges = true;
-        }
-    }
-    
-    if (fechaInicio && fechaInicio !== '') {
-        if (url.searchParams.get('fecha_inicio') !== fechaInicio) {
-            url.searchParams.set('fecha_inicio', fechaInicio);
-            hasChanges = true;
-        }
-    } else {
-        if (url.searchParams.has('fecha_inicio')) {
-            url.searchParams.delete('fecha_inicio');
-            hasChanges = true;
-        }
-    }
-    
-    if (fechaFin && fechaFin !== '') {
-        if (url.searchParams.get('fecha_fin') !== fechaFin) {
-            url.searchParams.set('fecha_fin', fechaFin);
-            hasChanges = true;
-        }
-    } else {
-        if (url.searchParams.has('fecha_fin')) {
-            url.searchParams.delete('fecha_fin');
-            hasChanges = true;
-        }
-    }
-    
-    if (hasChanges) {
-        // Mostrar indicador de carga
-        const loadingDiv = document.querySelector('.filtro-loading');
-        if (loadingDiv) loadingDiv.classList.add('active');
-        isApplyingFilter = true;
-        
-        // Redirigir después de un pequeño delay para evitar múltiples redirecciones
-        setTimeout(() => {
-            window.location.href = url.toString();
-        }, 100);
-    }
-}
-
-// Configurar eventos de los filtros en tiempo real
-document.addEventListener('DOMContentLoaded', function() {
-    const filtroProveedor = document.getElementById('filtroProveedor');
-    const filtroFechaInicio = document.getElementById('filtroFechaInicio');
-    const filtroFechaFin = document.getElementById('filtroFechaFin');
-    const limpiarFiltrosBtn = document.getElementById('limpiarFiltrosBtn');
-    
-    function triggerFiltros() {
-        if (filtroTimeout) clearTimeout(filtroTimeout);
-        filtroTimeout = setTimeout(function() {
-            aplicarFiltrosEnTiempoReal();
-        }, 500);
-    }
-    
-    if (filtroProveedor) {
-        filtroProveedor.addEventListener('change', triggerFiltros);
-    }
-    
-    if (filtroFechaInicio) {
-        filtroFechaInicio.addEventListener('change', triggerFiltros);
-    }
-    
-    if (filtroFechaFin) {
-        filtroFechaFin.addEventListener('change', triggerFiltros);
-    }
-    
-    if (limpiarFiltrosBtn) {
-        limpiarFiltrosBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            // Limpiar los selects manualmente antes de redirigir
-            if (filtroProveedor) filtroProveedor.value = '';
-            if (filtroFechaInicio) filtroFechaInicio.value = '';
-            if (filtroFechaFin) filtroFechaFin.value = '';
-            // Redirigir a la página sin parámetros
-            window.location.href = window.location.pathname;
-        });
     }
 });
 

@@ -6,6 +6,20 @@ use PHPMailer\PHPMailer\Exception;
 date_default_timezone_set('America/Mexico_City');
 
 require_once 'includes/auth_guard.php';
+require_once __DIR__ . '/includes/configuracion_password.php';
+
+try {
+    $password_temporal_actual = cfgPasswordObtener($conn);
+    $password_temporal_longitud = cfgPasswordLongitudMinima($conn);
+} catch (Throwable $e) {
+    error_log(
+        'Configuración de contraseña temporal: '
+        . $e->getMessage()
+    );
+
+    $password_temporal_actual = 'Pescadores1';
+    $password_temporal_longitud = 8;
+}
 
 // PHPMailer: instala con composer require phpmailer/phpmailer
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
@@ -298,9 +312,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     $usuario_id = $_SESSION['usuario_id'];
     $ip = $_SERVER['REMOTE_ADDR'];
-    
+
+    // Actualizar contraseña temporal del portal
+    if ($action === 'update_default_password') {
+        $nueva_password = trim(
+            (string) ($_POST['password_default_nueva'] ?? '')
+        );
+
+        $confirmar_password = trim(
+            (string) ($_POST['password_default_confirmar'] ?? '')
+        );
+
+        if (!$es_super_administrador) {
+            $mensaje = 'Solo el superadministrador puede cambiar '
+                . 'la contraseña temporal del portal.';
+            $tipo_mensaje = 'danger';
+        } elseif ($nueva_password !== $confirmar_password) {
+            $mensaje = 'Las contraseñas temporales no coinciden.';
+            $tipo_mensaje = 'danger';
+        } else {
+            $validacion_password = cfgPasswordValidar(
+                $nueva_password,
+                $password_temporal_longitud
+            );
+
+            if (!$validacion_password['ok']) {
+                $mensaje = $validacion_password['mensaje'];
+                $tipo_mensaje = 'danger';
+            } elseif (
+                hash_equals(
+                    $password_temporal_actual,
+                    $nueva_password
+                )
+            ) {
+                $mensaje = 'La nueva contraseña es igual '
+                    . 'a la configuración actual.';
+                $tipo_mensaje = 'warning';
+            } else {
+                try {
+                    cfgPasswordGuardar(
+                        $conn,
+                        $nueva_password,
+                        (int) $usuario_id,
+                        $password_temporal_longitud
+                    );
+
+                    $password_temporal_actual = $nueva_password;
+
+                    $mensaje = "
+                        <div style='text-align:center; width:100%;'>
+                            <strong>Contraseña temporal actualizada.</strong>
+                        </div>
+                    ";
+
+                    $tipo_mensaje = 'success';
+
+                    $stmt_audit = $conn->prepare("
+                        INSERT INTO auditoria (
+                            usuario_id,
+                            accion,
+                            detalle,
+                            ip
+                        )
+                        VALUES (
+                            ?,
+                            'ACTUALIZAR_PASSWORD_TEMPORAL',
+                            'Actualizó la contraseña temporal del portal',
+                            ?
+                        )
+                    ");
+
+                    if ($stmt_audit) {
+                        $stmt_audit->bind_param(
+                            'is',
+                            $usuario_id,
+                            $ip
+                        );
+                        $stmt_audit->execute();
+                        $stmt_audit->close();
+                    }
+                } catch (Throwable $e) {
+                    $mensaje = 'No fue posible actualizar la contraseña: '
+                        . htmlspecialchars(
+                            $e->getMessage(),
+                            ENT_QUOTES,
+                            'UTF-8'
+                        );
+
+                    $tipo_mensaje = 'danger';
+                }
+            }
+        }
+
+        $tab_activo = 'usuarios';
+    }
+
     // Actualizar configuración general
-    if ($action === 'update_general') {
+    elseif ($action === 'update_general') {
         $nombre = trim($_POST['nombre'] ?? '');
         $telefono = trim($_POST['telefono'] ?? '');
         $email = trim($_POST['email'] ?? '');
@@ -448,8 +556,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $email = trim($_POST['email'] ?? '');
         $rol = trim($_POST['rol'] ?? 'vendedor');
         $activo = intval($_POST['activo'] ?? 1);
-        $password_default = 'Pescadores1';
-        $password_hash = password_hash($password_default, PASSWORD_DEFAULT);
+        $password_default = $password_temporal_actual;
+        $password_default_html = htmlspecialchars(
+            $password_default,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $password_hash = password_hash(
+            $password_default,
+            PASSWORD_DEFAULT
+        );
 
         $roles_permitidos = $es_super_administrador
             ? ['vendedor', 'administrador', 'super_administrador']
@@ -496,7 +613,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             <div style='text-align:left'>
                                 <strong>Usuario creado, pero no se pudo enviar el correo.</strong><br><br>
                                 <strong>Correo:</strong> {$email_html}<br>
-                                <strong>Contraseña temporal:</strong> {$password_default}<br><br>
+                                <strong>Contraseña temporal:</strong> {$password_default_html}<br><br>
                                 <small><strong>Error SMTP:</strong> {$error_correo}</small>
                             </div>
                         ";
@@ -570,8 +687,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // Resetear contraseña
     elseif ($action === 'reset_password') {
         $id_usuario = intval($_POST['id_usuario'] ?? 0);
-        $password_default = 'Pescadores1';
-        $password_hash = password_hash($password_default, PASSWORD_DEFAULT);
+        $password_default = $password_temporal_actual;
+        $password_default_html = htmlspecialchars(
+            $password_default,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $password_hash = password_hash(
+            $password_default,
+            PASSWORD_DEFAULT
+        );
 
         if (!administradorPuedeGestionarUsuario($conn, $id_usuario, $es_super_administrador)) {
             $mensaje = "No tienes permiso para restablecer la contraseña de esta cuenta.";
@@ -581,7 +707,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->bind_param("si", $password_hash, $id_usuario);
 
             if ($stmt->execute()) {
-                $mensaje = "Contraseña restablecida a: <strong>Pescadores1</strong>. El usuario deberá cambiarla al iniciar sesión.";
+                $mensaje = "Contraseña restablecida a: "
+                    . "<strong>{$password_default_html}</strong>. "
+                    . "El usuario deberá cambiarla al iniciar sesión.";
                 $tipo_mensaje = "success";
 
                 $stmt_audit = $conn->prepare("INSERT INTO auditoria (usuario_id, accion, detalle, ip) VALUES (?, 'Resetear Contraseña', ?, ?)");
@@ -1362,7 +1490,180 @@ include 'includes/navbar.php';
                     font-size: 18px;
                 }
             }
-        </style>
+        
+            /* =========================================================
+               CONTRASEÑA TEMPORAL DEL PORTAL
+               ========================================================= */
+            .password-config-card {
+                display: grid;
+                grid-template-columns:
+                    minmax(280px, .9fr)
+                    minmax(380px, 1.1fr);
+                gap: 20px;
+                margin-bottom: 18px;
+                padding: 20px;
+                border: 1px solid #e6ebf2;
+                border-radius: 16px;
+                background: #ffffff;
+                box-shadow: 0 8px 22px rgba(15, 23, 42, .055);
+            }
+
+            .password-config-info {
+                min-width: 0;
+                display: flex;
+                align-items: flex-start;
+                gap: 14px;
+            }
+
+            .password-config-icon {
+                width: 46px;
+                height: 46px;
+                flex: 0 0 46px;
+                display: grid;
+                place-items: center;
+                border-radius: 13px;
+                color: #ea580c;
+                background: #fff7ed;
+                font-size: 18px;
+            }
+
+            .password-config-copy {
+                min-width: 0;
+            }
+
+            .password-config-eyebrow {
+                display: block;
+                margin-bottom: 3px;
+                color: #c2410c;
+                font-size: 10px;
+                font-weight: 900;
+                letter-spacing: .07em;
+                text-transform: uppercase;
+            }
+
+            .password-config-copy h3 {
+                margin: 0;
+                color: #172033;
+                font-size: 18px;
+                font-weight: 850;
+            }
+
+            .password-config-copy p {
+                margin: 7px 0 12px;
+                color: #64748b;
+                font-size: 12.5px;
+                line-height: 1.5;
+            }
+
+            .password-current-row {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 7px 9px;
+                border: 1px solid #e5eaf0;
+                border-radius: 9px;
+                background: #f8fafc;
+            }
+
+            .password-current-row > span {
+                color: #64748b;
+                font-size: 11px;
+                font-weight: 750;
+            }
+
+            .password-current-row code {
+                color: #172033;
+                background: transparent;
+                font-size: 12px;
+                font-weight: 850;
+                letter-spacing: .4px;
+            }
+
+            .password-eye-btn,
+            .password-field-toggle {
+                border: 0;
+                background: transparent;
+                color: #718198;
+                cursor: pointer;
+            }
+
+            .password-eye-btn:hover,
+            .password-field-toggle:hover {
+                color: #f97316;
+            }
+
+            .password-config-form {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                align-content: start;
+            }
+
+            .password-config-field label {
+                display: block;
+                margin-bottom: 6px;
+                color: #526178;
+                font-size: 11px;
+                font-weight: 800;
+            }
+
+            .password-input-wrap {
+                position: relative;
+            }
+
+            .password-input-wrap .form-control {
+                height: 42px;
+                padding-right: 42px;
+                border-radius: 10px;
+            }
+
+            .password-field-toggle {
+                position: absolute;
+                top: 50%;
+                right: 11px;
+                transform: translateY(-50%);
+            }
+
+            .password-config-actions {
+                grid-column: 1 / -1;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
+            .password-config-actions small {
+                color: #7c899a;
+                font-size: 10.5px;
+            }
+
+            @media (max-width: 900px) {
+                .password-config-card {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            @media (max-width: 575px) {
+                .password-config-card {
+                    gap: 16px;
+                    padding: 16px;
+                }
+
+                .password-config-form {
+                    grid-template-columns: 1fr;
+                }
+
+                .password-config-actions {
+                    align-items: stretch;
+                    flex-direction: column;
+                }
+
+                .password-config-actions .btn {
+                    width: 100%;
+                }
+            }
+
+</style>
 
             <div class="content-wrapper">
                 <section class="content-header">
@@ -1606,6 +1907,138 @@ include 'includes/navbar.php';
 
                 <!-- TAB USUARIOS -->
                 <div class="tab-pane <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" id="tab-usuarios" data-tab-content="usuarios">
+
+                    <?php if ($es_super_administrador): ?>
+                        <section class="password-config-card">
+                            <div class="password-config-info">
+                                <div class="password-config-icon">
+                                    <i class="fas fa-key"></i>
+                                </div>
+
+                                <div class="password-config-copy">
+                                    <span class="password-config-eyebrow">
+                                        Seguridad de usuarios
+                                    </span>
+
+                                    <h3>Contraseña temporal del portal</h3>
+
+                                    <p>
+                                        Se utiliza al crear usuarios y al
+                                        restablecer sus accesos. Después,
+                                        cada usuario deberá cambiarla.
+                                    </p>
+
+                                    <div class="password-current-row">
+                                        <span>Actual:</span>
+
+                                        <code
+                                            id="passwordDefaultActual"
+                                            data-password="<?= htmlspecialchars(
+                                                $password_temporal_actual,
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>"
+                                        >••••••••</code>
+
+                                        <button
+                                            type="button"
+                                            class="password-eye-btn"
+                                            id="togglePasswordDefault"
+                                            aria-label="Mostrar u ocultar contraseña"
+                                        >
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <form
+                                method="POST"
+                                id="formPasswordDefault"
+                                class="password-config-form"
+                                autocomplete="off"
+                            >
+                                <input
+                                    type="hidden"
+                                    name="tab_activo"
+                                    value="usuarios"
+                                >
+
+                                <div class="password-config-field">
+                                    <label for="password_default_nueva">
+                                        Nueva contraseña temporal
+                                    </label>
+
+                                    <div class="password-input-wrap">
+                                        <input
+                                            type="password"
+                                            class="form-control"
+                                            name="password_default_nueva"
+                                            id="password_default_nueva"
+                                            minlength="<?= (int) $password_temporal_longitud ?>"
+                                            maxlength="72"
+                                            autocomplete="new-password"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="password-field-toggle"
+                                            data-target="password_default_nueva"
+                                            aria-label="Mostrar contraseña"
+                                        >
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="password-config-field">
+                                    <label for="password_default_confirmar">
+                                        Confirmar contraseña
+                                    </label>
+
+                                    <div class="password-input-wrap">
+                                        <input
+                                            type="password"
+                                            class="form-control"
+                                            name="password_default_confirmar"
+                                            id="password_default_confirmar"
+                                            minlength="<?= (int) $password_temporal_longitud ?>"
+                                            maxlength="72"
+                                            autocomplete="new-password"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="password-field-toggle"
+                                            data-target="password_default_confirmar"
+                                            aria-label="Mostrar contraseña"
+                                        >
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="password-config-actions">
+                                    <small>
+                                        Mínimo
+                                        <?= (int) $password_temporal_longitud ?>
+                                        caracteres, una letra y un número.
+                                    </small>
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                    >
+                                        <i class="fas fa-save mr-1"></i>
+                                        Guardar contraseña
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+                    <?php endif; ?>
+
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h3 class="card-title mb-0"><i class="fas fa-users mr-2"></i> Gestión de Usuarios</h3>
@@ -1908,7 +2341,16 @@ include 'includes/navbar.php';
                     <div class="form-group">
                         <label>Contraseña</label>
                         <input type="password" class="form-control" name="password" id="usuario_password" placeholder="Dejar en blanco">
-                        <small class="text-muted" id="passwordHelp">Contraseña por defecto: <strong>Pescadores1</strong></small>
+                        <small class="text-muted" id="passwordHelp">
+                            Contraseña temporal configurada:
+                            <strong>
+                                <?= htmlspecialchars(
+                                    $password_temporal_actual,
+                                    ENT_QUOTES,
+                                    'UTF-8'
+                                ) ?>
+                            </strong>
+                        </small>
                     </div>
                     <div class="form-group">
                         <label>Rol</label>
@@ -2303,6 +2745,164 @@ if (formCorreo) {
     });
 }
 
+// ==================== CONTRASEÑA TEMPORAL DEL PORTAL ====================
+const formPasswordDefault =
+    document.getElementById('formPasswordDefault');
+
+if (formPasswordDefault) {
+    formPasswordDefault.addEventListener(
+        'submit',
+        async function (event) {
+            event.preventDefault();
+
+            const nueva =
+                document.getElementById(
+                    'password_default_nueva'
+                )?.value || '';
+
+            const confirmar =
+                document.getElementById(
+                    'password_default_confirmar'
+                )?.value || '';
+
+            if (nueva !== confirmar) {
+                Swal.fire({
+                    title: 'Las contraseñas no coinciden',
+                    text: 'Revisa ambos campos antes de guardar.',
+                    icon: 'warning',
+                    confirmButtonColor: '#f97316'
+                });
+                return;
+            }
+
+            const confirmacion = await Swal.fire({
+                title: '¿Cambiar contraseña temporal?',
+                text:
+                    'Los próximos usuarios creados o restablecidos '
+                    + 'recibirán esta nueva contraseña.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#f97316',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, actualizar',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true
+            });
+
+            if (!confirmacion.isConfirmed) {
+                return;
+            }
+
+            Swal.fire({
+                title: 'Guardando configuración...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: function () {
+                    Swal.showLoading();
+                }
+            });
+
+            try {
+                const data = await enviarFormularioFetch(
+                    formPasswordDefault,
+                    'update_default_password'
+                );
+
+                mostrarAlertaServidor(
+                    data,
+                    'Contraseña temporal actualizada.'
+                );
+            } catch (error) {
+                const data = error.data || {};
+
+                Swal.fire({
+                    title: 'No fue posible guardar',
+                    html:
+                        data.mensaje
+                        || error.message
+                        || 'Revisa los datos capturados.',
+                    icon: 'error',
+                    confirmButtonColor: '#f97316'
+                });
+            }
+        }
+    );
+}
+
+const togglePasswordDefault =
+    document.getElementById('togglePasswordDefault');
+
+if (togglePasswordDefault) {
+    togglePasswordDefault.addEventListener(
+        'click',
+        function () {
+            const actual =
+                document.getElementById(
+                    'passwordDefaultActual'
+                );
+
+            if (!actual) {
+                return;
+            }
+
+            const visible =
+                actual.dataset.visible === '1';
+
+            actual.textContent = visible
+                ? '••••••••'
+                : (actual.dataset.password || '');
+
+            actual.dataset.visible =
+                visible ? '0' : '1';
+
+            const icono =
+                togglePasswordDefault.querySelector('i');
+
+            if (icono) {
+                icono.classList.toggle('fa-eye', visible);
+                icono.classList.toggle(
+                    'fa-eye-slash',
+                    !visible
+                );
+            }
+        }
+    );
+}
+
+document
+    .querySelectorAll('.password-field-toggle')
+    .forEach(function (boton) {
+        boton.addEventListener('click', function () {
+            const objetivo =
+                document.getElementById(
+                    boton.dataset.target || ''
+                );
+
+            if (!objetivo) {
+                return;
+            }
+
+            const mostrar =
+                objetivo.type === 'password';
+
+            objetivo.type =
+                mostrar ? 'text' : 'password';
+
+            const icono = boton.querySelector('i');
+
+            if (icono) {
+                icono.classList.toggle(
+                    'fa-eye',
+                    !mostrar
+                );
+                icono.classList.toggle(
+                    'fa-eye-slash',
+                    mostrar
+                );
+            }
+        });
+    });
+
 // ==================== FORMULARIO USUARIO (MODAL) ====================
 const formUsuario = document.getElementById('formUsuario');
 if (formUsuario) {
@@ -2568,6 +3168,21 @@ function previewLogo(input, previewId, containerId) {
 }
 
 // ==================== FUNCIONES USUARIOS ====================
+const PASSWORD_TEMPORAL_ACTUAL = <?= json_encode(
+    $password_temporal_actual,
+    JSON_HEX_TAG
+    | JSON_HEX_APOS
+    | JSON_HEX_AMP
+    | JSON_HEX_QUOT
+    | JSON_UNESCAPED_UNICODE
+) ?>;
+
+function escaparHtml(valor) {
+    const elemento = document.createElement('div');
+    elemento.textContent = String(valor ?? '');
+    return elemento.innerHTML;
+}
+
 function abrirModalUsuario() {
     document.getElementById('modalUsuarioTitulo').textContent = 'Nuevo Usuario';
     document.getElementById('usuarioAction').value = 'crear_usuario';
@@ -2577,7 +3192,10 @@ function abrirModalUsuario() {
     document.getElementById('usuario_password').value = '';
     document.getElementById('usuario_rol').value = 'vendedor';
     document.getElementById('usuario_activo').value = '1';
-    document.getElementById('passwordHelp').innerHTML = 'Contraseña por defecto: <strong>Pescadores1</strong>';
+    document.getElementById('passwordHelp').innerHTML =
+        'Contraseña temporal configurada: <strong>'
+        + escaparHtml(PASSWORD_TEMPORAL_ACTUAL)
+        + '</strong>';
     $('#modalUsuario').modal('show');
 }
 
@@ -2597,7 +3215,10 @@ function editarUsuario(usuario) {
 function resetearPassword(id, nombre) {
     Swal.fire({
         title: '¿Restablecer contraseña?',
-        html: `Usuario: <strong>${nombre}</strong><br>La contraseña se establecerá como: <strong>Pescadores1</strong>`,
+        html:
+            `Usuario: <strong>${escaparHtml(nombre)}</strong>`
+            + '<br>La contraseña se establecerá como: '
+            + `<strong>${escaparHtml(PASSWORD_TEMPORAL_ACTUAL)}</strong>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#f59e0b',

@@ -19,6 +19,7 @@ function permisos_normalizar_rol($rol): string
         'admin' => 'administrador',
         'administrador' => 'administrador',
         'superadmin' => 'super_administrador',
+        'superadministrador' => 'super_administrador',
         'super admin' => 'super_administrador',
         'super_admin' => 'super_administrador',
         'super-administrador' => 'super_administrador',
@@ -137,7 +138,11 @@ function permisos_configuracion_legacy(): array
             ],
         ],
         'ajustes_productos' => [
-            'roles' => ['vendedor'],
+            'roles' => [
+                'administrador',
+                'super_administrador',
+                'vendedor',
+            ],
             'rutas' => ['vendedor_ajustes_productos.php'],
         ],
         'proveedores' => [

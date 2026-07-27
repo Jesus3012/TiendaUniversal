@@ -1,289 +1,371 @@
 <?php
-// Limpiar cualquier output previo
-if (ob_get_level()) ob_clean();
-header('Content-Type: application/json');
-header('Cache-Control: no-cache, must-revalidate');
+declare(strict_types=1);
 
-include '../includes/db.php';
-require_once('../includes/fpdf.php');
+date_default_timezone_set('America/Mexico_City');
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-// Función para buscar logo con diferentes extensiones
-function buscarLogo($basePath = 'img/panel_principal') {
-    $extensiones = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
-    $ubicaciones = [
-        $basePath,
-        '../' . $basePath,
-        __DIR__ . '/../' . $basePath,
-        $_SERVER['DOCUMENT_ROOT'] . '/' . $basePath
-    ];
-    
-    foreach ($extensiones as $ext) {
-        foreach ($ubicaciones as $ubicacion) {
-            $ruta = $ubicacion . '.' . $ext;
-            if (file_exists($ruta)) {
-                return $ruta;
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/ventas_reembolsos_helper.php';
+
+function dp_estado_folio(mysqli $conn, string $folio): string
+{
+    $stmt = $conn->prepare("
+        SELECT id, cantidad_vendida, estado
+        FROM ventas
+        WHERE folio_ticket = ?
+        ORDER BY id
+    ");
+    $stmt->bind_param('s', $folio);
+    $stmt->execute();
+    $filas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if ($filas === []) {
+        return 'cancelada';
+    }
+
+    $totalDisponible = 0;
+    $tieneAjustes = false;
+    $tienePendiente = false;
+
+    foreach ($filas as $fila) {
+        $disponible = vrh_cantidad_disponible($conn, $fila);
+        $totalDisponible += $disponible;
+        $estado = mb_strtolower((string) ($fila['estado'] ?? 'completada'), 'UTF-8');
+        $tieneAjustes = $tieneAjustes || in_array($estado, ['parcial', 'cancelada'], true);
+        $tienePendiente = $tienePendiente || $estado === 'pendiente';
+    }
+
+    if ($totalDisponible <= 0) {
+        return 'cancelada';
+    }
+
+    if ($tieneAjustes) {
+        return 'parcial';
+    }
+
+    return $tienePendiente ? 'pendiente' : 'completada';
+}
+
+$usuarioId = (int) ($_SESSION['usuario_id'] ?? 0);
+$rol = mb_strtolower(trim((string) ($_SESSION['rol'] ?? '')), 'UTF-8');
+
+if ($usuarioId <= 0) {
+    vrh_responder(['success' => false, 'message' => 'Sesión no válida.'], 401);
+}
+
+if (!in_array($rol, ['administrador', 'super_administrador', 'vendedor'], true)) {
+    vrh_responder(['success' => false, 'message' => 'No tienes permiso para procesar devoluciones.'], 403);
+}
+
+$data = vrh_json_entrada();
+$folio = trim((string) ($data['folio'] ?? ''));
+$productoId = (int) ($data['id_producto'] ?? 0);
+$cantidadSolicitada = (int) ($data['cantidad'] ?? 0);
+$motivo = mb_substr(trim((string) ($data['motivo'] ?? '')), 0, 255);
+$motivoFinal = $motivo !== '' ? $motivo : 'Devolución parcial';
+
+if ($folio === '' || $productoId <= 0 || $cantidadSolicitada <= 0) {
+    vrh_responder([
+        'success' => false,
+        'message' => 'Folio, producto y cantidad son obligatorios.',
+    ], 422);
+}
+
+$lockName = 'devolucion_' . hash('sha256', $folio . '|' . $productoId);
+$lockObtenido = false;
+
+try {
+    $stmt = $conn->prepare('SELECT GET_LOCK(?, 15) AS obtenido');
+    $stmt->bind_param('s', $lockName);
+    $stmt->execute();
+    $lockObtenido = (int) ($stmt->get_result()->fetch_assoc()['obtenido'] ?? 0) === 1;
+    $stmt->close();
+
+    if (!$lockObtenido) {
+        throw new RuntimeException('Este producto está siendo procesado. Intenta nuevamente.');
+    }
+
+    $stmt = $conn->prepare("
+        SELECT
+            v.id,
+            v.folio_ticket,
+            v.id_producto,
+            v.id_vendedor,
+            v.cantidad_vendida,
+            v.precio_unitario,
+            v.subtotal,
+            v.metodo_pago,
+            v.referencia_pago,
+            v.fecha_venta,
+            v.estado,
+            p.nombre AS producto_nombre,
+            p.precio_venta
+        FROM ventas v
+        INNER JOIN productos p ON p.id = v.id_producto
+        WHERE v.folio_ticket = ?
+          AND v.id_producto = ?
+        ORDER BY v.id ASC
+    ");
+    $stmt->bind_param('si', $folio, $productoId);
+    $stmt->execute();
+    $filas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if ($filas === []) {
+        throw new RuntimeException('No se encontró el producto dentro de esta venta.');
+    }
+
+    if ($rol === 'vendedor') {
+        foreach ($filas as $fila) {
+            if ((int) ($fila['id_vendedor'] ?? 0) !== $usuarioId) {
+                throw new RuntimeException('No puedes devolver artículos de una venta registrada por otro usuario.');
             }
         }
     }
-    return null;
-}
 
-$input = json_decode(file_get_contents('php://input'), true);
+    $metodo = vrh_normalizar_metodo((string) ($filas[0]['metodo_pago'] ?? ''));
+    $plazo = vrh_validar_plazo(
+        $conn,
+        $metodo,
+        (string) $filas[0]['fecha_venta'],
+        'parcial'
+    );
 
-$folio = $conn->real_escape_string($input['folio'] ?? '');
-$id_producto = intval($input['id_producto'] ?? 0);
-$cantidad_devuelta = intval($input['cantidad'] ?? 0);
-$motivo = $conn->real_escape_string($input['motivo'] ?? '');
+    $disponibleTotal = 0;
+    $pendiente = $cantidadSolicitada;
+    $aplicaciones = [];
+    $montoReembolso = 0.00;
+    $semillaPartes = [];
 
-if (!$folio || $id_producto <= 0 || $cantidad_devuelta <= 0) {
-    echo json_encode(['success' => false, 'message' => 'Datos inválidos. Parámetros requeridos: folio, id_producto, cantidad.']);
-    exit;
-}
+    foreach ($filas as $fila) {
+        $disponible = vrh_cantidad_disponible($conn, $fila);
+        $disponibleTotal += $disponible;
 
-// Obtener configuración de la tienda
-$sql_config = "SELECT nombre, telefono, email, direccion FROM configuracion_galeria WHERE id = 1";
-$result_config = $conn->query($sql_config);
-$config = $result_config->fetch_assoc();
+        $devueltoAntes = vrh_total_devuelto($conn, (int) $fila['id']);
+        $canceladoAntes = vrh_total_cancelado(
+            $conn,
+            (int) $fila['id'],
+            (int) $fila['cantidad_vendida']
+        );
+        $semillaPartes[] = implode(':', [
+            (int) $fila['id'],
+            $devueltoAntes,
+            $canceladoAntes,
+            $disponible,
+        ]);
 
-if (!$config) {
-    $config = [
-        'nombre' => 'TIENDA PESCADORES',
-        'telefono' => '',
-        'email' => '',
-        'direccion' => ''
-    ];
-}
+        if ($pendiente <= 0 || $disponible <= 0) {
+            continue;
+        }
 
-// === 1. Obtener venta específica ===
-$stmt = $conn->prepare("
-    SELECT id, cantidad_vendida, correo_cliente 
-    FROM ventas 
-    WHERE folio_ticket = ? AND id_producto = ?
-");
-$stmt->bind_param("si", $folio, $id_producto);
-$stmt->execute();
-$res = $stmt->get_result();
+        $aplicar = min($pendiente, $disponible);
+        $precio = vrh_precio_unitario($fila);
+        $importe = round($aplicar * $precio, 2);
 
-if ($res->num_rows == 0) {
-    echo json_encode(['success'=>false, 'message'=>'Artículo no encontrado en este ticket']);
-    exit;
-}
+        $aplicaciones[] = [
+            'venta' => $fila,
+            'cantidad' => $aplicar,
+            'disponible_antes' => $disponible,
+            'precio' => $precio,
+            'importe' => $importe,
+        ];
 
-$venta = $res->fetch_assoc();
-$id_venta = $venta['id'];
-$cantidad_vendida = $venta['cantidad_vendida'];
-$correo = $venta['correo_cliente'];
-
-// === 2. Validar cantidad ===
-if ($cantidad_devuelta > $cantidad_vendida) {
-    echo json_encode(['success'=>false, 'message'=>'La cantidad excede lo vendido.']);
-    exit;
-}
-
-// === 3. Registrar devolución ===
-$conn->query("
-CREATE TABLE IF NOT EXISTS devoluciones_parciales(
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    id_venta INT,
-    cantidad_devuelta INT,
-    motivo VARCHAR(255),
-    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB
-");
-
-$stmt2 = $conn->prepare("
-    INSERT INTO devoluciones_parciales (id_venta, cantidad_devuelta, motivo)
-    VALUES (?, ?, ?)
-");
-$stmt2->bind_param("iis", $id_venta, $cantidad_devuelta, $motivo);
-$stmt2->execute();
-
-// === 4. Actualizar cantidad vendida ===
-$nueva_cantidad = $cantidad_vendida - $cantidad_devuelta;
-
-if ($nueva_cantidad > 0) {
-    $stmt3 = $conn->prepare("UPDATE ventas SET cantidad_vendida = ? WHERE id = ?");
-    $stmt3->bind_param("ii", $nueva_cantidad, $id_venta);
-    $stmt3->execute();
-} else {
-    // si quedó en 0, eliminar fila de ventas
-    $conn->query("DELETE FROM ventas WHERE id = $id_venta");
-}
-
-// === 5. Restaurar stock ===
-$stmt4 = $conn->prepare("UPDATE productos SET cantidad = cantidad + ? WHERE id = ?");
-$stmt4->bind_param("ii", $cantidad_devuelta, $id_producto);
-$stmt4->execute();
-
-// === 5.1 ACTUALIZAR PEDIDOS ===
-$pedido = $conn->query("
-    SELECT id, cantidad_pedida, faltante
-    FROM pedidos
-    WHERE id_producto = $id_producto
-    ORDER BY fecha DESC
-    LIMIT 1
-")->fetch_assoc();
-
-if($pedido){
-    $nueva_cantidad_pedida = $pedido['cantidad_pedida'] - $cantidad_devuelta;
-    if($nueva_cantidad_pedida < 0) $nueva_cantidad_pedida = 0;
-
-    $nuevo_faltante = $pedido['faltante'] - $cantidad_devuelta;
-    if($nuevo_faltante < 0) $nuevo_faltante = 0;
-
-    $conn->query("
-        UPDATE pedidos
-        SET cantidad_pedida = $nueva_cantidad_pedida,
-            faltante = $nuevo_faltante
-        WHERE id = {$pedido['id']}
-    ");
-}
-
-// === 6. Revisar si quedan artículos ===
-$q2 = $conn->prepare("
-    SELECT v.*, p.nombre, p.precio_venta
-    FROM ventas v
-    JOIN productos p ON v.id_producto = p.id
-    WHERE folio_ticket = ?
-");
-$q2->bind_param("s", $folio);
-$q2->execute();
-$rest = $q2->get_result();
-
-if ($rest->num_rows == 0) {
-    echo json_encode(['success'=>true, 'message'=>'Devolución realizada. Ticket vacío.']);
-    exit;
-}
-
-// === 7. Regenerar PDF ===
-$carrito = [];
-$total = 0;
-
-while ($r = $rest->fetch_assoc()) {
-    $carrito[] = $r;
-    $total += $r['precio_venta'] * $r['cantidad_vendida'];
-}
-
-$subtotal = $total / 1.16;
-$iva = $total - $subtotal;
-
-if (!is_dir('../tickets')) mkdir('../tickets', 0777, true);
-$ruta = "../tickets/ticket_$folio.pdf";
-
-// Tamaño dinámico
-$alto = 120 + (count($carrito) * 10);
-if ($alto < 130) $alto = 130;
-
-$pdf = new FPDF('P','mm',array(80,$alto));
-$pdf->AddPage();
-$pdf->SetMargins(5,3,5);
-
-// ====== LOGO (buscando img/panel_principal con cualquier extensión) ======
-$logoPath = buscarLogo('img/panel_principal');
-if ($logoPath && file_exists($logoPath)) {
-    $anchoLogo = 20;
-    $anchoPagina = $pdf->GetPageWidth();
-    $x = ($anchoPagina - $anchoLogo) / 2;
-    $pdf->Image($logoPath, $x, 4, $anchoLogo);
-    $pdf->Ln(18);
-} else {
-    $pdf->Ln(8);
-}
-
-// ====== ENCABEZADO DE TIENDA ======
-$nombreTienda = !empty($config['nombre']) ? $config['nombre'] : 'TIENDA PESCADORES';
-$pdf->SetFont('Arial','B',12);
-$pdf->Cell(0,6,utf8_decode($nombreTienda),0,1,'C');
-
-$pdf->SetFont('Arial','',8);
-
-if (!empty($config['direccion'])) {
-    $pdf->Cell(0,4,utf8_decode($config['direccion']),0,1,'C');
-}
-if (!empty($config['telefono'])) {
-    $pdf->Cell(0,4,'Tel: ' . $config['telefono'],0,1,'C');
-}
-if (!empty($config['email'])) {
-    $pdf->Cell(0,4,$config['email'],0,1,'C');
-}
-
-$pdf->Ln(2);
-$pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
-
-// ====== INFO DEL TICKET ======
-$pdf->SetFont('Arial','B',9);
-$pdf->Cell(0,5,'Folio: '.$folio,0,1,'L');
-
-$pdf->SetFont('Arial','',9);
-$pdf->Cell(0,5,'Fecha: '.date('d/m/Y H:i:s'),0,1,'L');
-$pdf->Cell(0,5,'Cliente: '.$correo,0,1,'L');
-
-$pdf->Ln(2);
-$pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
-
-// ====== TABLA DE PRODUCTOS ======
-$pdf->SetFont('Arial','B',8);
-$pdf->Cell(38,5,'Producto',0,0);
-$pdf->Cell(10,5,'Cant',0,0,'C');
-$pdf->Cell(14,5,'P.U.',0,0,'R');
-$pdf->Cell(13,5,'Total',0,1,'R');
-
-$pdf->SetFont('Arial','',8);
-
-foreach ($carrito as $p) {
-    $nombre = utf8_decode($p['nombre']);
-    if (strlen($nombre) > 20) {
-        $nombre = substr($nombre, 0, 18) . '...';
+        $montoReembolso += $importe;
+        $pendiente -= $aplicar;
     }
-    
-    $pdf->Cell(38,5,$nombre,0,0);
-    $pdf->Cell(10,5,$p['cantidad_vendida'],0,0,'C');
-    $pdf->Cell(14,5,'$'.number_format($p['precio_venta'],2),0,0,'R');
-    $pdf->Cell(13,5,'$'.number_format($p['precio_venta'] * $p['cantidad_vendida'],2),0,1,'R');
+
+    if ($cantidadSolicitada > $disponibleTotal || $pendiente > 0) {
+        throw new RuntimeException(
+            "Solo quedan {$disponibleTotal} pieza(s) disponibles para devolver."
+        );
+    }
+
+    $montoReembolso = round($montoReembolso, 2);
+
+    // Solicita el dinero a Mercado Pago antes de modificar existencias.
+    $resultadoMp = vrh_procesar_reembolso_mp(
+        $conn,
+        $filas[0],
+        $folio,
+        $montoReembolso,
+        'parcial',
+        $productoId . '|' . $cantidadSolicitada . '|' . implode('|', $semillaPartes),
+        $motivoFinal,
+        $usuarioId
+    );
+
+    $estadoReembolso = vrh_es_tarjeta($metodo)
+        ? (string) ($resultadoMp['status'] ?? 'accepted')
+        : 'manual_pendiente';
+    $reembolsoUid = (string) ($resultadoMp['idempotency_key'] ?? 'MAN-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)));
+
+    $conn->begin_transaction();
+
+    foreach ($aplicaciones as $aplicacion) {
+        $venta = $aplicacion['venta'];
+        $ventaId = (int) $venta['id'];
+        $cantidad = (int) $aplicacion['cantidad'];
+        $disponibleAntes = (int) $aplicacion['disponible_antes'];
+        $importe = (float) $aplicacion['importe'];
+
+        $stmt = $conn->prepare("
+            SELECT id, cantidad_vendida, estado
+            FROM ventas
+            WHERE id = ?
+            FOR UPDATE
+        ");
+        $stmt->bind_param('i', $ventaId);
+        $stmt->execute();
+        $actual = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$actual) {
+            throw new RuntimeException('Una fila de la venta dejó de existir durante el proceso.');
+        }
+
+        $disponibleActual = vrh_cantidad_disponible($conn, $actual);
+        if ($disponibleActual !== $disponibleAntes || $cantidad > $disponibleActual) {
+            throw new RuntimeException(
+                'La venta cambió mientras Mercado Pago procesaba el reembolso. Revisa la bitácora antes de reintentar.'
+            );
+        }
+
+        $stmt = $conn->prepare("
+            INSERT INTO devoluciones_parciales (
+                id_venta,
+                cantidad_devuelta,
+                monto_reembolso,
+                motivo,
+                metodo_pago,
+                estado_reembolso,
+                reembolso_uid,
+                procesada_por,
+                fecha
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->bind_param(
+            'iidssssi',
+            $ventaId,
+            $cantidad,
+            $importe,
+            $motivoFinal,
+            $metodo,
+            $estadoReembolso,
+            $reembolsoUid,
+            $usuarioId
+        );
+        $stmt->execute();
+        $stmt->close();
+
+        $nuevoDisponible = $disponibleActual - $cantidad;
+        $nuevoEstado = $nuevoDisponible <= 0 ? 'cancelada' : 'parcial';
+
+        $stmt = $conn->prepare("UPDATE ventas SET estado = ? WHERE id = ?");
+        $stmt->bind_param('si', $nuevoEstado, $ventaId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $stmt = $conn->prepare("
+        UPDATE productos
+        SET cantidad = cantidad + ?
+        WHERE id = ?
+    ");
+    $stmt->bind_param('ii', $cantidadSolicitada, $productoId);
+    $stmt->execute();
+    if ($stmt->affected_rows !== 1) {
+        throw new RuntimeException('No se pudo restaurar el stock del producto.');
+    }
+    $stmt->close();
+
+    // Mantiene la lógica histórica de pedidos, sin permitir valores negativos.
+    if (vrh_tabla_existe($conn, 'pedidos')) {
+        $stmt = $conn->prepare("
+            SELECT id, cantidad_pedida, faltante
+            FROM pedidos
+            WHERE id_producto = ?
+            ORDER BY fecha DESC
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $stmt->bind_param('i', $productoId);
+        $stmt->execute();
+        $pedido = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($pedido) {
+            $nuevaPedida = max((int) $pedido['cantidad_pedida'] - $cantidadSolicitada, 0);
+            $nuevoFaltante = max((int) $pedido['faltante'] - $cantidadSolicitada, 0);
+            $stmt = $conn->prepare("
+                UPDATE pedidos
+                SET cantidad_pedida = ?, faltante = ?
+                WHERE id = ?
+            ");
+            $pedidoId = (int) $pedido['id'];
+            $stmt->bind_param('iii', $nuevaPedida, $nuevoFaltante, $pedidoId);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    $estadoFolio = dp_estado_folio($conn, $folio);
+
+    vrh_insertar_auditoria(
+        $conn,
+        $usuarioId,
+        'DEVOLUCION_PARCIAL',
+        "Devolvió {$cantidadSolicitada} pieza(s) del producto {$productoId} en {$folio}. " .
+        'Importe: $' . number_format($montoReembolso, 2) .
+        ". Método: {$metodo}. Estado de reembolso: {$estadoReembolso}. Motivo: {$motivoFinal}."
+    );
+
+    $conn->commit();
+
+    $requiereManual = !vrh_es_tarjeta($metodo);
+    $mensaje = vrh_es_tarjeta($metodo)
+        ? 'Devolución guardada, stock restaurado y reembolso parcial enviado a Mercado Pago.'
+        : 'Devolución guardada y stock restaurado. Entrega o transfiere manualmente el importe al cliente.';
+
+    vrh_responder([
+        'success' => true,
+        'message' => $mensaje,
+        'folio' => $folio,
+        'id_producto' => $productoId,
+        'cantidad_devuelta' => $cantidadSolicitada,
+        'monto_reembolso' => $montoReembolso,
+        'monto_reembolso_formateado' => '$' . number_format($montoReembolso, 2),
+        'estado_venta' => $estadoFolio,
+        'estado_reembolso' => $estadoReembolso,
+        'requiere_reembolso_manual' => $requiereManual,
+        'mercadopago' => $resultadoMp,
+        'plazo' => $plazo,
+    ]);
+} catch (Throwable $e) {
+    try {
+        $conn->rollback();
+    } catch (Throwable $rollbackError) {
+        error_log('Rollback devolver_parcial.php: ' . $rollbackError->getMessage());
+    }
+
+    error_log('devolver_parcial.php: ' . $e->getMessage());
+
+    vrh_responder([
+        'success' => false,
+        'message' => $e->getMessage(),
+        'requiere_revision_pago' => vrh_contiene($e->getMessage(), 'Mercado Pago procesaba'),
+    ], 409);
+} finally {
+    if ($lockObtenido) {
+        try {
+            $stmt = $conn->prepare('SELECT RELEASE_LOCK(?)');
+            $stmt->bind_param('s', $lockName);
+            $stmt->execute();
+            $stmt->close();
+        } catch (Throwable $unlockError) {
+            error_log('RELEASE_LOCK devolver_parcial.php: ' . $unlockError->getMessage());
+        }
+    }
 }
-
-$pdf->Ln(2);
-$pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
-
-// ====== TOTALES ======
-$pdf->SetFont('Arial','',9);
-$pdf->Cell(45,6,'Subtotal:',0,0,'R');
-$pdf->SetFont('Arial','B',9);
-$pdf->Cell(20,6,'$'.number_format($subtotal,2),0,1,'R');
-
-$pdf->SetFont('Arial','',9);
-$pdf->Cell(45,6,'IVA 16%:',0,0,'R');
-$pdf->SetFont('Arial','B',9);
-$pdf->Cell(20,6,'$'.number_format($iva,2),0,1,'R');
-
-$pdf->Ln(2);
-$pdf->SetFont('Arial','B',11);
-$pdf->Cell(45,7,'TOTAL:',0,0,'R');
-$pdf->SetFont('Arial','B',11);
-$pdf->Cell(20,7,'$'.number_format($total,2),0,1,'R');
-
-$pdf->Ln(3);
-$pdf->Cell(0,4,str_repeat('-', 45),0,1,'C');
-
-// ====== MENSAJE FINAL ======
-$pdf->SetFont('Arial','I',8);
-$pdf->Cell(0,5,utf8_decode('¡Gracias por tu compra!'),0,1,'C');
-if ($cantidad_devuelta > 0) {
-    $pdf->SetFont('Arial','I',7);
-    $pdf->Cell(0,4,'* Se realizó una devolución parcial *',0,1,'C');
-}
-$pdf->Cell(0,5,utf8_decode('¡Vuelva pronto!'),0,1,'C');
-
-// Guardar PDF
-$pdf->Output('F',$ruta);
-
-// Guardar referencia en DB
-$conn->query("UPDATE ventas SET ticket_pdf = 'ticket_$folio.pdf' WHERE folio_ticket = '$folio'");
-
-// Limpiar buffer antes de enviar respuesta
-if (ob_get_level()) ob_clean();
-
-// Enviar respuesta JSON exitosa
-echo json_encode(['success'=>true, 'message'=>'Devolución parcial realizada y ticket actualizado.']);
-exit;
-?>

@@ -1,11 +1,96 @@
 <?php
 ob_start();
-session_start();
-require_once 'includes/db.php';
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/permisos.php';
+
+/**
+ * Normalización adicional para instalaciones donde permisos.php todavía
+ * conserva una lista antigua de alias del superadministrador.
+ */
+function historialStockAjaxNormalizarRol($rol): string
+{
+    $rol = trim((string) $rol);
+
+    if (function_exists('mb_strtolower')) {
+        $rol = mb_strtolower($rol, 'UTF-8');
+    } else {
+        $rol = strtolower($rol);
+    }
+
+    $mapa = [
+        'admin' => 'administrador',
+        'administrador' => 'administrador',
+        'superadmin' => 'super_administrador',
+        'superadministrador' => 'super_administrador',
+        'super admin' => 'super_administrador',
+        'super_admin' => 'super_administrador',
+        'super-administrador' => 'super_administrador',
+        'super administrador' => 'super_administrador',
+        'super_administrador' => 'super_administrador',
+    ];
+
+    return $mapa[$rol] ?? $rol;
+}
+
+$usuario_id_sesion = function_exists('permisos_usuario_id')
+    ? permisos_usuario_id()
+    : (int) (
+        $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? 0
+    );
+
+$rol_actual = function_exists('permisos_normalizar_rol')
+    ? permisos_normalizar_rol($_SESSION['rol'] ?? '')
+    : ($_SESSION['rol'] ?? '');
+
+$rol_actual = historialStockAjaxNormalizarRol($rol_actual);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+if ($usuario_id_sesion <= 0) {
+    http_response_code(401);
+
+    echo json_encode([
+        'success' => false,
+        'ok' => false,
+        'message' => 'Tu sesión ha expirado. Inicia sesión nuevamente.',
+        'tabla' => '',
+        'paginacion' => '',
+        'total_registros' => '0',
+        'producto_nombre' => '',
+        'proveedor_filtro' => '',
+        'filtros' => [],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
+
+if (!in_array($rol_actual, ['administrador', 'super_administrador'], true)) {
+    http_response_code(403);
+
+    echo json_encode([
+        'success' => false,
+        'ok' => false,
+        'message' => 'No tienes permiso para consultar el historial de stock.',
+        'tabla' => '',
+        'paginacion' => '',
+        'total_registros' => '0',
+        'producto_nombre' => '',
+        'proveedor_filtro' => '',
+        'filtros' => [],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+$_SESSION['usuario_id'] = $usuario_id_sesion;
+$_SESSION['id_usuario'] = $usuario_id_sesion;
+$_SESSION['id'] = $usuario_id_sesion;
+$_SESSION['rol'] = $rol_actual;
+$_SESSION['last_activity'] = time();
 
 // Obtener parámetros de la petición AJAX
 $producto_id = isset($_GET['producto_id']) ? intval($_GET['producto_id']) : 0;
@@ -59,7 +144,7 @@ if (!empty($fecha_desde) && !empty($fecha_hasta)) {
 // Obtener total de registros
 $count_query = "SELECT COUNT(*) as total " . $base_query;
 $total_result = $conn->query($count_query);
-$total_registros = $total_result->fetch_assoc()['total'];
+$total_registros = $total_result ? (int)($total_result->fetch_assoc()['total'] ?? 0) : 0;
 
 // Calcular offset
 if ($registros_por_pagina === 'todos') {
@@ -90,6 +175,23 @@ if ($registros_por_pagina !== 'todos') {
 }
 
 $historial = $conn->query($query);
+
+if (!$historial) {
+    http_response_code(500);
+
+    echo json_encode([
+        'success' => false,
+        'ok' => false,
+        'message' => 'No fue posible consultar el historial de stock.',
+        'tabla' => '',
+        'paginacion' => '',
+        'total_registros' => '0',
+        'producto_nombre' => $producto_nombre,
+        'proveedor_filtro' => $proveedor_filtro,
+        'filtros' => [],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 
 // Generar HTML de la tabla
 ob_start();
@@ -173,15 +275,15 @@ if ($historial->num_rows === 0): ?>
         <td>
             <span class="<?= $badge_class ?>"><?= $badge_text ?></span>
         </td>
-        <td class="text-right"><?= number_format($row['cantidad_anterior'], 2) ?></td>
+        <td class="text-right"><?= number_format((float)($row['cantidad_anterior'] ?? 0), 2) ?></td>
         <td class="text-center <?= $color_clase ?> font-weight-bold">
             <?php if ($signo): ?>
-                <?= $signo . number_format($cantidad_mostrar, 2) ?>
+                <?= $signo . number_format((float)$cantidad_mostrar, 2) ?>
             <?php else: ?>
-                <?= number_format($cantidad_mostrar, 2) ?>
+                <?= number_format((float)$cantidad_mostrar, 2) ?>
             <?php endif; ?>
         </td>
-        <td class="text-center font-weight-bold"><?= number_format($row['cantidad_nueva'], 2) ?></td>
+        <td class="text-center font-weight-bold"><?= number_format((float)($row['cantidad_nueva'] ?? 0), 2) ?></td>
         <td>
             <?= htmlspecialchars($row['nota'] ?? '-') ?>
             <?php if (empty($row['nota']) && $row['cantidad_anterior'] == 0): ?>
@@ -295,7 +397,6 @@ if (!empty($fecha_hasta)) {
 }
 
 // Devolver respuesta JSON
-header('Content-Type: application/json');
 echo json_encode([
     'tabla' => $tabla_html,
     'paginacion' => $paginacion_html,

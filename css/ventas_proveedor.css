@@ -912,3 +912,575 @@ footer {
     color: var(--gray-500);
     font-size: 0.75rem;
 }
+/* =========================================================
+   AJUSTE SOBRIO — SOLO SELECTOR Y CONTROL DE STOCK
+   Mantiene intactos los demás bloques del módulo.
+   ========================================================= */
+
+/* Selector de proveedor: blanco, limpio y sin cabecera naranja pesada */
+.proveedor-card {
+    overflow: hidden;
+    border: 1px solid #e5e7eb !important;
+    border-left: 1px solid #e5e7eb !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06) !important;
+    background: #ffffff !important;
+}
+
+.proveedor-card .card-header {
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    padding: 14px 18px !important;
+    padding-right: 64px !important;
+    color: #172033 !important;
+    background: #ffffff !important;
+    border: 0 !important;
+    border-bottom: 1px solid #edf0f4 !important;
+    border-radius: 0 !important;
+}
+
+.proveedor-card .card-header h5 {
+    color: #172033 !important;
+    font-size: 0.98rem !important;
+    font-weight: 700 !important;
+}
+
+.proveedor-card .card-header h5 > i {
+    width: 32px;
+    height: 32px;
+    margin-right: 9px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f97316;
+    background: #fff3e8;
+    border-radius: 9px;
+}
+
+.proveedor-card .card-header small {
+    color: #7b8494 !important;
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.proveedor-card .card-body {
+    padding: 18px !important;
+}
+
+.proveedor-card label {
+    margin-bottom: 7px !important;
+    color: #4b5563 !important;
+    font-size: 0.82rem;
+}
+
+.proveedor-card label i,
+.proveedor-card .card-body small i {
+    color: #f97316;
+}
+
+.btn-reset-corner {
+    top: 11px !important;
+    right: 14px !important;
+    width: 32px !important;
+    height: 32px !important;
+    color: #5f6877 !important;
+    background: #f4f6f8 !important;
+    border: 1px solid #e4e8ed !important;
+    border-radius: 9px !important;
+}
+
+.btn-reset-corner:hover:not(:disabled) {
+    color: #ea580c !important;
+    background: #fff3e8 !important;
+    border-color: #fed7aa !important;
+    transform: none !important;
+}
+
+.btn-reset-corner:disabled {
+    opacity: 0.42 !important;
+}
+
+/* Select2 menos alto y más neutral */
+.proveedor-card .select2-container--default .select2-selection--single {
+    height: 42px !important;
+    background: #ffffff !important;
+    border: 1px solid #dfe4ea !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+}
+
+.proveedor-card .select2-container--default .select2-selection--single:hover {
+    border-color: #f4a261 !important;
+}
+
+.proveedor-card .select2-container--default.select2-container--focus .select2-selection--single,
+.proveedor-card .select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #f97316 !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
+}
+
+.proveedor-card .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 40px !important;
+    padding-left: 13px !important;
+    color: #253047 !important;
+    font-size: 0.84rem !important;
+}
+
+.proveedor-card .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 40px !important;
+}
+
+/* Panel principal del control de stock */
+.desktop-view.card {
+    overflow: hidden !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 14px !important;
+    box-shadow: 0 5px 16px rgba(15, 23, 42, 0.06) !important;
+}
+
+.desktop-view > .card-header {
+    min-height: 68px;
+    padding: 14px 18px !important;
+    background: #ffffff !important;
+    border: 0 !important;
+    border-bottom: 1px solid #e9edf2 !important;
+}
+
+.desktop-view > .card-header h5 {
+    color: #182338 !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+}
+
+.desktop-view > .card-header h5 > strong {
+    color: #ea580c !important;
+}
+
+.desktop-view > .card-header .fa-boxes {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    color: #f97316 !important;
+    background: #fff3e8;
+    border-radius: 9px;
+    font-size: 0.9rem !important;
+}
+
+.desktop-view > .card-header .badge {
+    padding: 5px 9px !important;
+    color: #9a4a10 !important;
+    background: #fff3e8 !important;
+    border: 1px solid #fed7aa;
+    border-radius: 999px !important;
+    font-size: 0.68rem;
+}
+
+/* Buscador y acciones */
+.desktop-view .search-input {
+    height: 38px;
+    padding: 7px 35px 7px 13px !important;
+    color: #253047;
+    background: #f9fafb !important;
+    border: 1px solid #dfe4ea !important;
+    border-radius: 10px !important;
+    font-size: 0.76rem !important;
+    box-shadow: none !important;
+}
+
+.desktop-view .search-input:focus {
+    background: #ffffff !important;
+    border-color: #f97316 !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
+}
+
+.desktop-view .btn-excel,
+.desktop-view .btn-pdf {
+    min-height: 38px;
+    padding: 7px 13px !important;
+    border-radius: 10px !important;
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.desktop-view .btn-excel:hover,
+.desktop-view .btn-pdf:hover {
+    transform: none !important;
+    filter: brightness(0.96);
+}
+
+/* Tabla: quitar bloque naranja completo y usar encabezado claro */
+@media (min-width: 992px) {
+    .table-wrapper {
+        max-height: 520px !important;
+        border-radius: 0 !important;
+        scrollbar-color: #c4cad3 transparent !important;
+    }
+
+    .table-wrapper::-webkit-scrollbar {
+        width: 7px !important;
+    }
+
+    .table-wrapper::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    .table-wrapper::-webkit-scrollbar-thumb {
+        background: #c4cad3 !important;
+        border: 2px solid #ffffff;
+        border-radius: 999px !important;
+    }
+
+    .productos-table {
+        color: #253047;
+        font-size: 0.75rem !important;
+    }
+
+    .productos-table thead tr {
+        background: #f7f8fa !important;
+        box-shadow: inset 0 -2px 0 #f97316;
+    }
+
+    .productos-table th {
+        padding: 11px 7px !important;
+        color: #596273 !important;
+        background: transparent !important;
+        border-right: 0 !important;
+        font-size: 0.66rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.015em;
+        text-transform: none;
+    }
+
+    .productos-table th:first-child {
+        padding-left: 16px !important;
+    }
+
+    .productos-table td {
+        padding: 9px 7px !important;
+        border-bottom: 1px solid #edf0f3 !important;
+        background: #ffffff;
+    }
+
+    .productos-table td:first-child {
+        padding-left: 16px !important;
+    }
+
+    .productos-table tbody tr:hover td {
+        background: #fffaf5 !important;
+    }
+
+    .productos-table .nombre-producto strong {
+        color: #172033;
+        font-size: 0.74rem !important;
+    }
+
+    .productos-table .nombre-producto small {
+        color: #8a93a2 !important;
+    }
+
+    .stock-conteo {
+        width: 82px !important;
+        height: 32px;
+        padding: 4px 7px !important;
+        color: #253047;
+        background: #ffffff;
+        border: 1px solid #d9dfe6 !important;
+        border-radius: 8px !important;
+        font-size: 0.72rem !important;
+        box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03);
+    }
+
+    .stock-conteo:focus {
+        border-color: #f97316 !important;
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
+    }
+
+    .stock-conteo.modificado {
+        color: #166534;
+        background: #f0fdf4 !important;
+        border-color: #86d7a2 !important;
+    }
+
+    .badge-pagado,
+    .badge-concesion {
+        margin-left: 5px !important;
+        padding: 3px 6px !important;
+        border-radius: 999px !important;
+        font-size: 0.54rem !important;
+        box-shadow: none !important;
+    }
+
+    .badge-pagado {
+        color: #166534 !important;
+        background: #dcfce7 !important;
+        border: 1px solid #bbf7d0;
+    }
+
+    .badge-concesion {
+        color: #9a4a10 !important;
+        background: #fff3e8 !important;
+        border: 1px solid #fed7aa;
+    }
+
+    .productos-table tfoot {
+        background: #fafbfc !important;
+        border-top: 1px solid #dfe4ea !important;
+    }
+
+    .productos-table tfoot td {
+        padding-top: 12px !important;
+        padding-bottom: 12px !important;
+        background: #fafbfc !important;
+    }
+}
+
+/* Botón guardar menos llamativo y mejor integrado */
+.desktop-view .btn-guardar {
+    padding: 10px 20px !important;
+    color: #ffffff !important;
+    background: #16a34a !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    font-size: 0.78rem !important;
+}
+
+.desktop-view .btn-guardar:hover {
+    background: #15803d !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Móvil: conservar las tarjetas existentes, solo suavizar el encabezado */
+@media (max-width: 991px) {
+    .proveedor-card,
+    .desktop-view.card {
+        border-radius: 12px !important;
+    }
+
+    .proveedor-card .card-header,
+    .desktop-view > .card-header {
+        padding: 12px 14px !important;
+    }
+
+    .desktop-view > .card-header .d-flex {
+        gap: 10px !important;
+    }
+
+    .product-card {
+        border-radius: 12px !important;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06) !important;
+    }
+
+    .product-card-header {
+        background: #fafbfc !important;
+        border-bottom: 1px solid #edf0f3 !important;
+    }
+
+    .badge-pagado-mobile {
+        color: #166534 !important;
+        background: #dcfce7 !important;
+        border: 1px solid #bbf7d0;
+    }
+
+    .badge-concesion-mobile {
+        color: #9a4a10 !important;
+        background: #fff3e8 !important;
+        border: 1px solid #fed7aa;
+    }
+}
+
+/* =========================
+   AJUSTE FINO: SELECTOR Y BOTONES EXPORTAR
+   ========================= */
+
+/* Card del selector más limpia */
+.proveedor-card .card-body {
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+.proveedor-card label.font-weight-bold {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.92rem;
+    color: var(--gray-700) !important;
+    margin-bottom: 0.55rem !important;
+}
+
+/* Select2 principal más limpio */
+.select2-container--default .select2-selection--single {
+    height: 50px !important;
+    border: 1px solid #d7dee7 !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.select2-container--default .select2-selection--single:hover {
+    border-color: #c9d3df !important;
+}
+
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--open .select2-selection--single {
+    border-color: rgba(249, 115, 22, 0.65) !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12) !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 48px !important;
+    padding-left: 16px !important;
+    padding-right: 52px !important;
+    font-size: 0.92rem !important;
+    color: #334155 !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: #94a3b8 !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__clear {
+    position: absolute;
+    right: 30px;
+    top: 50%;
+    transform: translateY(-52%);
+    color: #64748b;
+    font-size: 18px;
+    margin: 0 !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 48px !important;
+    right: 12px !important;
+    width: 18px !important;
+}
+
+.select2-dropdown {
+    border: 1px solid #dbe3ec !important;
+    border-radius: 14px !important;
+    overflow: hidden;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.12) !important;
+}
+
+.select2-search--dropdown {
+    padding: 10px !important;
+    background: #fff;
+    border-bottom: 1px solid #edf2f7;
+}
+
+.select2-search__field {
+    border: 1px solid #d7dee7 !important;
+    border-radius: 12px !important;
+    min-height: 40px;
+    padding: 8px 12px !important;
+    font-size: 0.9rem !important;
+    color: #334155 !important;
+}
+
+.select2-results__options {
+    max-height: 260px !important;
+    padding: 6px 0;
+}
+
+.select2-results__option {
+    padding: 11px 14px !important;
+    font-size: 0.92rem !important;
+    color: #334155;
+}
+
+.select2-container--default .select2-results__option--highlighted[aria-selected] {
+    background: #fff7ed !important;
+    color: #ea580c !important;
+}
+
+.select2-container--default .select2-results__option[aria-selected="true"] {
+    background: #f97316 !important;
+    color: #fff !important;
+}
+
+/* Más espacio y mejor acomodo en acciones */
+.desktop-view .card-header .d-flex.flex-column.flex-sm-row.align-items-stretch.align-items-sm-center.gap-2 {
+    gap: 12px !important;
+}
+
+.desktop-view .card-header .d-flex.gap-2 {
+    gap: 10px !important;
+    margin-left: 4px;
+}
+
+.desktop-view .dropdown {
+    margin: 0 !important;
+}
+
+.btn-excel,
+.btn-pdf {
+    min-width: 84px;
+    justify-content: center;
+    padding: 9px 16px !important;
+    border-radius: 14px !important;
+}
+
+/* Mejor separación del buscador respecto a botones */
+.position-relative[style*="min-width: 220px"] {
+    margin-right: 2px;
+}
+
+/* Móvil y tablet */
+@media (max-width: 991px) {
+    .proveedor-card .card-body {
+        padding: 0.9rem 0.95rem 1rem;
+    }
+
+    .select2-container--default .select2-selection--single {
+        height: 46px !important;
+        border-radius: 12px !important;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 44px !important;
+        font-size: 0.88rem !important;
+        padding-left: 14px !important;
+        padding-right: 48px !important;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 44px !important;
+        right: 10px !important;
+    }
+
+    .desktop-view .card-header .d-flex.gap-2 {
+        gap: 12px !important;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .btn-excel,
+    .btn-pdf {
+        min-width: 96px;
+    }
+}
+
+@media (max-width: 768px) {
+    .select2-dropdown {
+        width: calc(100% - 24px) !important;
+        max-width: 100% !important;
+        left: 12px !important;
+        right: 12px !important;
+        transform: none !important;
+    }
+
+    .desktop-view .card-header .d-flex.gap-2 {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .btn-excel,
+    .btn-pdf {
+        flex: 0 0 auto;
+    }
+}

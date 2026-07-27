@@ -2,6 +2,39 @@
 require_once 'includes/auth_guard.php';
 require_once 'includes/csrf.php';
 
+/*
+|--------------------------------------------------------------------------
+| Contraseña temporal configurable del portal
+|--------------------------------------------------------------------------
+| Se obtiene de configuracion_seguridad mediante el helper compartido.
+| Si la instalación todavía no tiene el helper, se conserva el valor
+| histórico para evitar dejar el dashboard inutilizable.
+*/
+$password_config_helper = __DIR__ . '/includes/configuracion_password.php';
+
+if (is_file($password_config_helper)) {
+    require_once $password_config_helper;
+}
+
+$password_temporal_actual = 'Pescadores1';
+$password_temporal_longitud = 8;
+
+if (function_exists('cfgPasswordObtener')) {
+    try {
+        $password_temporal_actual = cfgPasswordObtener($conn);
+        $password_temporal_longitud = function_exists(
+            'cfgPasswordLongitudMinima'
+        )
+            ? cfgPasswordLongitudMinima($conn)
+            : 8;
+    } catch (Throwable $e) {
+        error_log(
+            'Dashboard: no fue posible cargar la contraseña temporal: '
+            . $e->getMessage()
+        );
+    }
+}
+
 $id_vendedor = (int) $_SESSION['usuario_id'];
 $nombre_usuario = $_SESSION['nombre'] ?? 'Vendedor';
 $nombre_completo = $nombre_usuario;
@@ -36,8 +69,11 @@ $saludo = ($genero == 'femenino') ? "Bienvenida" : "Bienvenido";
 
 // ===== PROCESAR AJAX PRIMERO (cambio de contraseña) =====
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_cambio_password'])) {
-    ob_clean();
-    header('Content-Type: application/json');
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
     
     $response = ['success' => false, 'message' => ''];
     
@@ -48,18 +84,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_cambio_password'
             exit;
         }
         
-        $password_nueva = $_POST['password_nueva'] ?? '';
-        $password_confirmar = $_POST['password_confirmar'] ?? '';
-        $id_usuario = $_SESSION['usuario_id'];
-        
-        if (empty($password_nueva) || empty($password_confirmar)) {
+        $password_nueva = (string) (
+            $_POST['password_nueva']
+            ?? ''
+        );
+
+        $password_confirmar = (string) (
+            $_POST['password_confirmar']
+            ?? ''
+        );
+
+        $id_usuario = (int) (
+            $_SESSION['usuario_id']
+            ?? 0
+        );
+
+        $validacion_password = function_exists(
+            'cfgPasswordValidar'
+        )
+            ? cfgPasswordValidar(
+                $password_nueva,
+                $password_temporal_longitud
+            )
+            : [
+                'ok' => strlen($password_nueva) >= 8,
+                'mensaje' => 'La contraseña debe tener al menos 8 caracteres.',
+            ];
+
+        if ($password_nueva === '' || $password_confirmar === '') {
             $response['message'] = "Todos los campos son obligatorios.";
         } elseif ($password_nueva !== $password_confirmar) {
             $response['message'] = "Las contraseñas no coinciden.";
-        } elseif (strlen($password_nueva) < 8) {
-            $response['message'] = "La contraseña debe tener al menos 8 caracteres.";
-        } elseif ($password_nueva === 'Pescadores1') {
-            $response['message'] = "No puedes usar la contraseña por defecto.";
+        } elseif (!$validacion_password['ok']) {
+            $response['message'] = $validacion_password['mensaje'];
+        } elseif (
+            hash_equals(
+                $password_temporal_actual,
+                $password_nueva
+            )
+        ) {
+            $response['message'] =
+                "No puedes conservar la contraseña temporal del portal.";
+        } elseif ($id_usuario <= 0) {
+            $response['message'] =
+                "No fue posible identificar al usuario de la sesión.";
         } else {
             $hash_nuevo = password_hash($password_nueva, PASSWORD_DEFAULT);
             $update = $conn->prepare("UPDATE usuarios SET password = ?, debe_cambiar_password = 0 WHERE id = ?");
@@ -78,7 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_cambio_password'
         $response['message'] = "Error interno: " . $e->getMessage();
     }
     
-    echo json_encode($response);
+    echo json_encode(
+        $response,
+        JSON_UNESCAPED_UNICODE
+        | JSON_UNESCAPED_SLASHES
+    );
     exit;
 }
 
@@ -410,7 +482,17 @@ if ($resSemanas) {
                 </div>
                 <div class="modal-body" style="background: white; padding: 24px;">
                     <div class="alert alert-warning py-2" style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;">
-                        <small style="color: #92400e;"><i class="fas fa-exclamation-triangle me-2"></i> Cambia tu contraseña por defecto <strong>"Pescadores1"</strong></small>
+                        <small style="color: #92400e;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Cambia la contraseña temporal asignada:
+                            <strong>
+                                "<?= htmlspecialchars(
+                                    $password_temporal_actual,
+                                    ENT_QUOTES,
+                                    'UTF-8'
+                                ) ?>"
+                            </strong>
+                        </small>
                     </div>
                     <div id="error-mensaje" class="alert alert-danger py-2" style="display: none; border-radius: 12px; font-size: 0.75rem; padding: 10px 14px;"></div>
                     
@@ -1358,9 +1440,32 @@ if ($resSemanas) {
         errorDiv.style.display = 'none';
         if (!password || !confirm) { errorDiv.textContent = 'Completa todos los campos'; errorDiv.style.display = 'block'; return; }
         if (password !== confirm) { errorDiv.textContent = 'Las contraseñas no coinciden'; errorDiv.style.display = 'block'; return; }
-        if (password.length < 8) { errorDiv.textContent = 'Mínimo 8 caracteres'; errorDiv.style.display = 'block'; return; }
-        if (password === 'Pescadores1') { errorDiv.textContent = 'Usa una contraseña diferente'; errorDiv.style.display = 'block'; return; }
-        submitBtn.disabled = true;
+        const passwordTemporalActual =
+            <?= json_encode(
+                $password_temporal_actual,
+                JSON_HEX_TAG
+                | JSON_HEX_APOS
+                | JSON_HEX_AMP
+                | JSON_HEX_QUOT
+                | JSON_UNESCAPED_UNICODE
+            ) ?>;
+
+        const passwordLongitudMinima =
+            <?= (int) $password_temporal_longitud ?>;
+
+        if (password.length < passwordLongitudMinima) {
+            errorDiv.textContent =
+                `Mínimo ${passwordLongitudMinima} caracteres`;
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+        if (password === passwordTemporalActual) {
+            errorDiv.textContent =
+                'Usa una contraseña distinta a la temporal del portal';
+            errorDiv.style.display = 'block';
+            return;
+        }submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Cambiando...';
         const formData = new FormData();
         formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);

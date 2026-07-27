@@ -1,18 +1,58 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED);
 ob_start();
-session_start();
 
-require_once 'includes/db.php';
-require_once 'includes/csrf.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/permisos.php';
+require_once __DIR__ . '/includes/csrf.php';
 
-if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['rol'] ?? '', ['administrador', 'vendedor'], true)) {
-    header('Location: login.php');
+/*
+|--------------------------------------------------------------------------
+| Acceso al módulo
+|--------------------------------------------------------------------------
+| Este módulo puede ser usado por vendedor, administrador y
+| superadministrador. El superadministrador recibe acceso total.
+*/
+
+$usuarioId = function_exists('permisos_usuario_id')
+    ? permisos_usuario_id()
+    : (int) (
+        $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? 0
+    );
+
+$rol = function_exists('permisos_normalizar_rol')
+    ? permisos_normalizar_rol($_SESSION['rol'] ?? '')
+    : strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$rolesPermitidos = [
+    'administrador',
+    'super_administrador',
+    'vendedor',
+];
+
+if ($usuarioId <= 0) {
+    header('Location: login.php?expired=1');
     exit;
 }
 
-$usuarioId = (int)$_SESSION['usuario_id'];
-$rol = $_SESSION['rol'] ?? 'vendedor';
+if (!in_array($rol, $rolesPermitidos, true)) {
+    header('Location: sin_permiso.php?modulo=vendedor_ajustes_productos.php');
+    exit;
+}
+
+/*
+ * Unificar la sesión para archivos antiguos como navbar.php.
+ */
+$_SESSION['usuario_id'] = $usuarioId;
+$_SESSION['id_usuario'] = $usuarioId;
+$_SESSION['id'] = $usuarioId;
+$_SESSION['rol'] = $rol;
+$_SESSION['last_activity'] = time();
+
 $errors = [];
 
 function e($value) {
@@ -20,7 +60,7 @@ function e($value) {
 }
 
 function vendedorPuedeGestionarProducto($conn, $usuarioId, $rol, $productoId) {
-    if ($rol === 'administrador') return true;
+    if (in_array($rol, ['administrador', 'super_administrador'], true)) return true;
 
     $stmt = $conn->prepare("
         SELECT id
@@ -59,7 +99,7 @@ function registrarMovimientoStock($conn, $productoId, $anterior, $nueva, $difere
 function obtenerCategoriasAsignadas($conn, $usuarioId, $rol) {
     $categorias = [];
 
-    if ($rol === 'administrador') {
+    if (in_array($rol, ['administrador', 'super_administrador'], true)) {
         $res = $conn->query("
             SELECT DISTINCT categoria
             FROM productos
@@ -100,7 +140,7 @@ function obtenerCategoriasAsignadas($conn, $usuarioId, $rol) {
 function obtenerProveedoresAsignados($conn, $usuarioId, $rol) {
     $proveedores = [];
 
-    if ($rol === 'administrador') {
+    if (in_array($rol, ['administrador', 'super_administrador'], true)) {
         $res = $conn->query("
             SELECT DISTINCT proveedor
             FROM productos
@@ -431,8 +471,8 @@ foreach ($productos as $p) {
     if ($stock <= 5) $productosStockBajo++;
 }
 
-include 'includes/header.php';
-include 'includes/navbar.php';
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/navbar.php';
 ?>
 
 <link rel="stylesheet" href="css/vendedor_ajustes_productos.css?v=<?= time() ?>">

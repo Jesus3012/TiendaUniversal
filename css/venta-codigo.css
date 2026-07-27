@@ -4023,3 +4023,472 @@
     }
 }
 
+
+
+/* =====================================================
+   PRECIOS POR MÉTODO DE PAGO
+===================================================== */
+.producto-precio-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.producto-precio-card > span {
+    font-size: 12px;
+    font-weight: 800;
+    color: #f97316;
+}
+
+.producto-precio-card > small {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #15803d;
+    line-height: 1.2;
+}
+
+.pos-descuento-pago {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: -2px 0 14px;
+    padding: 10px 12px;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.pos-descuento-pago[hidden] {
+    display: none !important;
+}
+
+.pos-descuento-pago i {
+    margin-top: 2px;
+    color: #16a34a;
+}
+
+.precio-pos-aplicado {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.05;
+}
+
+.precio-pos-aplicado small {
+    color: #94a3b8;
+    font-size: 9px;
+    text-decoration: line-through;
+}
+
+.precio-pos-aplicado strong {
+    color: #15803d;
+    font-size: 13px;
+}
+
+.icono-transferencia-pos {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1d4ed8;
+}
+
+.icono-transferencia-pos .fa-university {
+    font-size: 20px;
+}
+
+.icono-transferencia-pos .fa-exchange-alt {
+    position: absolute;
+    right: -5px;
+    bottom: -4px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: #1d4ed8;
+    color: #fff;
+    border: 2px solid #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+}
+
+.pos-aviso-transferencia {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#monto_pagado {
+    cursor: text;
+}
+
+#monto_pagado:focus {
+    background: #eff6ff !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .12) !important;
+}
+
+@media (max-width: 768px) {
+    .pos-descuento-pago {
+        margin-top: 0;
+        font-size: 11px;
+    }
+
+    .icono-transferencia-pos {
+        width: 34px;
+        height: 34px;
+    }
+
+    .icono-transferencia-pos .fa-university {
+        font-size: 17px;
+    }
+
+    .producto-precio-card > small {
+        font-size: 9px;
+    }
+}
+
+
+/* =====================================================
+   AJUSTE VISUAL: IMPORTES MÁS GRANDES Y PRECIOS LIMPIOS
+   ===================================================== */
+
+/* Total, pagado y cambio con mayor presencia */
+.pos-totales .form-group {
+    min-height: 124px;
+    padding: 18px 20px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-radius: 20px !important;
+    border: 1px solid #dbe3ec !important;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, .055) !important;
+}
+
+.pos-totales .small-label {
+    margin-bottom: 9px;
+    font-size: .84rem !important;
+    letter-spacing: .045em;
+    color: #334155;
+}
+
+#total,
+#monto_pagado,
+#cambio {
+    min-height: 58px !important;
+    padding: 9px 14px !important;
+    border-radius: 14px !important;
+    font-family: inherit !important;
+    font-size: 1.75rem !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    letter-spacing: .015em;
+    text-align: left !important;
+    font-variant-numeric: tabular-nums;
+}
+
+#total {
+    color: #ea580c !important;
+    background: #fff7ed !important;
+    border: 1px solid #fed7aa !important;
+}
+
+#monto_pagado {
+    color: #2563eb !important;
+    background: #f8fbff !important;
+    border: 1px solid #bfdbfe !important;
+}
+
+#cambio {
+    color: #059669 !important;
+    background: #ecfdf5 !important;
+    border: 1px solid #a7f3d0 !important;
+}
+
+#monto_pagado:focus {
+    background: #ffffff !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, .13) !important;
+}
+
+/* =====================================================
+   AJUSTE FINAL: PRECIO ÚNICO EN CATÁLOGO E IMPORTES GRANDES
+   ===================================================== */
+
+/* En el catálogo solo se muestra el precio base real del producto. */
+.producto-precio-card {
+    width: 100%;
+    min-height: 34px;
+    margin: 8px 0 7px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    color: #f97316 !important;
+    font-size: 1.08rem !important;
+    line-height: 1.1;
+    font-weight: 900 !important;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Se anulan los bloques dobles de precio de versiones anteriores. */
+.precio-card-line {
+    display: none !important;
+}
+
+.producto-stock-card {
+    margin-top: 1px;
+}
+
+/* Total, pagado y cambio con números mucho más visibles. */
+.pos-totales .form-group {
+    min-height: 142px;
+    padding: 18px 20px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-radius: 20px !important;
+    border: 1px solid #dbe3ec !important;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, .055) !important;
+}
+
+.pos-totales .small-label {
+    margin-bottom: 10px;
+    font-size: .9rem !important;
+    letter-spacing: .045em;
+    color: #334155;
+}
+
+#total,
+#monto_pagado,
+#cambio {
+    min-height: 72px !important;
+    padding: 10px 16px !important;
+    border-radius: 16px !important;
+    font-family: inherit !important;
+    font-size: 2.35rem !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    letter-spacing: .01em;
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+}
+
+#total {
+    color: #ea580c !important;
+    background: #fff7ed !important;
+    border: 1px solid #fed7aa !important;
+}
+
+#monto_pagado {
+    color: #2563eb !important;
+    background: #f8fbff !important;
+    border: 1px solid #bfdbfe !important;
+}
+
+#cambio {
+    color: #059669 !important;
+    background: #ecfdf5 !important;
+    border: 1px solid #a7f3d0 !important;
+}
+
+#monto_pagado:focus {
+    background: #ffffff !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, .13) !important;
+}
+
+@media (max-width: 991px) {
+    .pos-totales .form-group {
+        min-height: 122px;
+        padding: 14px !important;
+    }
+
+    #total,
+    #monto_pagado,
+    #cambio {
+        min-height: 64px !important;
+        font-size: 2rem !important;
+    }
+
+    .producto-precio-card {
+        font-size: 1rem !important;
+    }
+}
+
+@media (max-width: 575px) {
+    .pos-totales .form-group {
+        min-height: 112px;
+        padding: 12px !important;
+    }
+
+    .pos-totales .small-label {
+        font-size: .76rem !important;
+    }
+
+    #total,
+    #monto_pagado,
+    #cambio {
+        min-height: 58px !important;
+        padding: 8px 10px !important;
+        font-size: 1.75rem !important;
+    }
+}
+
+
+/* =====================================================
+   AJUSTE DEFINITIVO: PRECIOS COMPACTOS E IMPORTES ADAPTABLES
+   ===================================================== */
+
+/* Precio del catálogo en el tamaño compacto original. */
+.producto-precio-card {
+    width: 100%;
+    min-height: 22px !important;
+    margin: 4px 0 5px !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    color: #f97316 !important;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    font-weight: 900 !important;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Las tres tarjetas conservan presencia sin desperdiciar espacio. */
+.pos-totales > [class*="col-"] {
+    min-width: 0;
+}
+
+.pos-totales .form-group {
+    width: 100%;
+    min-height: 116px !important;
+    padding: 14px 16px !important;
+    border-radius: 18px !important;
+}
+
+.pos-totales .small-label {
+    margin-bottom: 8px !important;
+    font-size: .82rem !important;
+}
+
+/* Importe grande, pero con espacio suficiente para miles. */
+#total,
+#monto_pagado,
+#cambio {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 64px !important;
+    padding: 8px 8px !important;
+    border-radius: 15px !important;
+    font-family: inherit !important;
+    font-size: clamp(1.55rem, 2.15vw, 1.9rem) !important;
+    font-weight: 900 !important;
+    line-height: 1.05 !important;
+    letter-spacing: -.025em !important;
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box !important;
+}
+
+/* Se reduce únicamente cuando la cantidad tiene más dígitos. */
+#total.importe-pos-largo,
+#monto_pagado.importe-pos-largo,
+#cambio.importe-pos-largo {
+    font-size: 1.55rem !important;
+    letter-spacing: -.04em !important;
+}
+
+#total.importe-pos-muy-largo,
+#monto_pagado.importe-pos-muy-largo,
+#cambio.importe-pos-muy-largo {
+    font-size: 1.3rem !important;
+    letter-spacing: -.045em !important;
+}
+
+/* Quita las flechas del input numérico para ganar espacio visual. */
+#monto_pagado::-webkit-inner-spin-button,
+#monto_pagado::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+#monto_pagado {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+@media (max-width: 991px) {
+    .producto-precio-card {
+        font-size: 12.5px !important;
+    }
+
+    .pos-totales .form-group {
+        min-height: 108px !important;
+        padding: 12px !important;
+    }
+
+    #total,
+    #monto_pagado,
+    #cambio {
+        min-height: 58px !important;
+        font-size: 1.65rem !important;
+    }
+
+    #total.importe-pos-largo,
+    #monto_pagado.importe-pos-largo,
+    #cambio.importe-pos-largo {
+        font-size: 1.4rem !important;
+    }
+
+    #total.importe-pos-muy-largo,
+    #monto_pagado.importe-pos-muy-largo,
+    #cambio.importe-pos-muy-largo {
+        font-size: 1.18rem !important;
+    }
+}
+
+@media (max-width: 575px) {
+    .pos-totales .small-label {
+        font-size: .72rem !important;
+    }
+
+    #total,
+    #monto_pagado,
+    #cambio {
+        padding-inline: 5px !important;
+        font-size: 1.48rem !important;
+    }
+
+    #total.importe-pos-largo,
+    #monto_pagado.importe-pos-largo,
+    #cambio.importe-pos-largo {
+        font-size: 1.24rem !important;
+    }
+
+    #total.importe-pos-muy-largo,
+    #monto_pagado.importe-pos-muy-largo,
+    #cambio.importe-pos-muy-largo {
+        font-size: 1.04rem !important;
+    }
+}

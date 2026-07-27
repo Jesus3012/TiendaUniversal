@@ -283,16 +283,17 @@ function caja_expresiones_venta() {
 
 function caja_obtener_resumen_ventas(mysqli $conn, $fechaInicio, $fechaFin) {
     [, , $neta, $metodo] = caja_expresiones_venta();
+    $precioVentaReal = "COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta)";
 
     $sql = "
         SELECT
-            COALESCE(SUM({$neta} * p.precio_venta), 0) AS ventas_sistema,
-            COALESCE(SUM(CASE WHEN {$metodo} = 'efectivo' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS efectivo_sistema,
-            COALESCE(SUM(CASE WHEN {$metodo} = 'tarjeta' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS tarjeta_sistema,
-            COALESCE(SUM(CASE WHEN {$metodo} = 'transferencia' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS transferencia_sistema,
-            COALESCE(SUM(CASE WHEN {$metodo} = 'otros' THEN {$neta} * p.precio_venta ELSE 0 END), 0) AS otros_sistema,
+            COALESCE(SUM({$neta} * {$precioVentaReal}), 0) AS ventas_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'efectivo' THEN {$neta} * {$precioVentaReal} ELSE 0 END), 0) AS efectivo_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'tarjeta' THEN {$neta} * {$precioVentaReal} ELSE 0 END), 0) AS tarjeta_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'transferencia' THEN {$neta} * {$precioVentaReal} ELSE 0 END), 0) AS transferencia_sistema,
+            COALESCE(SUM(CASE WHEN {$metodo} = 'otros' THEN {$neta} * {$precioVentaReal} ELSE 0 END), 0) AS otros_sistema,
             COALESCE(SUM({$neta}), 0) AS total_piezas,
-            COALESCE(SUM({$neta} * (p.precio_venta - p.precio_compra)), 0) AS utilidad_estimada,
+            COALESCE(SUM({$neta} * ({$precioVentaReal} - p.precio_compra)), 0) AS utilidad_estimada,
             COUNT(DISTINCT IFNULL(v.folio_ticket, CONCAT('VENTA-', v.id))) AS total_tickets
         FROM ventas v
         INNER JOIN productos p ON p.id = v.id_producto
@@ -343,11 +344,20 @@ function caja_obtener_ventas_paginadas(mysqli $conn, $fechaInicio, $fechaFin, $p
             v.referencia_pago,
             v.cantidad_vendida,
             p.nombre AS producto_nombre,
-            p.precio_venta,
+            COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta) AS precio_venta,
             p.precio_compra,
             u.nombre AS vendedor_nombre,
-            (v.cantidad_vendida * p.precio_venta) AS subtotal,
-            (v.cantidad_vendida * (p.precio_venta - p.precio_compra)) AS utilidad_estimada
+            COALESCE(
+                NULLIF(v.subtotal, 0),
+                v.cantidad_vendida * COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta)
+            ) AS subtotal,
+            (
+                COALESCE(
+                    NULLIF(v.subtotal, 0),
+                    v.cantidad_vendida * COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta)
+                )
+                - (v.cantidad_vendida * p.precio_compra)
+            ) AS utilidad_estimada
         FROM ventas v
         INNER JOIN productos p ON p.id = v.id_producto
         LEFT JOIN usuarios u ON u.id = v.id_vendedor
@@ -389,10 +399,19 @@ function caja_guardar_ventas_auditoria(mysqli $conn, $cajaId, $fechaInicio, $fec
             v.cantidad_vendida,
             v.metodo_pago,
             v.referencia_pago,
-            p.precio_venta,
+            COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta) AS precio_venta,
             p.precio_compra,
-            (v.cantidad_vendida * p.precio_venta) AS subtotal,
-            (v.cantidad_vendida * (p.precio_venta - p.precio_compra)) AS utilidad_estimada,
+            COALESCE(
+                NULLIF(v.subtotal, 0),
+                v.cantidad_vendida * COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta)
+            ) AS subtotal,
+            (
+                COALESCE(
+                    NULLIF(v.subtotal, 0),
+                    v.cantidad_vendida * COALESCE(NULLIF(v.precio_unitario, 0), p.precio_venta)
+                )
+                - (v.cantidad_vendida * p.precio_compra)
+            ) AS utilidad_estimada,
             v.fecha_venta
         FROM ventas v
         INNER JOIN productos p ON p.id = v.id_producto
@@ -743,728 +762,85 @@ if (isset($_GET['cerrada'])) {
 
 include 'includes/header.php';
 include 'includes/navbar.php';
+
+$metodosNoEfectivo =
+    (float)$resumen['tarjeta_sistema']
+    + (float)$resumen['transferencia_sistema']
+    + (float)$resumen['otros_sistema'];
+
+$datosPdfCajaActual = null;
+
+if ($cajaAbierta) {
+    $datosPdfCajaActual = [
+        'folio' => $cajaAbierta['folio_caja'] ?? '',
+        'estado' => 'abierta',
+        'usuario_apertura' => $cajaAbierta['usuario_apertura_nombre'] ?? $usuarioNombre,
+        'usuario_cierre' => '',
+        'apertura' => !empty($cajaAbierta['fecha_apertura'])
+            ? date('d/m/Y H:i', strtotime($cajaAbierta['fecha_apertura']))
+            : '',
+        'cierre' => '',
+        'monto_inicial' => (float)($cajaAbierta['monto_inicial'] ?? 0),
+        'ventas' => (float)$resumen['ventas_sistema'],
+        'efectivo' => (float)$resumen['efectivo_sistema'],
+        'tarjeta' => (float)$resumen['tarjeta_sistema'],
+        'transferencia' => (float)$resumen['transferencia_sistema'],
+        'otros' => (float)$resumen['otros_sistema'],
+        'entradas' => (float)$totalesMovimientos['entradas'],
+        'salidas' => (float)$totalesMovimientos['salidas'],
+        'esperado' => (float)$efectivoEsperado,
+        'contado' => null,
+        'diferencia' => null,
+        'tickets' => (int)$resumen['total_tickets'],
+        'piezas' => (float)$resumen['total_piezas'],
+        'observaciones_apertura' => $cajaAbierta['observaciones_apertura'] ?? '',
+        'observaciones_cierre' => '',
+        'generado' => date('d/m/Y H:i'),
+    ];
+}
 ?>
 
-<style>
-.content-wrapper {
-    background: linear-gradient(180deg, #FFF4E6, #FFFFFF);
-    min-height: 100vh;
-    padding: 25px;
-    border-radius: 18px 0 0 18px;
-}
+<link rel="stylesheet" href="css/corte_caja.css?v=<?= time() ?>">
 
-.page-title {
-    font-size: 1.9rem;
-    font-weight: 700;
-    color: #2c2c2c;
-}
-
-.caja-subtitle {
-    color: #6c757d;
-    font-size: .92rem;
-    margin-top: 4px;
-}
-
-.caja-card {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.03);
-    transition: all .35s ease;
-}
-
-.caja-card:hover {
-    box-shadow: 0 18px 45px rgba(0,0,0,0.12);
-}
-
-.caja-card-body {
-    padding: 20px;
-}
-
-.caja-btn {
-    border: none;
-    border-radius: 40px;
-    padding: 10px 18px;
-    font-weight: 700;
-    transition: all .28s ease;
-    box-shadow: 0 8px 18px rgba(0,0,0,.08);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.caja-btn:hover {
-    transform: translateY(-2px);
-    text-decoration: none;
-}
-
-.caja-btn-primary {
-    background: #111;
-    color: white;
-}
-
-.caja-btn-primary:hover {
-    background: #000;
-    color: white;
-}
-
-.caja-btn-light {
-    background: white;
-    color: #2c2c2c;
-    border: 1px solid #e4e7eb;
-}
-
-.caja-btn-danger {
-    background: #fff0f0;
-    color: #dc3545;
-    border: 1px solid #ffd2d2;
-}
-
-.caja-btn-success {
-    background: #111;
-    color: white;
-}
-
-.caja-btn-success:hover {
-    background: #007bff;
-    color: white;
-}
-
-.caja-label {
-    font-size: .72rem;
-    color: #69798b;
-    text-transform: uppercase;
-    letter-spacing: .35px;
-    font-weight: 800;
-    margin-bottom: 7px;
-}
-
-.caja-input,
-.caja-select,
-.caja-textarea {
-    border-radius: 14px !important;
-    border: 1px solid #ced4da !important;
-    padding: 10px 14px !important;
-    min-height: 44px;
-    box-shadow: none !important;
-}
-
-.caja-textarea {
-    min-height: 86px;
-    resize: vertical;
-}
-
-.caja-input:focus,
-.caja-select:focus,
-.caja-textarea:focus {
-    border-color: #111 !important;
-    box-shadow: 0 0 0 3px rgba(17,17,17,.08) !important;
-}
-
-.caja-status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    border-radius: 40px;
-    padding: 8px 13px;
-    font-size: .8rem;
-    font-weight: 800;
-}
-
-.caja-status-open {
-    background: #eaf8ef;
-    color: #16a34a;
-    border: 1px solid #c9efd6;
-}
-
-.caja-status-closed {
-    background: #f1f3f5;
-    color: #495057;
-    border: 1px solid #dee2e6;
-}
-
-.caja-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-}
-
-.caja-stat {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.03);
-    padding: 16px;
-    min-height: 142px;
-    position: relative;
-    overflow: hidden;
-}
-
-.caja-stat::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 5px;
-    background: #007bff;
-}
-
-.caja-stat.stat-dark::before { background: #111; }
-.caja-stat.stat-success::before { background: #28a745; }
-.caja-stat.stat-danger::before { background: #dc3545; }
-.caja-stat.stat-warning::before { background: #ffc107; }
-
-.caja-stat-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
-    background: #f8fafc;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #34495e;
-    margin-bottom: 12px;
-}
-
-.caja-stat-label {
-    font-size: .68rem;
-    color: #69798b;
-    text-transform: uppercase;
-    letter-spacing: .25px;
-    font-weight: 800;
-    margin-bottom: 5px;
-}
-
-.caja-stat-value {
-    font-size: 1.35rem;
-    line-height: 1.1;
-    font-weight: 800;
-    color: #212529;
-    letter-spacing: -.5px;
-}
-
-.caja-stat-small {
-    font-size: .78rem;
-    color: #6c757d;
-    margin-top: 6px;
-}
-
-.caja-section-title {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 16px;
-}
-
-.caja-section-title h5 {
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: #222;
-    margin: 0;
-}
-
-.caja-section-title small {
-    color: #6c757d;
-}
-
-.caja-table-wrapper {
-    background: white;
-    border: 1px solid #edf1f5;
-    border-radius: 18px;
-    overflow: hidden;
-}
-
-.caja-table-wrapper .table {
-    margin-bottom: 0;
-}
-
-.caja-table-wrapper thead th {
-    background: #f8fafc;
-    color: #69798b;
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .25px;
-    border-bottom: 1px solid #edf1f5;
-    white-space: nowrap;
-}
-
-.caja-table-wrapper tbody td {
-    vertical-align: middle;
-    border-top: 1px solid #edf1f5;
-}
-
-.caja-num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-
-.caja-empty {
-    text-align: center;
-    padding: 45px 20px;
-    background: white;
-    border-radius: 18px;
-    color: #6c757d;
-}
-
-.caja-empty i {
-    font-size: 3rem;
-    color: #adb5bd;
-    margin-bottom: 12px;
-}
-
-.caja-open-hero {
-    background: linear-gradient(135deg, #111 0%, #343a40 100%);
-    color: white;
-    border-radius: 22px;
-    padding: 24px;
-    box-shadow: 0 16px 38px rgba(0,0,0,.14);
-}
-
-.caja-open-hero h3 {
-    font-weight: 800;
-    margin-bottom: 8px;
-}
-
-.caja-open-hero p {
-    color: rgba(255,255,255,.78);
-    margin-bottom: 0;
-}
-
-.caja-cierre-box {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    color: #222;
-    border-radius: 18px;
-    padding: 20px;
-    border: 1px solid rgba(0,0,0,0.03);
-    box-shadow: 0 10px 26px rgba(0,0,0,0.08);
-}
-
-.caja-cierre-box h5 {
-    color: #222;
-}
-
-.caja-cierre-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 9px 0;
-    border-bottom: 1px solid #edf1f5;
-}
-
-.caja-cierre-line:last-child {
-    border-bottom: none;
-}
-
-.caja-cierre-line span {
-    color: #69798b;
-    font-weight: 700;
-}
-
-.caja-cierre-line strong {
-    color: #212529;
-    font-weight: 900;
-}
-
-.caja-cierre-box label {
-    color: #222 !important;
-}
-
-.caja-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 40px;
-    padding: 7px 12px;
-    font-size: .75rem;
-    font-weight: 800;
-    background: #eef6ff;
-    color: #007bff;
-    border: 1px solid #d7eaff;
-}
-
-.caja-badge-success {
-    background: #eaf8ef;
-    color: #16a34a;
-    border-color: #c9efd6;
-}
-
-.caja-badge-danger {
-    background: #fff0f0;
-    color: #dc3545;
-    border-color: #ffd2d2;
-}
-
-.caja-badge-muted {
-    background: #f1f3f5;
-    color: #495057;
-    border-color: #dee2e6;
-}
-
-.pagination-wrapper {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 15px;
-    margin-top: 25px;
-    margin-bottom: 5px;
-    flex-wrap: wrap;
-}
-
-.pagination-btn {
-    padding: 10px 20px;
-    background: white;
-    border: 2px solid #007bff;
-    border-radius: 40px;
-    color: #007bff;
-    font-weight: 600;
-    transition: all 0.3s;
-    cursor: pointer;
-    font-size: 0.9rem;
-    text-decoration: none;
-}
-
-.pagination-btn:hover:not(.disabled) {
-    background: #007bff;
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
-    text-decoration: none;
-}
-
-.pagination-btn.disabled,
-.pagination-btn.disabled:hover {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-    background: white;
-    color: #007bff;
-    transform: none;
-    box-shadow: none;
-}
-
-.page-number {
-    min-width: 40px;
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 10px;
-    color: #495057;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin: 0 3px;
-    text-decoration: none;
-}
-
-.page-number:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-    color: #495057;
-    text-decoration: none;
-}
-
-.page-number.active {
-    background: #007bff;
-    border-color: #007bff;
-    color: white;
-}
-
-.toast-custom {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #28a745;
-    color: white;
-    padding: 12px 24px;
-    border-radius: 50px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    z-index: 9999;
-    animation: cajaSlideIn .3s ease;
-    font-weight: 600;
-}
-
-@keyframes cajaSlideIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-}
-
-@media (max-width: 1199px) {
-    .caja-summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 575px) {
-    .content-wrapper {
-        padding: 14px;
-        border-radius: 0;
-    }
-
-    .page-title {
-        font-size: 1.45rem;
-    }
-
-    .caja-summary-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .caja-section-title {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .caja-btn,
-    .pagination-btn {
-        width: 100%;
-    }
-
-    .pagination-wrapper {
-        gap: 8px;
-    }
-}
-
-@media print {
-    .main-sidebar,
-    .main-header,
-    .no-print,
-    .historial-cajas {
-        display: none !important;
-    }
-
-    .content-wrapper {
-        margin-left: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        border-radius: 0 !important;
-    }
-
-    .caja-card,
-    .caja-stat,
-    .caja-cierre-box {
-        box-shadow: none !important;
-        border: 1px solid #ddd !important;
-    }
-
-    .caja-summary-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-    }
-
-    .table td,
-    .table th {
-        font-size: 10px;
-        padding: 6px;
-    }
-}
-/* ================== DISEÑO ABRIR CAJA SIN NEGRO ================== */
-
-.row.justify-content-center .col-lg-7 {
-    max-width: 760px;
-}
-
-/* Encabezado de abrir caja */
-.caja-open-hero {
-    background: linear-gradient(135deg, #fff2e8 0%, #ffffff 72%);
-    color: #2f2f2f;
-    border-radius: 20px;
-    padding: 22px 24px;
-    box-shadow: 0 12px 28px rgba(255, 122, 61, 0.12);
-    border: 1px solid rgba(255, 122, 61, 0.22);
-    position: relative;
-    overflow: hidden;
-}
-
-.caja-open-hero::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 18px;
-    bottom: 18px;
-    width: 6px;
-    border-radius: 0 12px 12px 0;
-    background: linear-gradient(180deg, #ff6b35, #ff9f43);
-}
-
-.caja-open-hero::after {
-    content: "";
-    position: absolute;
-    right: -42px;
-    top: -42px;
-    width: 125px;
-    height: 125px;
-    border-radius: 50%;
-    background: rgba(255, 122, 61, 0.08);
-}
-
-.caja-open-hero h3 {
-    font-size: 1.52rem;
-    font-weight: 850;
-    margin: 0 0 8px;
-    color: #3a2a20;
-    position: relative;
-    z-index: 1;
-}
-
-.caja-open-hero h3 i {
-    color: #ff6b35;
-    margin-right: 8px;
-}
-
-.caja-open-hero p {
-    margin: 0;
-    color: #745a49;
-    font-size: .94rem;
-    line-height: 1.5;
-    position: relative;
-    z-index: 1;
-}
-
-/* Tarjeta del formulario */
-.row.justify-content-center .col-lg-7 > .caja-card {
-    border-radius: 20px;
-    box-shadow: 0 12px 28px rgba(255, 122, 61, 0.09);
-    border: 1px solid rgba(255, 122, 61, 0.18);
-    background: linear-gradient(180deg, #ffffff 0%, #fffaf6 100%);
-}
-
-.row.justify-content-center .col-lg-7 > .caja-card .caja-card-body {
-    padding: 24px;
-}
-
-/* Labels */
-.row.justify-content-center .caja-label {
-    color: #70472e;
-    font-size: .7rem;
-    font-weight: 850;
-    letter-spacing: .35px;
-    margin-bottom: 8px;
-}
-
-.row.justify-content-center .caja-label i {
-    color: #ff6b35;
-    margin-right: 6px !important;
-}
-
-/* Inputs */
-.row.justify-content-center .caja-input,
-.row.justify-content-center .caja-textarea {
-    border-radius: 15px !important;
-    border: 1px solid #e6d8cf !important;
-    background: #ffffff;
-    min-height: 48px;
-    padding: 11px 14px !important;
-    font-size: .94rem;
-    color: #3f3f46;
-    transition: all .22s ease;
-}
-
-.row.justify-content-center .caja-textarea {
-    min-height: 92px;
-}
-
-.row.justify-content-center .caja-input:hover,
-.row.justify-content-center .caja-textarea:hover {
-    border-color: #ffb27f !important;
-}
-
-.row.justify-content-center .caja-input:focus,
-.row.justify-content-center .caja-textarea:focus {
-    border-color: #ff6b35 !important;
-    box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.13) !important;
-}
-
-/* Botón abrir caja */
-.row.justify-content-center .caja-btn-primary {
-    min-height: 50px;
-    border-radius: 15px;
-    background: linear-gradient(135deg, #ff6b35 0%, #ff9f43 100%);
-    color: #ffffff;
-    box-shadow: 0 10px 22px rgba(255, 122, 61, 0.24);
-    font-size: .96rem;
-    border: none;
-}
-
-.row.justify-content-center .caja-btn-primary:hover {
-    background: linear-gradient(135deg, #f45f2d 0%, #ff8f2f 100%);
-    color: #ffffff;
-    transform: translateY(-1px);
-    box-shadow: 0 13px 28px rgba(255, 122, 61, 0.30);
-}
-
-.row.justify-content-center .form-group {
-    margin-bottom: 18px;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .row.justify-content-center .col-lg-7 {
-        max-width: 100%;
-    }
-
-    .caja-open-hero {
-        padding: 20px;
-        border-radius: 18px;
-    }
-
-    .caja-open-hero h3 {
-        font-size: 1.35rem;
-    }
-
-    .row.justify-content-center .col-lg-7 > .caja-card .caja-card-body {
-        padding: 20px;
-    }
-}
-</style>
-
-<div class="content-wrapper">
-    <section class="content-header mb-4">
+<div class="content-wrapper caja-page">
+    <section class="content-header caja-page-header">
         <div class="container-fluid">
-            <div class="row align-items-center">
-                <div class="col-lg-7">
-                    <h1 class="page-title mb-0">
-                        <i class="fas fa-cash-register mr-2"></i> Caja
-                    </h1>
+            <div class="caja-heading-row">
+                <div class="caja-heading">
+                    <div class="caja-heading-icon" aria-hidden="true">
+                        <i class="fas fa-cash-register"></i>
+                    </div>
 
-                    <div class="caja-subtitle">
-                        <?php if ($cajaAbierta): ?>
-                            Caja abierta desde
-                            <strong><?= caja_h(date('d/m/Y H:i', strtotime($cajaAbierta['fecha_apertura']))) ?></strong>
-                            · <?= caja_h($cajaAbierta['folio_caja']) ?>
-                        <?php else: ?>
-                            Primero abre caja con el monto inicial para comenzar el turno.
-                        <?php endif; ?>
+                    <div>
+                        <span class="caja-eyebrow">Operación diaria</span>
+                        <h1>Control de caja</h1>
+                        <p>
+                            <?php if ($cajaAbierta): ?>
+                                Revisa el dinero del turno, registra movimientos y realiza el cierre.
+                            <?php else: ?>
+                                Abre una caja para comenzar a contabilizar las ventas del turno.
+                            <?php endif; ?>
+                        </p>
                     </div>
                 </div>
 
-                <div class="col-lg-5 mt-3 mt-lg-0 text-lg-right no-print">
+                <div class="caja-header-actions no-print">
                     <?php if ($cajaAbierta): ?>
-                        <button type="button" class="caja-btn caja-btn-light" onclick="window.print()">
-                            <i class="fas fa-print"></i> Imprimir resumen
+                        <span class="caja-state is-open">
+                            <span class="caja-state-dot"></span>
+                            Caja abierta
+                        </span>
+
+                        <button type="button" class="caja-button is-secondary is-pdf" id="btnDescargarCortePdf">
+                            <i class="fas fa-file-pdf"></i>
+                            <span>Corte en PDF</span>
                         </button>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <div class="row mt-3">
-                <div class="col-12">
-                    <?php if ($cajaAbierta): ?>
-                        <span class="caja-status-pill caja-status-open">
-                            <i class="fas fa-lock-open"></i> Caja abierta
-                        </span>
                     <?php else: ?>
-                        <span class="caja-status-pill caja-status-closed">
-                            <i class="fas fa-lock"></i> Caja cerrada
+                        <span class="caja-state is-closed">
+                            <i class="fas fa-lock"></i>
+                            Caja cerrada
                         </span>
                     <?php endif; ?>
-
-                    <small class="text-muted ml-2">
-                        Usuario: <strong><?= caja_h($usuarioNombre) ?></strong>
-                    </small>
                 </div>
             </div>
         </div>
@@ -1473,711 +849,1467 @@ include 'includes/navbar.php';
     <section class="content">
         <div class="container-fluid">
 
-            <?php if ($mensaje): ?>
-                <div class="alert alert-success text-center">
-                    <i class="fas fa-check-circle mr-1"></i> <?= caja_h($mensaje) ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($error): ?>
-                <div class="alert alert-danger text-center">
-                    <i class="fas fa-exclamation-triangle mr-1"></i> <?= caja_h($error) ?>
-                </div>
-            <?php endif; ?>
-
             <?php if (!$cajaAbierta): ?>
+                <div class="caja-start-tip-toolbar no-print">
+                    <button
+                        type="button"
+                        class="caja-tip-toggle"
+                        id="btnToggleConsejoCaja"
+                        aria-controls="cajaConsejoApertura"
+                        aria-expanded="false"
+                    >
+                        <span class="caja-tip-toggle-icon" aria-hidden="true">
+                            <i class="fas fa-lightbulb"></i>
+                        </span>
+                        <span class="caja-tip-toggle-copy">
+                            <strong id="textoToggleConsejoCaja">Ver consejo de apertura</strong>
+                            <small id="ayudaToggleConsejoCaja">Consulta cómo iniciar y cerrar el turno correctamente.</small>
+                        </span>
+                        <i class="fas fa-chevron-down caja-tip-toggle-chevron" aria-hidden="true"></i>
+                    </button>
+                </div>
 
-                <div class="row justify-content-center">
-                    <div class="col-lg-7">
-                        <div class="caja-open-hero mb-4">
-                            <h3>
-                                <i class="fas fa-door-open mr-2"></i>
-                                Abrir caja
-                            </h3>
-                            <p>
-                                Ingresa el efectivo inicial con el que empieza el turno.
-                                Desde este momento se tomarán las ventas para el cierre.
-                            </p>
+                <section class="caja-start-layout is-tip-hidden" id="cajaStartLayout">
+                    <aside
+                        class="caja-start-tip"
+                        id="cajaConsejoApertura"
+                        aria-label="Consejo para abrir la caja"
+                        hidden
+                    >
+                        <div class="caja-start-tip-icon" aria-hidden="true">
+                            <i class="fas fa-lightbulb"></i>
                         </div>
 
-                        <div class="caja-card mb-4">
-                            <div class="caja-card-body">
-                                <form method="POST" id="formAbrirCaja">
-                                    <input type="hidden" name="accion" value="abrir_caja">
+                        <div class="caja-start-tip-content">
+                            <span class="caja-section-kicker">Consejo antes de comenzar</span>
+                            <h2>Registra el efectivo disponible para dar cambio</h2>
+                            <p>
+                                La caja empezará a contabilizar las ventas desde el momento en que la abras.
+                                Al terminar el turno, podrás comparar el efectivo contado contra el esperado.
+                            </p>
 
-                                    <div class="form-group">
-                                        <div class="caja-label">
-                                            <i class="fas fa-money-bill-wave mr-1"></i> Monto inicial en caja
-                                        </div>
-                                        <input type="number"
-                                               step="0.50"
-                                               min="0"
-                                               name="monto_inicial"
-                                               class="form-control caja-input"
-                                               placeholder="Ejemplo: 500.50"
-                                               required>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <div class="caja-label">
-                                            <i class="fas fa-sticky-note mr-1"></i> Observaciones
-                                        </div>
-                                        <textarea name="observaciones_apertura"
-                                                  class="form-control caja-textarea"
-                                                  placeholder="Ejemplo: Caja abierta con cambio inicial."></textarea>
-                                    </div>
-
-                                    <button type="submit" class="caja-btn caja-btn-primary w-100">
-                                        <i class="fas fa-lock-open"></i> Abrir caja
-                                    </button>
-                                </form>
+                            <div class="caja-start-tip-points">
+                                <span><i class="fas fa-check"></i> Cuenta el fondo inicial</span>
+                                <span><i class="fas fa-check"></i> Registra entradas y salidas</span>
+                                <span><i class="fas fa-check"></i> Cierra al finalizar el turno</span>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </aside>
+
+                    <article class="caja-panel caja-start-form-panel">
+                        <div class="caja-panel-heading caja-opening-heading">
+                            <div>
+                                <span class="caja-section-kicker">Nueva apertura</span>
+                                <h2>Abrir caja</h2>
+                                <p>Indica con cuánto efectivo inicia este turno.</p>
+                            </div>
+
+                            <span class="caja-opening-state">
+                                <i class="fas fa-lock"></i>
+                                Aún cerrada
+                            </span>
+                        </div>
+
+                        <form method="POST" id="formAbrirCaja" novalidate>
+                            <input type="hidden" name="accion" value="abrir_caja">
+
+                            <div class="caja-field">
+                                <label for="monto_inicial">
+                                    Monto inicial
+                                    <span>Obligatorio</span>
+                                </label>
+
+                                <div class="caja-money-field">
+                                    <span>$</span>
+                                    <input
+                                        type="number"
+                                        id="monto_inicial"
+                                        name="monto_inicial"
+                                        step="0.50"
+                                        min="0"
+                                        inputmode="decimal"
+                                        placeholder="0.00"
+                                        required
+                                    >
+                                </div>
+
+                                <small>Escribe el efectivo que está físicamente disponible para dar cambio.</small>
+                            </div>
+
+                            <div class="caja-field">
+                                <label for="observaciones_apertura">Nota de apertura <span>Opcional</span></label>
+                                <textarea
+                                    id="observaciones_apertura"
+                                    name="observaciones_apertura"
+                                    rows="3"
+                                    placeholder="Ejemplo: Se recibió completo el fondo del turno anterior."
+                                ></textarea>
+                            </div>
+
+                            <button type="submit" class="caja-button is-primary is-full">
+                                <i class="fas fa-lock-open"></i>
+                                Abrir caja e iniciar turno
+                            </button>
+                        </form>
+                    </article>
+                </section>
 
             <?php else: ?>
+                <section
+                    class="caja-shift-banner"
+                    data-opened-at="<?= caja_h(date('c', strtotime($cajaAbierta['fecha_apertura']))) ?>"
+                >
+                    <div class="caja-shift-main">
+                        <span class="caja-live-indicator">
+                            <span></span>
+                            Turno activo
+                        </span>
 
-                <div class="caja-summary-grid mb-4">
-                    <div class="caja-stat stat-dark">
-                        <div class="caja-stat-icon">
-                            <i class="fas fa-wallet"></i>
-                        </div>
-                        <div class="caja-stat-label">Monto inicial</div>
-                        <div class="caja-stat-value"><?= caja_money($cajaAbierta['monto_inicial']) ?></div>
-                        <div class="caja-stat-small">Efectivo al abrir caja</div>
-                    </div>
-
-                    <div class="caja-stat stat-success">
-                        <div class="caja-stat-icon">
-                            <i class="fas fa-money-bill-wave"></i>
-                        </div>
-                        <div class="caja-stat-label">Ventas en efectivo</div>
-                        <div class="caja-stat-value text-success"><?= caja_money($resumen['efectivo_sistema']) ?></div>
-                        <div class="caja-stat-small">Registradas en sistema</div>
-                    </div>
-
-                    <div class="caja-stat">
-                        <div class="caja-stat-icon">
-                            <i class="fas fa-receipt"></i>
-                        </div>
-                        <div class="caja-stat-label">Ventas totales</div>
-                        <div class="caja-stat-value text-primary"><?= caja_money($resumen['ventas_sistema']) ?></div>
-                        <div class="caja-stat-small">
-                            <?= (int)$resumen['total_tickets'] ?> tickets · <?= number_format((float)$resumen['total_piezas'], 2) ?> piezas
+                        <div>
+                            <h2><?= caja_h($cajaAbierta['folio_caja']) ?></h2>
+                            <p>Todo lo registrado desde la apertura pertenece a esta caja.</p>
                         </div>
                     </div>
 
-                    <div class="caja-stat stat-warning">
-                        <div class="caja-stat-icon">
-                            <i class="fas fa-calculator"></i>
+                    <div class="caja-shift-meta">
+                        <div>
+                            <small>Apertura</small>
+                            <strong><?= caja_h(date('d/m/Y · H:i', strtotime($cajaAbierta['fecha_apertura']))) ?></strong>
                         </div>
-                        <div class="caja-stat-label">Efectivo esperado</div>
-                        <div class="caja-stat-value"><?= caja_money($efectivoEsperado) ?></div>
-                        <div class="caja-stat-small">Inicial + efectivo + entradas - salidas</div>
-                    </div>
-                </div>
 
-                <div class="row mb-4">
-                    <div class="col-lg-8 mb-4 mb-lg-0">
-                        <div class="caja-card h-100">
-                            <div class="caja-card-body">
-                                <div class="caja-section-title">
-                                    <div>
-                                        <h5>
-                                            <i class="fas fa-chart-pie mr-2"></i>
-                                            Resumen de caja
-                                        </h5>
-                                        <small>Vista simple del dinero registrado desde que se abrió la caja.</small>
+                        <div>
+                            <small>Responsable</small>
+                            <strong><?= caja_h($cajaAbierta['usuario_apertura_nombre'] ?: $usuarioNombre) ?></strong>
+                        </div>
+
+                        <div>
+                            <small>Tiempo transcurrido</small>
+                            <strong id="cajaTiempoTurno">Calculando…</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="caja-metrics" aria-label="Resumen principal de la caja">
+                    <article class="caja-metric is-expected">
+                        <div class="caja-metric-icon"><i class="fas fa-calculator"></i></div>
+                        <div>
+                            <small>Efectivo esperado</small>
+                            <strong><?= caja_money($efectivoEsperado) ?></strong>
+                            <span>Lo que debería existir físicamente</span>
+                        </div>
+                    </article>
+
+                    <article class="caja-metric">
+                        <div class="caja-metric-icon"><i class="fas fa-receipt"></i></div>
+                        <div>
+                            <small>Ventas del turno</small>
+                            <strong><?= caja_money($resumen['ventas_sistema']) ?></strong>
+                            <span><?= (int)$resumen['total_tickets'] ?> tickets · <?= number_format((float)$resumen['total_piezas'], 2) ?> piezas</span>
+                        </div>
+                    </article>
+
+                    <article class="caja-metric">
+                        <div class="caja-metric-icon"><i class="fas fa-money-bill-wave"></i></div>
+                        <div>
+                            <small>Ventas en efectivo</small>
+                            <strong><?= caja_money($resumen['efectivo_sistema']) ?></strong>
+                            <span>Sí forman parte del efectivo esperado</span>
+                        </div>
+                    </article>
+
+                    <article class="caja-metric">
+                        <div class="caja-metric-icon"><i class="fas fa-chart-line"></i></div>
+                        <div>
+                            <small>Utilidad estimada</small>
+                            <strong><?= caja_money($resumen['utilidad_estimada']) ?></strong>
+                            <span>Venta menos costo de los productos</span>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="caja-panel caja-balance-panel">
+                    <div class="caja-panel-heading is-inline">
+                        <div>
+                            <span class="caja-section-kicker">Resumen del turno</span>
+                            <h2>¿Cómo se obtiene el efectivo esperado?</h2>
+                            <p>Las ventas con tarjeta o transferencia no se cuentan como dinero físico.</p>
+                        </div>
+
+                        <span class="caja-total-pill">
+                            <small>Resultado</small>
+                            <strong><?= caja_money($efectivoEsperado) ?></strong>
+                        </span>
+                    </div>
+
+                    <div class="caja-equation" aria-label="Cálculo del efectivo esperado">
+                        <div class="caja-equation-item">
+                            <small>Monto inicial</small>
+                            <strong><?= caja_money($cajaAbierta['monto_inicial']) ?></strong>
+                        </div>
+                        <span class="caja-equation-operator">+</span>
+                        <div class="caja-equation-item">
+                            <small>Ventas efectivo</small>
+                            <strong><?= caja_money($resumen['efectivo_sistema']) ?></strong>
+                        </div>
+                        <span class="caja-equation-operator">+</span>
+                        <div class="caja-equation-item">
+                            <small>Entradas</small>
+                            <strong><?= caja_money($totalesMovimientos['entradas']) ?></strong>
+                        </div>
+                        <span class="caja-equation-operator">−</span>
+                        <div class="caja-equation-item">
+                            <small>Salidas</small>
+                            <strong><?= caja_money($totalesMovimientos['salidas']) ?></strong>
+                        </div>
+                        <span class="caja-equation-operator is-equal">=</span>
+                        <div class="caja-equation-item is-result">
+                            <small>Efectivo esperado</small>
+                            <strong><?= caja_money($efectivoEsperado) ?></strong>
+                        </div>
+                    </div>
+
+                    <div class="caja-method-grid">
+                        <div class="caja-method">
+                            <span class="is-cash"><i class="fas fa-money-bill-wave"></i></span>
+                            <div><small>Efectivo</small><strong><?= caja_money($resumen['efectivo_sistema']) ?></strong></div>
+                        </div>
+                        <div class="caja-method">
+                            <span class="is-card"><i class="fas fa-credit-card"></i></span>
+                            <div><small>Tarjeta</small><strong><?= caja_money($resumen['tarjeta_sistema']) ?></strong></div>
+                        </div>
+                        <div class="caja-method">
+                            <span class="is-transfer"><i class="fas fa-exchange-alt"></i></span>
+                            <div><small>Transferencia</small><strong><?= caja_money($resumen['transferencia_sistema']) ?></strong></div>
+                        </div>
+                        <div class="caja-method">
+                            <span class="is-other"><i class="fas fa-wallet"></i></span>
+                            <div><small>Otros métodos</small><strong><?= caja_money($resumen['otros_sistema']) ?></strong></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="caja-work-layout">
+                    <article class="caja-panel caja-movements-panel">
+                        <div class="caja-panel-heading is-inline">
+                            <div>
+                                <span class="caja-section-kicker">Dinero físico</span>
+                                <h2>Entradas y salidas</h2>
+                                <p>Registra efectivo agregado o retirado que no proviene de una venta.</p>
+                            </div>
+
+                            <div class="caja-inline-totals">
+                                <span class="is-entry">+ <?= caja_money($totalesMovimientos['entradas']) ?></span>
+                                <span class="is-exit">− <?= caja_money($totalesMovimientos['salidas']) ?></span>
+                            </div>
+                        </div>
+
+                        <div class="caja-movement-layout">
+                            <form method="POST" id="formMovimientoCaja" class="caja-movement-form no-print" novalidate>
+                                <input type="hidden" name="accion" value="agregar_movimiento">
+
+                                <div class="caja-field">
+                                    <label for="tipo_movimiento">Tipo de movimiento</label>
+                                    <select id="tipo_movimiento" name="tipo" required>
+                                        <option value="entrada">Entrada de efectivo</option>
+                                        <option value="salida">Salida de efectivo</option>
+                                    </select>
+                                </div>
+
+                                <div class="caja-field">
+                                    <label for="concepto_movimiento">Concepto</label>
+                                    <input
+                                        type="text"
+                                        id="concepto_movimiento"
+                                        name="concepto"
+                                        maxlength="120"
+                                        placeholder="Ejemplo: cambio adicional"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="caja-field">
+                                    <label for="monto_movimiento">Monto</label>
+                                    <div class="caja-money-field">
+                                        <span>$</span>
+                                        <input
+                                            type="number"
+                                            id="monto_movimiento"
+                                            name="monto"
+                                            step="0.50"
+                                            min="0.50"
+                                            inputmode="decimal"
+                                            placeholder="0.00"
+                                            required
+                                        >
                                     </div>
                                 </div>
 
-                                <div class="caja-table-wrapper table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Concepto</th>
-                                                <th class="caja-num">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><i class="fas fa-wallet text-dark mr-2"></i> Monto inicial</td>
-                                                <td class="caja-num"><strong><?= caja_money($cajaAbierta['monto_inicial']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-money-bill-wave text-success mr-2"></i> Ventas en efectivo</td>
-                                                <td class="caja-num"><strong><?= caja_money($resumen['efectivo_sistema']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-credit-card text-primary mr-2"></i> Ventas con tarjeta</td>
-                                                <td class="caja-num"><strong><?= caja_money($resumen['tarjeta_sistema']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-exchange-alt text-info mr-2"></i> Transferencias</td>
-                                                <td class="caja-num"><strong><?= caja_money($resumen['transferencia_sistema']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-wallet text-muted mr-2"></i> Otros métodos</td>
-                                                <td class="caja-num"><strong><?= caja_money($resumen['otros_sistema']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-plus-circle text-success mr-2"></i> Entradas manuales</td>
-                                                <td class="caja-num"><strong><?= caja_money($totalesMovimientos['entradas']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><i class="fas fa-minus-circle text-danger mr-2"></i> Salidas manuales</td>
-                                                <td class="caja-num"><strong><?= caja_money($totalesMovimientos['salidas']) ?></strong></td>
-                                            </tr>
-                                            <tr>
-                                                <td><strong>Efectivo esperado</strong></td>
-                                                <td class="caja-num"><strong><?= caja_money($efectivoEsperado) ?></strong></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                                <div class="caja-field">
+                                    <label for="observaciones_movimiento">Nota <span>Opcional</span></label>
+                                    <textarea
+                                        id="observaciones_movimiento"
+                                        name="observaciones"
+                                        rows="2"
+                                        placeholder="Agrega un detalle si es necesario."
+                                    ></textarea>
                                 </div>
 
-                                <div class="row mt-3">
-                                    <div class="col-md-6 mb-2 mb-md-0">
-                                        <span class="caja-badge caja-badge-success">
-                                            <i class="fas fa-plus-circle"></i>
-                                            Entradas: <?= caja_money($totalesMovimientos['entradas']) ?>
-                                        </span>
-                                    </div>
-
-                                    <div class="col-md-6 text-md-right">
-                                        <span class="caja-badge caja-badge-danger">
-                                            <i class="fas fa-minus-circle"></i>
-                                            Salidas: <?= caja_money($totalesMovimientos['salidas']) ?>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-lg-4">
-                        <div class="caja-cierre-box h-100">
-                            <h5 class="font-weight-bold mb-3">
-                                <i class="fas fa-lock mr-2"></i> Cerrar caja
-                            </h5>
-
-                            <div class="caja-cierre-line">
-                                <span>Monto inicial</span>
-                                <strong><?= caja_money($cajaAbierta['monto_inicial']) ?></strong>
-                            </div>
-
-                            <div class="caja-cierre-line">
-                                <span>Ventas efectivo</span>
-                                <strong><?= caja_money($resumen['efectivo_sistema']) ?></strong>
-                            </div>
-
-                            <div class="caja-cierre-line">
-                                <span>Entradas</span>
-                                <strong><?= caja_money($totalesMovimientos['entradas']) ?></strong>
-                            </div>
-
-                            <div class="caja-cierre-line">
-                                <span>Salidas</span>
-                                <strong><?= caja_money($totalesMovimientos['salidas']) ?></strong>
-                            </div>
-
-                            <div class="caja-cierre-line">
-                                <span>Efectivo esperado</span>
-                                <strong><?= caja_money($efectivoEsperado) ?></strong>
-                            </div>
-
-                            <form method="POST" id="formCerrarCaja" class="mt-3 no-print">
-                                <input type="hidden" name="accion" value="cerrar_caja">
-
-                                <div class="form-group">
-                                    <label class="font-weight-bold small">
-                                        Efectivo contado físicamente
-                                    </label>
-                                    <input type="number"
-                                           step="0.50"
-                                           min="0"
-                                           name="efectivo_contado"
-                                           id="efectivo_contado"
-                                           class="form-control caja-input"
-                                           value="<?= caja_h(number_format($efectivoEsperado, 2, '.', '')) ?>"
-                                           required>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="font-weight-bold small">
-                                        Observaciones de cierre
-                                    </label>
-                                    <textarea name="observaciones_cierre"
-                                              class="form-control caja-textarea"
-                                              placeholder="Ejemplo: caja sin diferencia, faltante de cambio, etc."></textarea>
-                                </div>
-
-                                <button type="submit" class="caja-btn caja-btn-success w-100">
-                                    <i class="fas fa-check-circle"></i> Cerrar caja
+                                <button type="submit" class="caja-button is-dark is-full">
+                                    <i class="fas fa-plus"></i>
+                                    Registrar movimiento
                                 </button>
                             </form>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="row mb-4">
-                    <div class="col-lg-5 mb-4 mb-lg-0">
-                        <div class="caja-card h-100">
-                            <div class="caja-card-body">
-                                <div class="caja-section-title">
-                                    <div>
-                                        <h5>
-                                            <i class="fas fa-random mr-2"></i>
-                                            Entradas y salidas
-                                        </h5>
-                                        <small>Registra dinero agregado o retirado de caja.</small>
-                                    </div>
+                            <div class="caja-movement-history">
+                                <div class="caja-subsection-heading">
+                                    <strong>Movimientos del turno</strong>
+                                    <small><?= count($movimientos) ?> registrados</small>
                                 </div>
-
-                                <form method="POST" id="formMovimientoCaja" class="no-print mb-3">
-                                    <input type="hidden" name="accion" value="agregar_movimiento">
-
-                                    <div class="form-group">
-                                        <div class="caja-label">Tipo</div>
-                                        <select name="tipo" class="form-control caja-select" required>
-                                            <option value="entrada">Entrada de efectivo</option>
-                                            <option value="salida">Salida de efectivo</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <div class="caja-label">Concepto</div>
-                                        <input type="text"
-                                               name="concepto"
-                                               class="form-control caja-input"
-                                               placeholder="Ejemplo: cambio adicional"
-                                               required>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <div class="caja-label">Monto</div>
-                                        <input type="number"
-                                               step="0.50"
-                                               min="0.50"
-                                               name="monto"
-                                               class="form-control caja-input"
-                                               placeholder="0.50"
-                                               required>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <div class="caja-label">Observaciones</div>
-                                        <textarea name="observaciones"
-                                                  class="form-control caja-textarea"
-                                                  placeholder="Opcional"></textarea>
-                                    </div>
-
-                                    <button type="submit" class="caja-btn caja-btn-primary w-100">
-                                        <i class="fas fa-save"></i> Registrar movimiento
-                                    </button>
-                                </form>
 
                                 <?php if (count($movimientos) > 0): ?>
-                                    <div class="caja-table-wrapper table-responsive">
-                                        <table class="table table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>Tipo</th>
-                                                    <th>Concepto</th>
-                                                    <th class="caja-num">Monto</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($movimientos as $mov): ?>
-                                                    <tr>
-                                                        <td>
-                                                            <?php if ($mov['tipo'] === 'entrada'): ?>
-                                                                <span class="text-success font-weight-bold">Entrada</span>
-                                                            <?php elseif ($mov['tipo'] === 'salida'): ?>
-                                                                <span class="text-danger font-weight-bold">Salida</span>
-                                                            <?php elseif ($mov['tipo'] === 'apertura'): ?>
-                                                                <span class="text-primary font-weight-bold">Apertura</span>
-                                                            <?php else: ?>
-                                                                <span class="text-dark font-weight-bold">Cierre</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>
-                                                            <?= caja_h($mov['concepto']) ?>
-                                                            <br>
-                                                            <small class="text-muted">
-                                                                <?= caja_h(date('d/m/Y H:i', strtotime($mov['fecha']))) ?>
-                                                            </small>
-                                                        </td>
-                                                        <td class="caja-num">
-                                                            <strong><?= caja_money($mov['monto']) ?></strong>
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="caja-empty">
-                                        <i class="fas fa-random"></i>
-                                        <h5>Sin movimientos</h5>
-                                        <p class="text-muted mb-0">Aquí aparecerán apertura, entradas, salidas y cierre.</p>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
+                                    <div class="caja-movement-list">
+                                        <?php foreach ($movimientos as $mov):
+                                            $tipoMovimiento = $mov['tipo'] ?? 'otro';
+                                            $claseMovimiento = in_array($tipoMovimiento, ['entrada', 'apertura'], true)
+                                                ? 'is-positive'
+                                                : (in_array($tipoMovimiento, ['salida'], true) ? 'is-negative' : 'is-neutral');
+                                            $signoMovimiento = in_array($tipoMovimiento, ['salida'], true) ? '−' : '+';
+                                        ?>
+                                            <div class="caja-movement-row <?= caja_h($claseMovimiento) ?>">
+                                                <span class="caja-movement-icon">
+                                                    <?php if ($tipoMovimiento === 'entrada'): ?>
+                                                        <i class="fas fa-arrow-down"></i>
+                                                    <?php elseif ($tipoMovimiento === 'salida'): ?>
+                                                        <i class="fas fa-arrow-up"></i>
+                                                    <?php elseif ($tipoMovimiento === 'apertura'): ?>
+                                                        <i class="fas fa-lock-open"></i>
+                                                    <?php else: ?>
+                                                        <i class="fas fa-lock"></i>
+                                                    <?php endif; ?>
+                                                </span>
 
-                    <div class="col-lg-7">
-                        <div class="caja-card h-100">
-                            <div class="caja-card-body">
-                                <div class="caja-section-title">
-                                    <div>
-                                        <h5>
-                                            <i class="fas fa-clipboard-list mr-2"></i>
-                                            Ventas de la caja
-                                        </h5>
-                                        <small>Auditoría de todas las ventas registradas desde la apertura.</small>
-                                    </div>
+                                                <div class="caja-movement-copy">
+                                                    <strong><?= caja_h($mov['concepto']) ?></strong>
+                                                    <small>
+                                                        <?= caja_h(ucfirst($tipoMovimiento)) ?> ·
+                                                        <?= caja_h(date('d/m/Y H:i', strtotime($mov['fecha']))) ?>
+                                                    </small>
+                                                </div>
 
-                                    <span class="caja-badge">
-                                        <?= (int)$totalVentasAuditoria ?> registros
-                                    </span>
-                                </div>
-
-                                <?php if (count($ventasCaja) > 0): ?>
-                                    <div class="caja-table-wrapper table-responsive">
-                                        <table class="table table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>Folio</th>
-                                                    <th>Producto</th>
-                                                    <th>Fecha</th>
-                                                    <th>Método</th>
-                                                    <th class="caja-num">Cant.</th>
-                                                    <th class="caja-num">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($ventasCaja as $venta): ?>
-                                                    <tr>
-                                                        <td>
-                                                            <strong><?= caja_h($venta['folio_ticket'] ?: 'VENTA-' . $venta['id']) ?></strong>
-                                                            <br>
-                                                            <small class="text-muted"><?= caja_h($venta['vendedor_nombre'] ?: 'Sin vendedor') ?></small>
-                                                        </td>
-
-                                                        <td><?= caja_h($venta['producto_nombre']) ?></td>
-
-                                                        <td><?= caja_h(date('d/m/Y H:i', strtotime($venta['fecha_venta']))) ?></td>
-
-                                                        <td>
-                                                            <span class="caja-badge">
-                                                                <?= caja_h($venta['metodo_pago'] ?: 'Sin método') ?>
-                                                            </span>
-                                                        </td>
-
-                                                        <td class="caja-num"><?= number_format((float)$venta['cantidad_vendida'], 2) ?></td>
-
-                                                        <td class="caja-num">
-                                                            <strong><?= caja_money($venta['subtotal']) ?></strong>
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    <?php if ($totalPaginasVentas > 1): ?>
-                                        <div class="pagination-wrapper no-print">
-                                            <?php
-                                            $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
-                                            $queryActual = $_GET;
-
-                                            $urlPrimera = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => 1]));
-                                            $urlAnterior = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => max(1, $paginaVentas - 1)]));
-                                            $urlSiguiente = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => min($totalPaginasVentas, $paginaVentas + 1)]));
-                                            $urlUltima = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => $totalPaginasVentas]));
-                                            ?>
-
-                                            <a class="pagination-btn <?= $paginaVentas <= 1 ? 'disabled' : '' ?>"
-                                               href="<?= caja_h($urlPrimera) ?>">
-                                                <i class="fas fa-angle-double-left"></i> Primera
-                                            </a>
-
-                                            <a class="pagination-btn <?= $paginaVentas <= 1 ? 'disabled' : '' ?>"
-                                               href="<?= caja_h($urlAnterior) ?>">
-                                                <i class="fas fa-chevron-left"></i> Anterior
-                                            </a>
-
-                                            <div class="pagination-pages">
-                                                <?php
-                                                $rango = 2;
-                                                $inicio = max(1, $paginaVentas - $rango);
-                                                $fin = min($totalPaginasVentas, $paginaVentas + $rango);
-
-                                                for ($i = $inicio; $i <= $fin; $i++):
-                                                    $urlPagina = $baseUrl . '?' . http_build_query(array_merge($queryActual, ['pagina_ventas' => $i]));
-                                                ?>
-                                                    <a href="<?= caja_h($urlPagina) ?>"
-                                                       class="page-number <?= $i === $paginaVentas ? 'active' : '' ?>">
-                                                        <?= $i ?>
-                                                    </a>
-                                                <?php endfor; ?>
+                                                <strong class="caja-movement-amount">
+                                                    <?= $signoMovimiento ?><?= caja_money($mov['monto']) ?>
+                                                </strong>
                                             </div>
-
-                                            <a class="pagination-btn <?= $paginaVentas >= $totalPaginasVentas ? 'disabled' : '' ?>"
-                                               href="<?= caja_h($urlSiguiente) ?>">
-                                                Siguiente <i class="fas fa-chevron-right"></i>
-                                            </a>
-
-                                            <a class="pagination-btn <?= $paginaVentas >= $totalPaginasVentas ? 'disabled' : '' ?>"
-                                               href="<?= caja_h($urlUltima) ?>">
-                                                Última <i class="fas fa-angle-double-right"></i>
-                                            </a>
-                                        </div>
-                                    <?php endif; ?>
-
+                                        <?php endforeach; ?>
+                                    </div>
                                 <?php else: ?>
-                                    <div class="caja-empty">
-                                        <i class="fas fa-search"></i>
-                                        <h5>No hay ventas todavía</h5>
-                                        <p class="text-muted mb-0">Las ventas aparecerán aquí después de abrir caja.</p>
+                                    <div class="caja-empty-state is-compact">
+                                        <i class="fas fa-random"></i>
+                                        <strong>Sin movimientos manuales</strong>
+                                        <span>Las entradas y salidas aparecerán aquí.</span>
                                     </div>
                                 <?php endif; ?>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </article>
 
-            <?php endif; ?>
-
-            <div class="caja-card historial-cajas">
-                <div class="caja-card-body">
-                    <div class="caja-section-title">
-                        <div>
-                            <h5>
-                                <i class="fas fa-history mr-2"></i>
-                                Historial de cajas
-                            </h5>
-                            <small>Últimas aperturas y cierres registrados.</small>
+                    <aside class="caja-panel caja-close-panel">
+                        <div class="caja-panel-heading">
+                            <div>
+                                <span class="caja-section-kicker">Finalizar turno</span>
+                                <h2>Cerrar caja</h2>
+                                <p>Cuenta únicamente el efectivo que tienes físicamente.</p>
+                            </div>
                         </div>
+
+                        <div class="caja-close-expected">
+                            <small>Deberías contar</small>
+                            <strong><?= caja_money($efectivoEsperado) ?></strong>
+                            <span>Tarjeta y transferencias no se incluyen.</span>
+                        </div>
+
+                        <form method="POST" id="formCerrarCaja" class="no-print" novalidate>
+                            <input type="hidden" name="accion" value="cerrar_caja">
+
+                            <div class="caja-field">
+                                <label for="efectivo_contado">Efectivo contado</label>
+                                <div class="caja-money-field is-large">
+                                    <span>$</span>
+                                    <input
+                                        type="number"
+                                        id="efectivo_contado"
+                                        name="efectivo_contado"
+                                        step="0.50"
+                                        min="0"
+                                        inputmode="decimal"
+                                        value="<?= caja_h(number_format($efectivoEsperado, 2, '.', '')) ?>"
+                                        required
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="caja-difference-preview is-balanced" id="cajaDiferenciaPreview" aria-live="polite">
+                                <span><i class="fas fa-check-circle"></i> Sin diferencia</span>
+                                <strong>$0.00</strong>
+                            </div>
+
+                            <div class="caja-field">
+                                <label for="observaciones_cierre">Nota del cierre <span>Opcional</span></label>
+                                <textarea
+                                    id="observaciones_cierre"
+                                    name="observaciones_cierre"
+                                    rows="3"
+                                    placeholder="Ejemplo: Caja completa y sin incidencias."
+                                ></textarea>
+                            </div>
+
+                            <button type="submit" class="caja-button is-primary is-full">
+                                <i class="fas fa-lock"></i>
+                                Revisar y cerrar caja
+                            </button>
+                        </form>
+                    </aside>
+                </section>
+
+                <section class="caja-panel caja-sales-panel">
+                    <div class="caja-panel-heading is-inline">
+                        <div>
+                            <span class="caja-section-kicker">Auditoría del turno</span>
+                            <h2>Ventas registradas</h2>
+                            <p>Productos vendidos desde la apertura de esta caja.</p>
+                        </div>
+
+                        <span class="caja-record-count">
+                            <strong><?= (int)$totalVentasAuditoria ?></strong>
+                            registros
+                        </span>
                     </div>
 
-                    <?php if (count($historial) > 0): ?>
-                        <div class="caja-table-wrapper table-responsive">
-                            <table class="table table-hover">
+                    <?php if (count($ventasCaja) > 0): ?>
+                        <div class="caja-table-shell">
+                            <table class="caja-data-table">
                                 <thead>
                                     <tr>
-                                        <th>Folio</th>
-                                        <th>Estado</th>
-                                        <th>Apertura</th>
-                                        <th>Cierre</th>
-                                        <th class="caja-num">Inicial</th>
-                                        <th class="caja-num">Ventas</th>
-                                        <th class="caja-num">Esperado</th>
-                                        <th class="caja-num">Contado</th>
-                                        <th class="caja-num">Diferencia</th>
+                                        <th>Venta</th>
+                                        <th>Producto</th>
+                                        <th>Fecha</th>
+                                        <th>Método</th>
+                                        <th class="is-number">Cantidad</th>
+                                        <th class="is-number">Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($historial as $caja): ?>
+                                    <?php foreach ($ventasCaja as $venta): ?>
                                         <tr>
-                                            <td>
-                                                <strong><?= caja_h($caja['folio_caja']) ?></strong>
-                                                <br>
-                                                <small class="text-muted"><?= caja_h($caja['usuario_apertura_nombre'] ?? '') ?></small>
+                                            <td data-label="Venta">
+                                                <strong><?= caja_h($venta['folio_ticket'] ?: 'VENTA-' . $venta['id']) ?></strong>
+                                                <small><?= caja_h($venta['vendedor_nombre'] ?: 'Sin vendedor') ?></small>
                                             </td>
-
-                                            <td>
-                                                <?php if ($caja['estado'] === 'abierta'): ?>
-                                                    <span class="caja-status-pill caja-status-open">
-                                                        <i class="fas fa-lock-open"></i> Abierta
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="caja-status-pill caja-status-closed">
-                                                        <i class="fas fa-lock"></i> Cerrada
-                                                    </span>
-                                                <?php endif; ?>
+                                            <td data-label="Producto"><?= caja_h($venta['producto_nombre']) ?></td>
+                                            <td data-label="Fecha"><?= caja_h(date('d/m/Y H:i', strtotime($venta['fecha_venta']))) ?></td>
+                                            <td data-label="Método">
+                                                <span class="caja-payment-badge">
+                                                    <?= caja_h($venta['metodo_pago'] ?: 'Sin método') ?>
+                                                </span>
                                             </td>
-
-                                            <td><?= caja_h(date('d/m/Y H:i', strtotime($caja['fecha_apertura']))) ?></td>
-
-                                            <td>
-                                                <?= $caja['fecha_cierre']
-                                                    ? caja_h(date('d/m/Y H:i', strtotime($caja['fecha_cierre'])))
-                                                    : '<span class="text-muted">---</span>' ?>
-                                            </td>
-
-                                            <td class="caja-num"><?= caja_money($caja['monto_inicial']) ?></td>
-                                            <td class="caja-num"><?= caja_money($caja['ventas_sistema']) ?></td>
-                                            <td class="caja-num"><?= caja_money($caja['efectivo_esperado']) ?></td>
-                                            <td class="caja-num"><?= caja_money($caja['efectivo_contado']) ?></td>
-                                            <td class="caja-num">
-                                                <strong class="<?= abs((float)$caja['diferencia_efectivo']) <= 0.01 ? 'text-success' : 'text-danger' ?>">
-                                                    <?= caja_money($caja['diferencia_efectivo']) ?>
-                                                </strong>
-                                            </td>
+                                            <td data-label="Cantidad" class="is-number"><?= number_format((float)$venta['cantidad_vendida'], 2) ?></td>
+                                            <td data-label="Total" class="is-number"><strong><?= caja_money($venta['subtotal']) ?></strong></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
+
+                        <?php if ($totalPaginasVentas > 1): ?>
+                            <nav class="caja-pagination no-print" aria-label="Paginación de ventas">
+                                <?php
+                                $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                                $queryActual = $_GET;
+                                unset($queryActual['abierta'], $queryActual['movimiento'], $queryActual['cerrada']);
+
+                                $crearUrlPagina = static function ($pagina) use ($baseUrl, $queryActual) {
+                                    return $baseUrl . '?' . http_build_query(array_merge($queryActual, [
+                                        'pagina_ventas' => $pagina,
+                                    ]));
+                                };
+                                ?>
+
+                                <a
+                                    href="<?= caja_h($crearUrlPagina(max(1, $paginaVentas - 1))) ?>"
+                                    class="caja-page-arrow <?= $paginaVentas <= 1 ? 'is-disabled' : '' ?>"
+                                    aria-label="Página anterior"
+                                >
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+
+                                <span class="caja-page-status">
+                                    Página <strong><?= $paginaVentas ?></strong> de <strong><?= $totalPaginasVentas ?></strong>
+                                </span>
+
+                                <a
+                                    href="<?= caja_h($crearUrlPagina(min($totalPaginasVentas, $paginaVentas + 1))) ?>"
+                                    class="caja-page-arrow <?= $paginaVentas >= $totalPaginasVentas ? 'is-disabled' : '' ?>"
+                                    aria-label="Página siguiente"
+                                >
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </nav>
+                        <?php endif; ?>
                     <?php else: ?>
-                        <div class="caja-empty">
-                            <i class="fas fa-clock"></i>
-                            <h5>Todavía no hay cajas registradas</h5>
-                            <p class="text-muted mb-0">Cuando abras y cierres caja aparecerá el historial aquí.</p>
+                        <div class="caja-empty-state">
+                            <i class="fas fa-receipt"></i>
+                            <strong>Aún no hay ventas en este turno</strong>
+                            <span>Cuando se registre una venta aparecerá automáticamente aquí.</span>
+                        </div>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+
+            <section class="caja-panel caja-history-panel historial-cajas">
+                <div class="caja-panel-heading is-inline caja-history-heading">
+                    <div>
+                        <span class="caja-section-kicker">Turnos anteriores</span>
+                        <h2>Historial de cajas</h2>
+                        <p>Revisa quién abrió cada caja, sus horarios, ventas y resultado del cierre.</p>
+                    </div>
+
+                    <?php if (count($historial) > 0): ?>
+                        <div class="caja-history-filters no-print">
+                            <div class="caja-search-field">
+                                <i class="fas fa-search"></i>
+                                <input type="search" id="cajaHistorialBuscar" placeholder="Buscar folio o usuario…">
+                            </div>
+
+                            <select id="cajaHistorialEstado" aria-label="Filtrar historial por estado">
+                                <option value="">Todas las cajas</option>
+                                <option value="abierta">Solo abiertas</option>
+                                <option value="cerrada">Solo cerradas</option>
+                            </select>
                         </div>
                     <?php endif; ?>
                 </div>
-            </div>
 
+                <?php if (count($historial) > 0): ?>
+                    <div class="caja-history-table-shell">
+                        <table class="caja-history-table" id="cajaHistorialGrid">
+                            <thead>
+                                <tr>
+                                    <th>Caja</th>
+                                    <th>Estado</th>
+                                    <th>Apertura</th>
+                                    <th>Cierre</th>
+                                    <th class="is-number">Inicial</th>
+                                    <th class="is-number">Ventas</th>
+                                    <th class="is-number">Resultado</th>
+                                    <th class="is-action no-print">Detalle</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($historial as $caja):
+                                    $estadoHistorial = $caja['estado'] ?? 'cerrada';
+                                    $esCajaActivaActual = $cajaAbierta
+                                        && (int)$cajaAbierta['id'] === (int)$caja['id']
+                                        && $estadoHistorial === 'abierta';
+
+                                    $ventasHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['ventas_sistema']
+                                        : (float)($caja['ventas_sistema'] ?? 0);
+                                    $efectivoHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['efectivo_sistema']
+                                        : (float)($caja['efectivo_sistema'] ?? 0);
+                                    $tarjetaHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['tarjeta_sistema']
+                                        : (float)($caja['tarjeta_sistema'] ?? 0);
+                                    $transferenciaHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['transferencia_sistema']
+                                        : (float)($caja['transferencia_sistema'] ?? 0);
+                                    $otrosHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['otros_sistema']
+                                        : (float)($caja['otros_sistema'] ?? 0);
+                                    $piezasHistorial = $esCajaActivaActual
+                                        ? (float)$resumen['total_piezas']
+                                        : (float)($caja['total_piezas'] ?? 0);
+                                    $entradasHistorial = $esCajaActivaActual
+                                        ? (float)$totalesMovimientos['entradas']
+                                        : (float)($caja['entradas_efectivo'] ?? 0);
+                                    $salidasHistorial = $esCajaActivaActual
+                                        ? (float)$totalesMovimientos['salidas']
+                                        : (float)($caja['salidas_efectivo'] ?? 0);
+                                    $esperadoHistorial = $esCajaActivaActual
+                                        ? (float)$efectivoEsperado
+                                        : (float)($caja['efectivo_esperado'] ?? 0);
+                                    $ticketsHistorial = $esCajaActivaActual
+                                        ? (int)$resumen['total_tickets']
+                                        : (int)($caja['total_tickets'] ?? 0);
+                                    $diferenciaHistorial = $esCajaActivaActual
+                                        ? 0.0
+                                        : (float)($caja['diferencia_efectivo'] ?? 0);
+
+                                    if ($estadoHistorial === 'abierta') {
+                                        $claseDiferencia = 'is-pending';
+                                        $textoDiferencia = 'Pendiente de cierre';
+                                    } elseif (abs($diferenciaHistorial) <= 0.01) {
+                                        $claseDiferencia = 'is-balanced';
+                                        $textoDiferencia = 'Caja exacta';
+                                    } elseif ($diferenciaHistorial > 0) {
+                                        $claseDiferencia = 'is-surplus';
+                                        $textoDiferencia = 'Sobrante';
+                                    } else {
+                                        $claseDiferencia = 'is-shortage';
+                                        $textoDiferencia = 'Faltante';
+                                    }
+
+                                    $detalleCaja = [
+                                        'folio' => $caja['folio_caja'],
+                                        'estado' => $estadoHistorial,
+                                        'usuario_apertura' => $caja['usuario_apertura_nombre'] ?? '',
+                                        'usuario_cierre' => $caja['usuario_cierre_nombre'] ?? '',
+                                        'apertura' => $caja['fecha_apertura']
+                                            ? date('d/m/Y H:i', strtotime($caja['fecha_apertura']))
+                                            : '',
+                                        'cierre' => $caja['fecha_cierre']
+                                            ? date('d/m/Y H:i', strtotime($caja['fecha_cierre']))
+                                            : '',
+                                        'monto_inicial' => (float)($caja['monto_inicial'] ?? 0),
+                                        'ventas' => $ventasHistorial,
+                                        'efectivo' => $efectivoHistorial,
+                                        'tarjeta' => $tarjetaHistorial,
+                                        'transferencia' => $transferenciaHistorial,
+                                        'otros' => $otrosHistorial,
+                                        'entradas' => $entradasHistorial,
+                                        'salidas' => $salidasHistorial,
+                                        'esperado' => $esperadoHistorial,
+                                        'contado' => (float)($caja['efectivo_contado'] ?? 0),
+                                        'diferencia' => $diferenciaHistorial,
+                                        'tickets' => $ticketsHistorial,
+                                        'piezas' => $piezasHistorial,
+                                        'generado' => date('d/m/Y H:i'),
+                                        'observaciones_apertura' => $caja['observaciones_apertura'] ?? '',
+                                        'observaciones_cierre' => $caja['observaciones_cierre'] ?? '',
+                                    ];
+                                ?>
+                                    <tr
+                                        class="caja-history-card"
+                                        data-history-state="<?= caja_h($estadoHistorial) ?>"
+                                        data-history-search="<?= caja_h(strtolower(($caja['folio_caja'] ?? '') . ' ' . ($caja['usuario_apertura_nombre'] ?? '') . ' ' . ($caja['usuario_cierre_nombre'] ?? ''))) ?>"
+                                    >
+                                        <td data-label="Caja">
+                                            <div class="caja-history-folio">
+                                                <strong><?= caja_h($caja['folio_caja']) ?></strong>
+                                                <small>
+                                                    <i class="fas fa-user"></i>
+                                                    <?= caja_h($caja['usuario_apertura_nombre'] ?: 'Sin responsable') ?>
+                                                </small>
+                                            </div>
+                                        </td>
+
+                                        <td data-label="Estado">
+                                            <span class="caja-history-status <?= $estadoHistorial === 'abierta' ? 'is-open' : 'is-closed' ?>">
+                                                <i class="fas <?= $estadoHistorial === 'abierta' ? 'fa-lock-open' : 'fa-lock' ?>"></i>
+                                                <?= $estadoHistorial === 'abierta' ? 'Abierta' : 'Cerrada' ?>
+                                            </span>
+                                        </td>
+
+                                        <td data-label="Apertura">
+                                            <span class="caja-history-date">
+                                                <?= caja_h(date('d/m/Y', strtotime($caja['fecha_apertura']))) ?>
+                                                <small><?= caja_h(date('H:i', strtotime($caja['fecha_apertura']))) ?></small>
+                                            </span>
+                                        </td>
+
+                                        <td data-label="Cierre">
+                                            <?php if ($caja['fecha_cierre']): ?>
+                                                <span class="caja-history-date">
+                                                    <?= caja_h(date('d/m/Y', strtotime($caja['fecha_cierre']))) ?>
+                                                    <small><?= caja_h(date('H:i', strtotime($caja['fecha_cierre']))) ?></small>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="caja-history-running">En curso</span>
+                                            <?php endif; ?>
+                                        </td>
+
+                                        <td data-label="Monto inicial" class="is-number">
+                                            <strong><?= caja_money($caja['monto_inicial']) ?></strong>
+                                        </td>
+
+                                        <td data-label="Ventas" class="is-number">
+                                            <strong><?= caja_money($ventasHistorial) ?></strong>
+                                            <small class="caja-history-tickets"><?= $ticketsHistorial ?> tickets</small>
+                                        </td>
+
+                                        <td data-label="Resultado" class="is-number">
+                                            <div class="caja-history-result">
+                                                <span class="caja-history-difference <?= caja_h($claseDiferencia) ?>">
+                                                    <?= caja_h($textoDiferencia) ?>
+                                                </span>
+                                                <?php if ($estadoHistorial !== 'abierta'): ?>
+                                                    <strong><?= caja_money($diferenciaHistorial) ?></strong>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+
+                                        <td data-label="Detalle" class="is-action no-print">
+                                            <button
+                                                type="button"
+                                                class="caja-history-detail"
+                                                aria-label="Ver detalle de <?= caja_h($caja['folio_caja']) ?>"
+                                                data-caja-detail='<?= caja_h(json_encode($detalleCaja, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
+                                            >
+                                                <i class="fas fa-eye"></i>
+                                                <span>Ver</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="caja-empty-state is-filtered" id="cajaHistorialSinResultados" hidden>
+                        <i class="fas fa-search"></i>
+                        <strong>No encontramos cajas con ese filtro</strong>
+                        <span>Prueba con otro folio, usuario o estado.</span>
+                    </div>
+                <?php else: ?>
+                    <div class="caja-empty-state">
+                        <i class="fas fa-history"></i>
+                        <strong>Todavía no hay cajas registradas</strong>
+                        <span>Cuando abras y cierres el primer turno aparecerá aquí.</span>
+                    </div>
+                <?php endif; ?>
+            </section>
         </div>
     </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script>
-const efectivoEsperado = <?= json_encode((float)$efectivoEsperado) ?>;
+(function () {
+    'use strict';
 
-function cajaFormatoMoneda(value) {
-    const number = Number(value || 0);
+    const efectivoEsperado = <?= json_encode((float)$efectivoEsperado) ?>;
+    const mensajeServidor = <?= json_encode($mensaje, JSON_UNESCAPED_UNICODE) ?>;
+    const errorServidor = <?= json_encode($error, JSON_UNESCAPED_UNICODE) ?>;
+    const cajaPdfActual = <?= json_encode($datosPdfCajaActual, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
-    return number.toLocaleString('es-MX', {
-        style: 'currency',
-        currency: 'MXN'
-    });
-}
 
-function cajaToast(mensaje, tipo = 'success') {
-    const toast = document.createElement('div');
-    toast.className = 'toast-custom';
-    toast.textContent = mensaje;
+    const CLAVE_CONSEJO_APERTURA = 'caja_consejo_apertura_visible_v1';
+    const btnToggleConsejo = document.getElementById('btnToggleConsejoCaja');
+    const consejoApertura = document.getElementById('cajaConsejoApertura');
+    const layoutApertura = document.getElementById('cajaStartLayout');
+    const textoToggleConsejo = document.getElementById('textoToggleConsejoCaja');
+    const ayudaToggleConsejo = document.getElementById('ayudaToggleConsejoCaja');
 
-    if (tipo === 'danger') {
-        toast.style.background = '#dc3545';
+    function leerPreferenciaConsejo() {
+        try {
+            return window.localStorage.getItem(CLAVE_CONSEJO_APERTURA) === 'visible';
+        } catch (error) {
+            return false;
+        }
     }
 
-    document.body.appendChild(toast);
+    function guardarPreferenciaConsejo(visible) {
+        try {
+            window.localStorage.setItem(
+                CLAVE_CONSEJO_APERTURA,
+                visible ? 'visible' : 'oculto'
+            );
+        } catch (error) {
+            // El módulo continúa funcionando aunque el navegador bloquee localStorage.
+        }
+    }
 
-    setTimeout(() => {
-        toast.style.animation = 'cajaSlideIn .3s reverse';
-        setTimeout(() => toast.remove(), 300);
-    }, 2200);
-}
+    function actualizarConsejoApertura(visible, guardar = false) {
+        if (!btnToggleConsejo || !consejoApertura || !layoutApertura) {
+            return;
+        }
 
-const formAbrirCaja = document.getElementById('formAbrirCaja');
+        consejoApertura.hidden = !visible;
+        layoutApertura.classList.toggle('is-tip-hidden', !visible);
+        btnToggleConsejo.classList.toggle('is-open', visible);
+        btnToggleConsejo.setAttribute('aria-expanded', visible ? 'true' : 'false');
 
-if (formAbrirCaja) {
-    formAbrirCaja.addEventListener('submit', function(e) {
-        e.preventDefault();
+        if (textoToggleConsejo) {
+            textoToggleConsejo.textContent = visible
+                ? 'Ocultar consejo de apertura'
+                : 'Ver consejo de apertura';
+        }
 
-        const monto = this.querySelector('[name="monto_inicial"]').value || '0';
+        if (ayudaToggleConsejo) {
+            ayudaToggleConsejo.textContent = visible
+                ? 'El consejo permanecerá visible la próxima vez que regreses.'
+                : 'Consulta cómo iniciar y cerrar el turno correctamente.';
+        }
 
-        Swal.fire({
-            icon: 'question',
-            title: '¿Abrir caja?',
-            html: `
-                <div class="text-center">
-                    <p>Se abrirá caja con monto inicial:</p>
-                    <h3 style="font-weight:800;">${cajaFormatoMoneda(monto)}</h3>
-                </div>
-            `,
-            showCancelButton: true,
-            confirmButtonText: 'Sí, abrir caja',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#111',
-            cancelButtonColor: '#6c757d'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                formAbrirCaja.submit();
-            }
+        if (guardar) {
+            guardarPreferenciaConsejo(visible);
+        }
+    }
+
+    if (btnToggleConsejo && consejoApertura && layoutApertura) {
+        actualizarConsejoApertura(leerPreferenciaConsejo(), false);
+
+        btnToggleConsejo.addEventListener('click', function () {
+            const seAbrira = btnToggleConsejo.getAttribute('aria-expanded') !== 'true';
+            actualizarConsejoApertura(seAbrira, true);
         });
-    });
-}
+    }
 
-const formMovimientoCaja = document.getElementById('formMovimientoCaja');
+    function moneda(valor) {
+        return Number(valor || 0).toLocaleString('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+            minimumFractionDigits: 2
+        });
+    }
 
-if (formMovimientoCaja) {
-    formMovimientoCaja.addEventListener('submit', function(e) {
-        e.preventDefault();
+    function textoSeguro(valor) {
+        const elemento = document.createElement('div');
+        elemento.textContent = String(valor ?? '');
+        return elemento.innerHTML;
+    }
 
-        const tipo = this.querySelector('[name="tipo"]').value;
-        const concepto = this.querySelector('[name="concepto"]').value || '';
-        const monto = this.querySelector('[name="monto"]').value || '0';
+    function limpiarMensajesUrl() {
+        const url = new URL(window.location.href);
+        ['abierta', 'movimiento', 'cerrada'].forEach((clave) => {
+            url.searchParams.delete(clave);
+        });
+        window.history.replaceState({}, '', url.toString());
+    }
 
+    function mostrarMensajeServidor() {
+        if (errorServidor) {
+            Swal.fire({
+                icon: 'error',
+                title: 'No se pudo completar la operación',
+                text: errorServidor,
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#f97316',
+                customClass: { popup: 'caja-swal-popup' }
+            });
+            return;
+        }
+
+        if (mensajeServidor) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Operación completada',
+                text: mensajeServidor,
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#16a34a',
+                timer: 2600,
+                timerProgressBar: true,
+                customClass: { popup: 'caja-swal-popup' }
+            });
+            limpiarMensajesUrl();
+        }
+    }
+
+    function validarFormulario(formulario) {
+        const invalido = formulario.querySelector(':invalid');
+
+        if (!invalido) {
+            return true;
+        }
+
+        invalido.focus();
         Swal.fire({
-            icon: 'question',
-            title: '¿Registrar movimiento?',
-            html: `
-                <div class="text-center">
-                    <p class="mb-2">Se registrará el movimiento en caja.</p>
-                    <div style="background:#f8fafc;border-radius:14px;padding:14px;border:1px solid #edf1f5;">
-                        <strong>Tipo:</strong> ${tipo}<br>
-                        <strong>Concepto:</strong> ${concepto}<br>
-                        <strong>Monto:</strong> ${cajaFormatoMoneda(monto)}
+            icon: 'warning',
+            title: 'Falta completar un dato',
+            text: invalido.validationMessage || 'Revisa los campos obligatorios.',
+            confirmButtonText: 'Revisar',
+            confirmButtonColor: '#f97316',
+            customClass: { popup: 'caja-swal-popup' }
+        });
+
+        return false;
+    }
+
+    const formAbrir = document.getElementById('formAbrirCaja');
+    if (formAbrir) {
+        formAbrir.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!validarFormulario(formAbrir)) return;
+
+            const monto = Number(formAbrir.elements.monto_inicial.value || 0);
+            const observacion = formAbrir.elements.observaciones_apertura.value.trim();
+
+            Swal.fire({
+                icon: 'question',
+                title: 'Confirmar apertura',
+                html: `
+                    <div class="caja-swal-summary">
+                        <p>La caja comenzará a registrar las ventas desde este momento.</p>
+                        <div class="caja-swal-amount">
+                            <small>Monto inicial</small>
+                            <strong>${moneda(monto)}</strong>
+                        </div>
+                        ${observacion ? `<div class="caja-swal-note"><strong>Nota:</strong> ${textoSeguro(observacion)}</div>` : ''}
                     </div>
-                </div>
-            `,
-            showCancelButton: true,
-            confirmButtonText: 'Sí, registrar',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#111',
-            cancelButtonColor: '#6c757d'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                formMovimientoCaja.submit();
-            }
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Abrir caja',
+                cancelButtonText: 'Seguir editando',
+                confirmButtonColor: '#f97316',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+                customClass: { popup: 'caja-swal-popup' }
+            }).then((resultado) => {
+                if (resultado.isConfirmed) formAbrir.submit();
+            });
         });
-    });
-}
+    }
 
-const formCerrarCaja = document.getElementById('formCerrarCaja');
+    const formMovimiento = document.getElementById('formMovimientoCaja');
+    if (formMovimiento) {
+        formMovimiento.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!validarFormulario(formMovimiento)) return;
 
-if (formCerrarCaja) {
-    formCerrarCaja.addEventListener('submit', function(e) {
-        e.preventDefault();
+            const tipo = formMovimiento.elements.tipo.value;
+            const concepto = formMovimiento.elements.concepto.value.trim();
+            const monto = Number(formMovimiento.elements.monto.value || 0);
+            const esEntrada = tipo === 'entrada';
 
-        const contadoInput = document.getElementById('efectivo_contado');
-        const contado = Number(contadoInput ? contadoInput.value : 0);
+            Swal.fire({
+                icon: 'question',
+                title: esEntrada ? 'Registrar entrada' : 'Registrar salida',
+                html: `
+                    <div class="caja-swal-summary">
+                        <div class="caja-swal-movement ${esEntrada ? 'is-entry' : 'is-exit'}">
+                            <span><i class="fas ${esEntrada ? 'fa-arrow-down' : 'fa-arrow-up'}"></i></span>
+                            <div>
+                                <small>${esEntrada ? 'Dinero agregado a caja' : 'Dinero retirado de caja'}</small>
+                                <strong>${moneda(monto)}</strong>
+                            </div>
+                        </div>
+                        <div class="caja-swal-note"><strong>Concepto:</strong> ${textoSeguro(concepto)}</div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: esEntrada ? 'Registrar entrada' : 'Registrar salida',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: esEntrada ? '#16a34a' : '#dc2626',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+                customClass: { popup: 'caja-swal-popup' }
+            }).then((resultado) => {
+                if (resultado.isConfirmed) formMovimiento.submit();
+            });
+        });
+    }
+
+    const inputContado = document.getElementById('efectivo_contado');
+    const previewDiferencia = document.getElementById('cajaDiferenciaPreview');
+
+    function actualizarDiferencia() {
+        if (!inputContado || !previewDiferencia) return 0;
+
+        const contado = Number(inputContado.value || 0);
         const diferencia = contado - efectivoEsperado;
+        const equilibrada = Math.abs(diferencia) <= 0.01;
 
-        Swal.fire({
-            icon: Math.abs(diferencia) <= 0.01 ? 'question' : 'warning',
-            title: '¿Cerrar caja?',
-            html: `
-                <div class="text-center">
-                    <p class="mb-2">Revisa los importes antes de cerrar.</p>
-                    <div style="background:#f8fafc;border-radius:14px;padding:14px;border:1px solid #edf1f5;">
-                        <strong>Efectivo esperado:</strong> ${cajaFormatoMoneda(efectivoEsperado)}<br>
-                        <strong>Efectivo contado:</strong> ${cajaFormatoMoneda(contado)}<br>
-                        <strong>Diferencia:</strong> 
-                        <span style="color:${Math.abs(diferencia) <= 0.01 ? '#16a34a' : '#dc3545'};font-weight:800;">
-                            ${cajaFormatoMoneda(diferencia)}
-                        </span>
+        previewDiferencia.className = 'caja-difference-preview';
+
+        if (equilibrada) {
+            previewDiferencia.classList.add('is-balanced');
+            previewDiferencia.querySelector('span').innerHTML = '<i class="fas fa-check-circle"></i> Sin diferencia';
+        } else if (diferencia > 0) {
+            previewDiferencia.classList.add('is-surplus');
+            previewDiferencia.querySelector('span').innerHTML = '<i class="fas fa-arrow-up"></i> Sobrante';
+        } else {
+            previewDiferencia.classList.add('is-shortage');
+            previewDiferencia.querySelector('span').innerHTML = '<i class="fas fa-arrow-down"></i> Faltante';
+        }
+
+        previewDiferencia.querySelector('strong').textContent = moneda(diferencia);
+        return diferencia;
+    }
+
+    if (inputContado) {
+        inputContado.addEventListener('input', actualizarDiferencia);
+        actualizarDiferencia();
+    }
+
+    const formCerrar = document.getElementById('formCerrarCaja');
+    if (formCerrar) {
+        formCerrar.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!validarFormulario(formCerrar)) return;
+
+            const contado = Number(formCerrar.elements.efectivo_contado.value || 0);
+            const diferencia = contado - efectivoEsperado;
+            const equilibrada = Math.abs(diferencia) <= 0.01;
+            const estado = equilibrada ? 'Sin diferencia' : (diferencia > 0 ? 'Sobrante' : 'Faltante');
+
+            Swal.fire({
+                icon: equilibrada ? 'question' : 'warning',
+                title: 'Revisar cierre de caja',
+                html: `
+                    <div class="caja-swal-summary">
+                        <div class="caja-swal-lines">
+                            <div><span>Efectivo esperado</span><strong>${moneda(efectivoEsperado)}</strong></div>
+                            <div><span>Efectivo contado</span><strong>${moneda(contado)}</strong></div>
+                            <div class="is-difference ${equilibrada ? 'is-ok' : 'is-alert'}">
+                                <span>${estado}</span>
+                                <strong>${moneda(diferencia)}</strong>
+                            </div>
+                        </div>
+                        <p class="caja-swal-warning">
+                            Al confirmar se cerrará el turno y ya no podrá recibir nuevas ventas.
+                        </p>
                     </div>
-                </div>
-            `,
-            showCancelButton: true,
-            confirmButtonText: 'Sí, cerrar caja',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#111',
-            cancelButtonColor: '#6c757d'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                formCerrarCaja.submit();
+                `,
+                showCancelButton: true,
+                confirmButtonText: equilibrada ? 'Cerrar caja' : 'Cerrar con diferencia',
+                cancelButtonText: 'Volver a revisar',
+                confirmButtonColor: equilibrada ? '#f97316' : '#dc2626',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+                customClass: { popup: 'caja-swal-popup' }
+            }).then((resultado) => {
+                if (resultado.isConfirmed) formCerrar.submit();
+            });
+        });
+    }
+
+    function cajaPdfNumero(value) {
+        const numero = Number(value);
+        return Number.isFinite(numero) ? numero : 0;
+    }
+
+    function cajaPdfMoneda(value) {
+        return cajaPdfNumero(value).toLocaleString('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function cajaPdfTexto(value, fallback = '-') {
+        const texto = String(value ?? '').trim();
+        return texto || fallback;
+    }
+
+    function cajaPdfNombreArchivo(value) {
+        return String(value || 'caja')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9_-]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .toLowerCase();
+    }
+
+    function cajaGenerarPdf(datos) {
+        if (!datos) {
+            Swal.fire({
+                icon: 'error',
+                title: 'No hay datos para exportar',
+                text: 'Abre una caja o selecciona un registro del historial.',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        if (!window.jspdf?.jsPDF) {
+            Swal.fire({
+                icon: 'error',
+                title: 'No se pudo generar el PDF',
+                text: 'La librería del PDF no terminó de cargar. Actualiza la página e inténtalo nuevamente.',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 16;
+        const orange = [249, 115, 22];
+        const orangeDark = [234, 88, 12];
+        const orangeSoft = [255, 247, 237];
+        const navy = [15, 23, 42];
+        const slate = [71, 85, 105];
+        const muted = [100, 116, 139];
+        const border = [226, 232, 240];
+        const green = [22, 163, 74];
+        const red = [220, 38, 38];
+        const amber = [217, 119, 6];
+        const estaAbierta = datos.estado === 'abierta';
+        const diferencia = datos.diferencia === null || datos.diferencia === undefined
+            ? null
+            : cajaPdfNumero(datos.diferencia);
+        const equilibrada = diferencia !== null && Math.abs(diferencia) <= 0.01;
+        const estadoResultado = estaAbierta
+            ? 'CORTE PRELIMINAR'
+            : (equilibrada ? 'CAJA EXACTA' : (diferencia > 0 ? 'SOBRANTE' : 'FALTANTE'));
+        const colorResultado = estaAbierta
+            ? orange
+            : (equilibrada ? green : (diferencia > 0 ? amber : red));
+
+        doc.setFillColor(...orange);
+        doc.rect(0, 0, pageWidth, 6, 'F');
+
+        doc.setFillColor(...orangeSoft);
+        doc.roundedRect(margin, 16, 18, 18, 4, 4, 'F');
+        doc.setTextColor(...orangeDark);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('$', margin + 9, 27.5, { align: 'center' });
+
+        doc.setTextColor(...navy);
+        doc.setFontSize(18);
+        doc.text('CORTE DE CAJA', margin + 23, 22.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...muted);
+        doc.setFontSize(9);
+        doc.text(estaAbierta ? 'Resumen del turno en curso' : 'Resumen final del turno', margin + 23, 29);
+
+        const badgeWidth = doc.getTextWidth(estadoResultado) + 12;
+        doc.setFillColor(...colorResultado);
+        doc.roundedRect(pageWidth - margin - badgeWidth, 19, badgeWidth, 9, 4.5, 4.5, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.2);
+        doc.text(estadoResultado, pageWidth - margin - badgeWidth / 2, 24.8, { align: 'center' });
+
+        doc.setDrawColor(...border);
+        doc.line(margin, 40, pageWidth - margin, 40);
+
+        const metaY = 48;
+        const col2 = 112;
+        const escribirMeta = (label, value, x, y) => {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.2);
+            doc.setTextColor(...muted);
+            doc.text(label.toUpperCase(), x, y);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(...navy);
+            doc.text(cajaPdfTexto(value), x, y + 5);
+        };
+
+        escribirMeta('Folio', datos.folio, margin, metaY);
+        escribirMeta('Responsable', datos.usuario_apertura, col2, metaY);
+        escribirMeta('Apertura', datos.apertura, margin, metaY + 14);
+        escribirMeta('Cierre', estaAbierta ? 'En curso' : datos.cierre, col2, metaY + 14);
+
+        const cardY = 81;
+        const gap = 5;
+        const cardWidth = (pageWidth - margin * 2 - gap * 2) / 3;
+        const cards = [
+            ['VENTAS TOTALES', cajaPdfMoneda(datos.ventas)],
+            ['EFECTIVO ESPERADO', cajaPdfMoneda(datos.esperado)],
+            [estaAbierta ? 'TICKETS' : 'EFECTIVO CONTADO', estaAbierta ? String(Number(datos.tickets || 0)) : cajaPdfMoneda(datos.contado)]
+        ];
+
+        cards.forEach((card, index) => {
+            const x = margin + index * (cardWidth + gap);
+            doc.setFillColor(index === 1 ? 255 : 248, index === 1 ? 247 : 250, index === 1 ? 237 : 252);
+            doc.setDrawColor(...(index === 1 ? [254, 215, 170] : border));
+            doc.roundedRect(x, cardY, cardWidth, 23, 4, 4, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.8);
+            doc.setTextColor(...muted);
+            doc.text(card[0], x + 5, cardY + 7);
+            doc.setFontSize(index === 2 && estaAbierta ? 15 : 12.5);
+            doc.setTextColor(...(index === 1 ? orangeDark : navy));
+            doc.text(card[1], x + 5, cardY + 16.5);
+        });
+
+        let y = 116;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(...navy);
+        doc.text('Ventas por método de pago', margin, y);
+
+        const metodos = [
+            ['Efectivo', cajaPdfMoneda(datos.efectivo)],
+            ['Tarjeta', cajaPdfMoneda(datos.tarjeta)],
+            ['Transferencia', cajaPdfMoneda(datos.transferencia)]
+        ];
+
+        if (Math.abs(cajaPdfNumero(datos.otros)) > 0.001) {
+            metodos.push(['Otros métodos', cajaPdfMoneda(datos.otros)]);
+        }
+        metodos.push(['Total de ventas', cajaPdfMoneda(datos.ventas)]);
+
+        doc.autoTable({
+            startY: y + 4,
+            margin: { left: margin, right: margin },
+            head: [['Método', 'Importe']],
+            body: metodos,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 8.2,
+                cellPadding: 3.1,
+                lineColor: border,
+                lineWidth: 0.25,
+                textColor: navy
+            },
+            headStyles: {
+                fillColor: [248, 250, 252],
+                textColor: slate,
+                fontStyle: 'bold',
+                halign: 'left'
+            },
+            columnStyles: {
+                0: { cellWidth: 112 },
+                1: { halign: 'right', fontStyle: 'bold' }
+            },
+            didParseCell: function (hook) {
+                if (hook.section === 'body' && hook.row.index === metodos.length - 1) {
+                    hook.cell.styles.fillColor = orangeSoft;
+                    hook.cell.styles.textColor = orangeDark;
+                    hook.cell.styles.fontStyle = 'bold';
+                }
             }
         });
-    });
-}
 
-<?php if ($mensaje): ?>
-document.addEventListener('DOMContentLoaded', function() {
-    cajaToast(<?= json_encode($mensaje) ?>);
-});
-<?php endif; ?>
+        y = doc.lastAutoTable.finalY + 12;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(...navy);
+        doc.text('Control de efectivo', margin, y);
+
+        const controlEfectivo = [
+            ['Monto inicial', cajaPdfMoneda(datos.monto_inicial)],
+            ['Ventas en efectivo', cajaPdfMoneda(datos.efectivo)],
+            ['Entradas manuales', cajaPdfMoneda(datos.entradas)],
+            ['Salidas manuales', '- ' + cajaPdfMoneda(datos.salidas)],
+            ['Efectivo esperado', cajaPdfMoneda(datos.esperado)]
+        ];
+
+        if (!estaAbierta) {
+            controlEfectivo.push(['Efectivo contado', cajaPdfMoneda(datos.contado)]);
+            controlEfectivo.push(['Diferencia', cajaPdfMoneda(datos.diferencia)]);
+        }
+
+        doc.autoTable({
+            startY: y + 4,
+            margin: { left: margin, right: margin },
+            body: controlEfectivo,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 8.2,
+                cellPadding: 3.1,
+                lineColor: border,
+                lineWidth: 0.25,
+                textColor: navy
+            },
+            columnStyles: {
+                0: { cellWidth: 112 },
+                1: { halign: 'right', fontStyle: 'bold' }
+            },
+            didParseCell: function (hook) {
+                const esperadoIndex = 4;
+                const diferenciaIndex = !estaAbierta ? controlEfectivo.length - 1 : -1;
+
+                if (hook.section === 'body' && hook.row.index === esperadoIndex) {
+                    hook.cell.styles.fillColor = orangeSoft;
+                    hook.cell.styles.textColor = orangeDark;
+                    hook.cell.styles.fontStyle = 'bold';
+                }
+
+                if (hook.section === 'body' && hook.row.index === diferenciaIndex) {
+                    hook.cell.styles.fillColor = equilibrada ? [236, 253, 243] : [254, 242, 242];
+                    hook.cell.styles.textColor = equilibrada ? green : red;
+                    hook.cell.styles.fontStyle = 'bold';
+                }
+            }
+        });
+
+        y = doc.lastAutoTable.finalY + 10;
+        const notas = [];
+        if (datos.observaciones_apertura) notas.push('Apertura: ' + datos.observaciones_apertura);
+        if (datos.observaciones_cierre) notas.push('Cierre: ' + datos.observaciones_cierre);
+
+        if (notas.length) {
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(...border);
+            const lineas = doc.splitTextToSize(notas.join('\n'), pageWidth - margin * 2 - 12);
+            const altura = Math.max(19, 11 + lineas.length * 4.2);
+            doc.roundedRect(margin, y, pageWidth - margin * 2, altura, 4, 4, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            doc.setTextColor(...muted);
+            doc.text('OBSERVACIONES', margin + 6, y + 7);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.2);
+            doc.setTextColor(...slate);
+            doc.text(lineas, margin + 6, y + 13);
+        }
+
+        if (estaAbierta) {
+            doc.setFillColor(...orangeSoft);
+            doc.setDrawColor(254, 215, 170);
+            doc.roundedRect(margin, pageHeight - 35, pageWidth - margin * 2, 13, 4, 4, 'FD');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.7);
+            doc.setTextColor(...orangeDark);
+            doc.text(
+                'Reporte preliminar: los importes pueden cambiar hasta que la caja sea cerrada.',
+                pageWidth / 2,
+                pageHeight - 27,
+                { align: 'center' }
+            );
+        }
+
+        doc.setDrawColor(...border);
+        doc.line(margin, pageHeight - 17, pageWidth - margin, pageHeight - 17);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...muted);
+        doc.text('Generado: ' + cajaPdfTexto(datos.generado, new Date().toLocaleString('es-MX')), margin, pageHeight - 11);
+        doc.text(
+            `${Number(datos.tickets || 0)} tickets - ${cajaPdfNumero(datos.piezas).toLocaleString('es-MX')} piezas`,
+            pageWidth - margin,
+            pageHeight - 11,
+            { align: 'right' }
+        );
+
+        const folioArchivo = cajaPdfNombreArchivo(datos.folio || 'sin_folio');
+        doc.save(`corte_caja_${folioArchivo}.pdf`);
+    }
+
+    const bannerTurno = document.querySelector('.caja-shift-banner[data-opened-at]');
+    const tiempoTurno = document.getElementById('cajaTiempoTurno');
+
+    function actualizarTiempoTurno() {
+        if (!bannerTurno || !tiempoTurno) return;
+
+        const inicio = new Date(bannerTurno.dataset.openedAt);
+        const segundos = Math.max(0, Math.floor((Date.now() - inicio.getTime()) / 1000));
+        const horas = Math.floor(segundos / 3600);
+        const minutos = Math.floor((segundos % 3600) / 60);
+
+        tiempoTurno.textContent = horas > 0
+            ? `${horas} h ${minutos} min`
+            : `${minutos} min`;
+    }
+
+    actualizarTiempoTurno();
+    setInterval(actualizarTiempoTurno, 60000);
+
+    const btnDescargarCortePdf = document.getElementById('btnDescargarCortePdf');
+    if (btnDescargarCortePdf) {
+        btnDescargarCortePdf.addEventListener('click', function () {
+            cajaGenerarPdf(cajaPdfActual);
+        });
+    }
+
+    const buscadorHistorial = document.getElementById('cajaHistorialBuscar');
+    const estadoHistorial = document.getElementById('cajaHistorialEstado');
+    const tarjetasHistorial = Array.from(document.querySelectorAll('.caja-history-card'));
+    const sinResultadosHistorial = document.getElementById('cajaHistorialSinResultados');
+
+    function filtrarHistorial() {
+        if (!tarjetasHistorial.length) return;
+
+        const termino = (buscadorHistorial?.value || '').trim().toLowerCase();
+        const estado = estadoHistorial?.value || '';
+        let visibles = 0;
+
+        tarjetasHistorial.forEach((tarjeta) => {
+            const coincideTexto = !termino || tarjeta.dataset.historySearch.includes(termino);
+            const coincideEstado = !estado || tarjeta.dataset.historyState === estado;
+            const mostrar = coincideTexto && coincideEstado;
+
+            tarjeta.hidden = !mostrar;
+            if (mostrar) visibles++;
+        });
+
+        if (sinResultadosHistorial) sinResultadosHistorial.hidden = visibles !== 0;
+    }
+
+    buscadorHistorial?.addEventListener('input', filtrarHistorial);
+    estadoHistorial?.addEventListener('change', filtrarHistorial);
+
+    document.querySelectorAll('[data-caja-detail]').forEach((boton) => {
+        boton.addEventListener('click', function () {
+            let detalle;
+
+            try {
+                detalle = JSON.parse(this.dataset.cajaDetail);
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo abrir el detalle',
+                    text: 'La información de esta caja no está disponible.',
+                    confirmButtonColor: '#f97316'
+                });
+                return;
+            }
+
+            const diferencia = Number(detalle.diferencia || 0);
+            const equilibrada = Math.abs(diferencia) <= 0.01;
+            const estadoCaja = detalle.estado === 'abierta' ? 'Abierta' : 'Cerrada';
+            const estadoDiferencia = detalle.estado === 'abierta'
+                ? 'En curso'
+                : (equilibrada ? 'Sin diferencia' : (diferencia > 0 ? 'Sobrante' : 'Faltante'));
+
+            Swal.fire({
+                title: textoSeguro(detalle.folio),
+                html: `
+                    <div class="caja-history-modal">
+                        <div class="caja-history-modal-status">
+                            <span class="${detalle.estado === 'abierta' ? 'is-open' : 'is-closed'}">${estadoCaja}</span>
+                            <strong class="${equilibrada ? 'is-ok' : 'is-alert'}">${estadoDiferencia}</strong>
+                        </div>
+
+                        <div class="caja-history-modal-dates">
+                            <div><small>Apertura</small><strong>${textoSeguro(detalle.apertura || '—')}</strong></div>
+                            <div><small>Cierre</small><strong>${textoSeguro(detalle.cierre || 'En curso')}</strong></div>
+                        </div>
+
+                        <div class="caja-swal-lines">
+                            <div><span>Monto inicial</span><strong>${moneda(detalle.monto_inicial)}</strong></div>
+                            <div><span>Ventas totales</span><strong>${moneda(detalle.ventas)}</strong></div>
+                            <div><span>Ventas en efectivo</span><strong>${moneda(detalle.efectivo)}</strong></div>
+                            <div><span>Tarjeta</span><strong>${moneda(detalle.tarjeta)}</strong></div>
+                            <div><span>Transferencia</span><strong>${moneda(detalle.transferencia)}</strong></div>
+                            ${Number(detalle.otros || 0) !== 0 ? `<div><span>Otros métodos</span><strong>${moneda(detalle.otros)}</strong></div>` : ''}
+                            <div><span>Entradas manuales</span><strong>${moneda(detalle.entradas)}</strong></div>
+                            <div><span>Salidas manuales</span><strong>${moneda(detalle.salidas)}</strong></div>
+                            <div><span>Efectivo esperado</span><strong>${moneda(detalle.esperado)}</strong></div>
+                            <div><span>Efectivo contado</span><strong>${moneda(detalle.contado)}</strong></div>
+                            <div class="is-difference ${equilibrada ? 'is-ok' : 'is-alert'}">
+                                <span>Diferencia</span><strong>${moneda(detalle.diferencia)}</strong>
+                            </div>
+                        </div>
+
+                        <div class="caja-history-modal-users">
+                            <p><strong>Abrió:</strong> ${textoSeguro(detalle.usuario_apertura || 'Sin nombre')}</p>
+                            ${detalle.usuario_cierre ? `<p><strong>Cerró:</strong> ${textoSeguro(detalle.usuario_cierre)}</p>` : ''}
+                            <p><strong>Tickets:</strong> ${Number(detalle.tickets || 0)}</p>
+                        </div>
+
+                        ${detalle.observaciones_cierre ? `<div class="caja-swal-note"><strong>Nota de cierre:</strong> ${textoSeguro(detalle.observaciones_cierre)}</div>` : ''}
+                    </div>
+                `,
+                width: 620,
+                showDenyButton: true,
+                confirmButtonText: 'Cerrar',
+                denyButtonText: '<i class="fas fa-file-pdf mr-1"></i> Descargar PDF',
+                confirmButtonColor: '#64748b',
+                denyButtonColor: '#f97316',
+                customClass: { popup: 'caja-swal-popup is-wide' }
+            }).then((resultado) => {
+                if (resultado.isDenied) {
+                    cajaGenerarPdf(detalle);
+                }
+            });
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', mostrarMensajeServidor);
+})();
 </script>
 
 <?php include 'includes/footer.php'; ?>

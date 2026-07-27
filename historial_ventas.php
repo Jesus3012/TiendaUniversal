@@ -81,7 +81,7 @@ table.dataTable tbody td:first-child {
     border-top: 3px solid #f97316;
 }
 
-#buscar_global, #fecha_inicio, #fecha_fin {
+#buscar_global, #fecha_inicio, #fecha_fin, #estado_venta {
     border-radius: 8px;
     border: 1px solid #ddd;
     padding: 8px 12px;
@@ -89,7 +89,7 @@ table.dataTable tbody td:first-child {
     width: 100%;
 }
 
-#buscar_global:focus, #fecha_inicio:focus, #fecha_fin:focus {
+#buscar_global:focus, #fecha_inicio:focus, #fecha_fin:focus, #estado_venta:focus {
     border-color: #f97316;
     outline: none;
     box-shadow: 0 0 0 2px rgba(249,115,22,0.2);
@@ -123,6 +123,28 @@ table.dataTable tbody td:first-child {
 .badge-completado {
     background-color: #28a745;
     color: #fff;
+}
+
+.badge-cancelada {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+.badge-parcial {
+    background-color: #7c3aed;
+    color: #fff;
+}
+
+.venta-cancelada-row {
+    background: #fff7f7 !important;
+}
+
+.venta-cancelada-row td {
+    color: #64748b;
+}
+
+.venta-cancelada-row td:first-child {
+    border-left: 3px solid #dc3545;
 }
 
 /* Modal Ticket */
@@ -572,16 +594,25 @@ table.dataTable tbody td:first-child {
             <div class="card card-primary card-outline">
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-4 mb-2">
-                            <input type="text" id="buscar_global" class="form-control" placeholder="Buscar producto o cliente...">
+                        <div class="col-lg-3 col-md-6 mb-2">
+                            <input type="text" id="buscar_global" class="form-control" placeholder="Buscar folio, producto o cliente...">
                         </div>
-                        <div class="col-md-3 mb-2">
-                            <input type="date" id="fecha_inicio" class="form-control" placeholder="Fecha inicio">
+                        <div class="col-lg-2 col-md-6 mb-2">
+                            <input type="date" id="fecha_inicio" class="form-control" aria-label="Fecha inicial">
                         </div>
-                        <div class="col-md-3 mb-2">
-                            <input type="date" id="fecha_fin" class="form-control" placeholder="Fecha fin">
+                        <div class="col-lg-2 col-md-6 mb-2">
+                            <input type="date" id="fecha_fin" class="form-control" aria-label="Fecha final">
                         </div>
-                        <div class="col-md-2 mb-2">
+                        <div class="col-lg-3 col-md-6 mb-2">
+                            <select id="estado_venta" class="form-control">
+                                <option value="">Todos los estados</option>
+                                <option value="completada">Completadas</option>
+                                <option value="pendiente">Pendientes</option>
+                                <option value="parcial">Con ajuste parcial</option>
+                                <option value="cancelada">Canceladas</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-2 col-md-12 mb-2">
                             <button id="btnLimpiar" class="btn btn-secondary w-100">Limpiar filtros</button>
                         </div>
                     </div>
@@ -738,7 +769,13 @@ $(document).ready(function() {
         }, 400);
     });
     
-    // Filtro de fechas
+    // Filtros de fecha y estado
+    $('#estado_venta').on('change', function() {
+        if (tabla) {
+            tabla.ajax.reload();
+        }
+    });
+
     $('#fecha_inicio, #fecha_fin').on('change', function() {
         const inicio = $('#fecha_inicio').val();
         const fin = $('#fecha_fin').val();
@@ -759,7 +796,7 @@ $(document).ready(function() {
     
     // Botón limpiar
     $('#btnLimpiar').on('click', function() {
-        $('#buscar_global, #fecha_inicio, #fecha_fin').val('');
+        $('#buscar_global, #fecha_inicio, #fecha_fin, #estado_venta').val('');
         if (tabla) {
             tabla.ajax.reload();
         }
@@ -776,11 +813,12 @@ $(document).ready(function() {
         const inicio = $('#fecha_inicio').val();
         const fin = $('#fecha_fin').val();
         const busqueda = $('#buscar_global').val();
+        const estado = $('#estado_venta').val();
         if (!inicio || !fin) {
             Swal.fire({ icon: 'warning', title: 'Fechas requeridas', text: 'Selecciona ambas fechas', confirmButtonColor: '#f97316' });
             return;
         }
-        window.location = `exportar_excel.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}`;
+        window.location = `exportar_excel.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}&estado=${encodeURIComponent(estado)}`;
     });
     
     // Exportar PDF
@@ -788,11 +826,12 @@ $(document).ready(function() {
         const inicio = $('#fecha_inicio').val();
         const fin = $('#fecha_fin').val();
         const busqueda = $('#buscar_global').val();
+        const estado = $('#estado_venta').val();
         if (!inicio || !fin) {
             Swal.fire({ icon: 'warning', title: 'Fechas requeridas', text: 'Selecciona ambas fechas', confirmButtonColor: '#f97316' });
             return;
         }
-        window.location = `api/exportar_ventas.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}`;
+        window.location = `api/exportar_ventas.php?inicio=${inicio}&fin=${fin}&busqueda=${encodeURIComponent(busqueda)}&estado=${encodeURIComponent(estado)}`;
     });
     
     // Eventos de modales
@@ -846,7 +885,8 @@ function cargarVentas() {
                 return {
                     global: $('#buscar_global').val(),
                     inicio: $('#fecha_inicio').val(),
-                    fin: $('#fecha_fin').val()
+                    fin: $('#fecha_fin').val(),
+                    estado: $('#estado_venta').val()
                 };
             },
             dataSrc: 'data',
@@ -883,20 +923,26 @@ function cargarVentas() {
                 }
             },
             {
-                data: null,
-                render: function(row) {
-                    const esPedido = row.folio_ticket && row.folio_ticket.startsWith('PEDIDO-');
-                    if (esPedido) {
-                        const estado = row.estado_pedido || 'pendiente';
-                        if (estado === 'completado') {
-                            return '<span class="badge-pedido badge-completado"><i class="fas fa-check-circle"></i> Completado</span>';
-                        } else if (estado === 'cancelado') {
-                            return '<span class="badge-pedido" style="background: #dc3545; color: white;"><i class="fas fa-ban"></i> Cancelado</span>';
-                        } else {
-                            return '<span class="badge-pedido badge-pendiente"><i class="fas fa-clock"></i> Pendiente</span>';
-                        }
+                data: 'estado_venta',
+                render: function(data, type, row) {
+                    const estado = String(data || 'completada').toLowerCase();
+                    const motivo = row.motivo_cancelacion
+                        ? ` title="${escapeHtml(row.motivo_cancelacion)}"`
+                        : '';
+
+                    if (estado === 'cancelada') {
+                        return `<span class="badge-pedido badge-cancelada"${motivo}><i class="fas fa-ban"></i> Cancelada</span>`;
                     }
-                    return '<span class="badge-pedido badge-completado"><i class="fas fa-tag"></i> Venta directa</span>';
+
+                    if (estado === 'pendiente') {
+                        return '<span class="badge-pedido badge-pendiente"><i class="fas fa-clock"></i> Pendiente</span>';
+                    }
+
+                    if (estado === 'parcial') {
+                        return '<span class="badge-pedido badge-parcial"><i class="fas fa-circle-half-stroke"></i> Ajuste parcial</span>';
+                    }
+
+                    return '<span class="badge-pedido badge-completado"><i class="fas fa-check-circle"></i> Completada</span>';
                 }
             },
             {
@@ -907,8 +953,16 @@ function cargarVentas() {
                     const folioEncoded = encodeURIComponent(folio);
                     const esPedido = folio.startsWith('PEDIDO-');
                     const pedidoCompletado = row.estado_pedido === 'completado';
+                    const estadoVenta = String(row.estado_venta || 'completada').toLowerCase();
+                    const ventaCancelada = estadoVenta === 'cancelada';
+                    const puedeCancelarTotal = row.puede_cancelar_total === true || Number(row.puede_cancelar_total) === 1;
+                    const puedeDevolucionParcial = row.puede_devolucion_parcial === true || Number(row.puede_devolucion_parcial) === 1;
+                    const diasCancelacion = Math.max(Number(row.dias_restantes_cancelacion_total || 0), 0);
+                    const diasDevolucion = Math.max(Number(row.dias_restantes_devolucion_parcial || 0), 0);
+                    const motivoPlazoCancelacion = String(row.motivo_bloqueo_cancelacion_total || 'El plazo de cancelación ya no está disponible.');
+                    const motivoPlazoDevolucion = String(row.motivo_bloqueo_devolucion_parcial || 'El plazo de devolución ya no está disponible.');
                     const correoCliente = row.correo_cliente ? String(row.correo_cliente).trim() : '';
-                    const puedeReenviar = tieneCorreoValido(correoCliente);
+                    const puedeReenviar = tieneCorreoValido(correoCliente) && !ventaCancelada;
 
                     const ticketLink = row.ticket_pdf
                         ? `<a href="tickets/${row.ticket_pdf}" target="_blank" class="text-success" title="Ver PDF"><i class="fas fa-file-pdf"></i></a>`
@@ -918,26 +972,53 @@ function cargarVentas() {
                         ? `<a href="#" class="reenvio-ticket" data-folio="${folioEncoded}" data-correo="${escapeHtml(correoCliente)}" title="Reenviar ticket" style="color: #f97316;">
                                 <i class="fas fa-paper-plane"></i>
                            </a>`
-                        : `<span class="reenvio-ticket accion-deshabilitada" data-disabled="1" data-folio="${folioEncoded}" title="No se puede reenviar: la venta no tiene correo registrado">
+                        : `<span class="reenvio-ticket accion-deshabilitada" data-disabled="1" data-folio="${folioEncoded}" title="${ventaCancelada ? 'No se reenvía un ticket como venta vigente porque la operación está cancelada' : 'No se puede reenviar: la venta no tiene correo registrado'}">
                                 <i class="fas fa-paper-plane"></i>
                            </span>`;
 
-                    const accionesParcialesBloqueadasPorPedido = esPedido && pedidoCompletado;
+                    const accionesParcialesBloqueadas = ventaCancelada || (esPedido && pedidoCompletado) || !puedeDevolucionParcial;
+                    let motivoBloqueoParcial = '';
 
-                    const cancelarArticuloLink = accionesParcialesBloqueadasPorPedido
-                        ? `<span class="accion-deshabilitada" title="No disponible para pedido completado"><i class="fas fa-times-circle"></i></span>`
-                        : `<a href="#" class="cancelar-articulo accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #ffc107;" data-folio="${folioEncoded}" title="Validando productos de la venta...">
+                    if (ventaCancelada) {
+                        motivoBloqueoParcial = 'La venta ya está cancelada';
+                    } else if (esPedido && pedidoCompletado) {
+                        motivoBloqueoParcial = 'No disponible para pedido completado';
+                    } else if (!puedeDevolucionParcial) {
+                        motivoBloqueoParcial = motivoPlazoDevolucion;
+                    }
+
+                    const tituloParcialDisponible = diasDevolucion === 0
+                        ? 'Disponible únicamente durante el día de hoy'
+                        : `Plazo disponible: ${diasDevolucion} día(s) restante(s)`;
+
+                    const cancelarArticuloLink = accionesParcialesBloqueadas
+                        ? `<span class="accion-deshabilitada" title="${escapeAttr(motivoBloqueoParcial)}"><i class="fas fa-times-circle"></i></span>`
+                        : `<a href="#" class="cancelar-articulo accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #ffc107;" data-folio="${folioEncoded}" title="Validando productos de la venta. ${escapeAttr(tituloParcialDisponible)}">
                                 <i class="fas fa-times-circle"></i>
                            </a>`;
 
-                    const devolucionLink = accionesParcialesBloqueadasPorPedido
-                        ? `<span class="accion-deshabilitada" title="No disponible para pedido completado"><i class="fas fa-arrow-rotate-left"></i></span>`
-                        : `<a href="#" class="devolucion-parcial accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #7a68b1;" data-folio="${folioEncoded}" title="Validando productos de la venta...">
+                    const devolucionLink = accionesParcialesBloqueadas
+                        ? `<span class="accion-deshabilitada" title="${escapeAttr(motivoBloqueoParcial)}"><i class="fas fa-arrow-rotate-left"></i></span>`
+                        : `<a href="#" class="devolucion-parcial accion-validable accion-cargando accion-deshabilitada" data-enabled="false" style="color: #7a68b1;" data-folio="${folioEncoded}" title="Validando productos de la venta. ${escapeAttr(tituloParcialDisponible)}">
                                 <i class="fas fa-arrow-rotate-left"></i>
                            </a>`;
 
+                    let cancelarVentaLink = '';
+                    if (ventaCancelada) {
+                        cancelarVentaLink = `<span class="accion-deshabilitada" title="La venta ya está cancelada"><i class="fas fa-ban"></i></span>`;
+                    } else if (!puedeCancelarTotal) {
+                        cancelarVentaLink = `<span class="accion-deshabilitada" title="${escapeAttr(motivoPlazoCancelacion)}"><i class="fas fa-ban"></i></span>`;
+                    } else {
+                        const tituloCancelacion = diasCancelacion === 0
+                            ? 'Cancelar venta completa · disponible únicamente durante el día de hoy'
+                            : `Cancelar venta completa · ${diasCancelacion} día(s) restante(s)`;
+                        cancelarVentaLink = `<a href="#" class="cancelar-venta" data-folio="${folioEncoded}" title="${escapeAttr(tituloCancelacion)}" style="color: #dc3545;">
+                                <i class="fas fa-ban"></i>
+                           </a>`;
+                    }
+
                     return `
-                        <span class="acciones-venta" data-folio="${folioEncoded}">
+                        <span class="acciones-venta" data-folio="${folioEncoded}" data-estado="${estadoVenta}">
                             <button class="btn-ver-ticket" data-folio="${folioEncoded}" title="Ver ticket">
                                 <i class="fas fa-eye"></i> Ver
                             </button>
@@ -949,9 +1030,7 @@ function cargarVentas() {
                             <span class="accion-separador">|</span>
                             ${devolucionLink}
                             <span class="accion-separador">|</span>
-                            <a href="#" class="cancelar-venta" data-folio="${folioEncoded}" title="Cancelar venta completa" style="color: #dc3545;">
-                                <i class="fas fa-ban"></i>
-                            </a>
+                            ${cancelarVentaLink}
                         </span>
                     `;
                 }
@@ -988,6 +1067,11 @@ function cargarVentas() {
             { className: "text-center", targets: [4] },
             { className: "text-nowrap", targets: [5] }
         ],
+        createdRow: function(row, data) {
+            if (String(data.estado_venta || '').toLowerCase() === 'cancelada') {
+                $(row).addClass('venta-cancelada-row');
+            }
+        },
         drawCallback: function(settings) {
             $('.dataTables_paginate .paginate_button').addClass('btn btn-sm');
             bindAcciones();
@@ -1200,6 +1284,11 @@ function prevalidarAccionesVisibles() {
     const folios = new Set();
 
     $('#tablaVentas tbody .acciones-venta').each(function() {
+        const estado = String($(this).attr('data-estado') || '').toLowerCase();
+        if (estado === 'cancelada') {
+            return;
+        }
+
         const folio = safeDecodeURIComponent($(this).attr('data-folio') || '');
         if (folio) {
             folios.add(folio);
@@ -1600,6 +1689,9 @@ const total = response.total || 0;
 const fechaVenta = response.fecha_venta;
 const clienteCorreo = response.correo_cliente;
 const vendedorNombre = response.vendedor_nombre;
+const estadoVentaTicket = String(response.estado_venta || 'completada').toLowerCase();
+const motivoCancelacionTicket = response.motivo_cancelacion || '';
+const fechaCancelacionTicket = response.fecha_cancelacion || '';
                 
                 // Obtener datos de la tienda
                 $.ajax({
@@ -1704,6 +1796,22 @@ const cliente = (clienteCorreo && clienteCorreo !== '' && clienteCorreo !== 'nul
                     <span style="font-weight: bold;">FECHA:</span>
                     <span>${fechaStr}</span>
                 </div>
+                <div style="display: flex; justify-content: space-between; align-items:center; gap:10px; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">ESTADO:</span>
+                    <span style="font-weight:800; color:${estadoVentaTicket === 'cancelada' ? '#dc2626' : (estadoVentaTicket === 'parcial' ? '#7c3aed' : (estadoVentaTicket === 'pendiente' ? '#ca8a04' : '#16a34a'))};">
+                        ${estadoVentaTicket === 'cancelada' ? 'CANCELADA' : (estadoVentaTicket === 'parcial' ? 'AJUSTE PARCIAL' : (estadoVentaTicket === 'pendiente' ? 'PENDIENTE' : 'COMPLETADA'))}
+                    </span>
+                </div>
+                ${estadoVentaTicket === 'cancelada' && motivoCancelacionTicket ? `
+                    <div style="font-size:10px; padding:5px 0 2px; color:#991b1b;">
+                        <b>Motivo:</b> ${escapeHtml(motivoCancelacionTicket)}
+                    </div>
+                ` : ''}
+                ${estadoVentaTicket === 'cancelada' && fechaCancelacionTicket ? `
+                    <div style="font-size:10px; padding:2px 0; color:#64748b;">
+                        <b>Cancelada:</b> ${escapeHtml(fechaCancelacionTicket)}
+                    </div>
+                ` : ''}
             </div>
             <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
                 <thead>
@@ -1816,6 +1924,12 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return escapeHtml(String(text || ''))
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 async function reenviarTicket(folio) {
@@ -1961,7 +2075,7 @@ async function procesarCancelacionVenta(folio, esPedido, motivo = '') {
                 confirmButtonColor: '#28a745',
                 timer: 2200
             }).then(() => {
-                location.reload();
+                tabla.ajax.reload(null, false);
             });
         } else {
             const tituloError = esPedido ? 'Error al cancelar pedido' : 'Error al cancelar venta';
@@ -2023,7 +2137,7 @@ async function cancelarPedidoCompletado(folio, motivo = '') {
                 confirmButtonColor: '#28a745',
                 timer: 2200
             }).then(() => {
-                location.reload();
+                tabla.ajax.reload(null, false);
             });
         } else {
             Swal.fire({

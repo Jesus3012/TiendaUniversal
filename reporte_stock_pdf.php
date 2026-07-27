@@ -1,15 +1,67 @@
 <?php
 ob_start();
-session_start();
 date_default_timezone_set('America/Mexico_City');
 
-require_once 'includes/db.php';
-require 'includes/fpdf.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/permisos.php';
+require_once __DIR__ . '/includes/fpdf.php';
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['rol'] !== 'administrador') {
-    header("Location: login.php");
+function reporteStockNormalizarRol($rol): string
+{
+    $rol = trim((string) $rol);
+
+    if (function_exists('mb_strtolower')) {
+        $rol = mb_strtolower($rol, 'UTF-8');
+    } else {
+        $rol = strtolower($rol);
+    }
+
+    $mapa = [
+        'admin' => 'administrador',
+        'administrador' => 'administrador',
+        'superadmin' => 'super_administrador',
+        'superadministrador' => 'super_administrador',
+        'super admin' => 'super_administrador',
+        'super_admin' => 'super_administrador',
+        'super-administrador' => 'super_administrador',
+        'super administrador' => 'super_administrador',
+        'super_administrador' => 'super_administrador',
+    ];
+
+    return $mapa[$rol] ?? $rol;
+}
+
+$usuario_id_sesion = function_exists('permisos_usuario_id')
+    ? permisos_usuario_id()
+    : (int) (
+        $_SESSION['usuario_id']
+        ?? $_SESSION['id_usuario']
+        ?? $_SESSION['id']
+        ?? 0
+    );
+
+$rol_actual = function_exists('permisos_normalizar_rol')
+    ? permisos_normalizar_rol($_SESSION['rol'] ?? '')
+    : ($_SESSION['rol'] ?? '');
+
+$rol_actual = reporteStockNormalizarRol($rol_actual);
+
+if ($usuario_id_sesion <= 0) {
+    header('Location: login.php?expired=1');
     exit;
 }
+
+if (!in_array($rol_actual, ['administrador', 'super_administrador'], true)) {
+    header('Location: sin_permiso.php?modulo=reporte_stock_pdf.php');
+    exit;
+}
+
+$_SESSION['usuario_id'] = $usuario_id_sesion;
+$_SESSION['id_usuario'] = $usuario_id_sesion;
+$_SESSION['id'] = $usuario_id_sesion;
+$_SESSION['rol'] = $rol_actual;
+$_SESSION['last_activity'] = time();
 
 // Limpiar cualquier salida anterior
 ob_clean();
@@ -23,7 +75,7 @@ $fecha_hasta = isset($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : '';
 // ===== OBTENER DATOS DE CONFIGURACIÓN DE LA TIENDA =====
 $sqlConfig = "SELECT nombre, logo FROM configuracion_galeria LIMIT 1";
 $resultConfig = $conn->query($sqlConfig);
-$configTienda = $resultConfig->fetch_assoc();
+$configTienda = $resultConfig ? ($resultConfig->fetch_assoc() ?: []) : [];
 $nombreTienda = $configTienda['nombre'] ?? 'SISTEMA DE INVENTARIO';
 $logoTiendaPath = $configTienda['logo'] ?? '';
 
@@ -102,7 +154,7 @@ if (!empty($proveedor_filtro)) {
 }
 
 // ===== CREAR CARPETAS SI NO EXISTEN =====
-$carpeta_base = 'uploads/';
+$carpeta_base = __DIR__ . '/uploads/';
 $carpeta_reportes_stock = $carpeta_base . 'reportes_stock/';
 
 if (!file_exists($carpeta_base)) {
@@ -286,7 +338,7 @@ if (!empty($fecha_hasta)) {
 // Obtener total de registros
 $count_query = "SELECT COUNT(*) as total " . $base_query;
 $total_result = $conn->query($count_query);
-$total_registros = $total_result->fetch_assoc()['total'];
+$total_registros = $total_result ? (int)($total_result->fetch_assoc()['total'] ?? 0) : 0;
 
 // Crear PDF (Landscape A4)
 $pdf = new PDF('L', 'mm', 'A4');
@@ -401,27 +453,27 @@ while($row = $historial->fetch_assoc()) {
     $proveedor = substr($pdf->decodeText($row['proveedor'] ?? '-'), 0, 25);
     
     // Stock Anterior
-    $stock_anterior = number_format($row['cantidad_anterior'], 0);
+    $stock_anterior = number_format((float)($row['cantidad_anterior'] ?? 0), 0);
     
     // Cantidad
     if ($esEntrada) {
-        $cantidad = '+' . number_format($row['cantidad_agregada'], 0);
+        $cantidad = '+' . number_format((float)($row['cantidad_agregada'] ?? 0), 0);
         $total_entradas += $row['cantidad_agregada'];
     } elseif ($esSalida) {
-        $cantidad = '-' . number_format($row['cantidad_agregada'], 0);
+        $cantidad = '-' . number_format((float)($row['cantidad_agregada'] ?? 0), 0);
         $total_salidas += $row['cantidad_agregada'];
     } else {
         $cantidad_val = $row['cantidad_agregada'];
         if ($cantidad_val >= 0) {
-            $cantidad = '+' . number_format($cantidad_val, 0);
+            $cantidad = '+' . number_format((float)$cantidad_val, 0);
         } else {
-            $cantidad = number_format($cantidad_val, 0);
+            $cantidad = number_format((float)$cantidad_val, 0);
         }
         $total_ajustes += $cantidad_val;
     }
     
     // Stock Nuevo
-    $stock_nuevo = number_format($row['cantidad_nueva'], 0);
+    $stock_nuevo = number_format((float)($row['cantidad_nueva'] ?? 0), 0);
     
     // Tipo
     $tipo = ($esEntrada) ? 'ENTRADA' : (($esSalida) ? 'SALIDA' : 'AJUSTE');

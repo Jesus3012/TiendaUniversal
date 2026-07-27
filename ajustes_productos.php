@@ -600,6 +600,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $tipo_codigo = 'multiple';
         }
 
+        
+        /*
+         * SEGURIDAD DE PRODUCCIÓN:
+         * Los artículos con códigos históricos sin P conservan tanto el valor
+         * de su código como su configuración actual. Aunque un formulario viejo,
+         * caché o manipulación del POST intente cambiar el tipo, no se permite
+         * convertirlos ni regenerarlos.
+         */
+        $tiene_codigo_legado = productoTieneCodigosLegados($conn, $id);
+        if ($tiene_codigo_legado) {
+            $tipo_codigo = $tipo_codigo_actual;
+        }
+
         debugTipoCodigoHostinger('POST update producto', [
             'id' => $id,
             'tipo_codigo_actual_bd' => $tipo_codigo_actual,
@@ -608,6 +621,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             'post_tipo_codigo_forzado' => $_POST['tipo_codigo_forzado'] ?? null,
             'post_tipo_codigo_tocado' => $_POST['tipo_codigo_tocado'] ?? null,
             'tipo_codigo_decidido' => $tipo_codigo,
+                    'tiene_codigo_legado' => $tiene_codigo_legado ? 1 : 0,
         ]);
         
         $atributos = [];
@@ -1430,7 +1444,19 @@ if (isset($_GET['action']) && $_GET['action'] === 'todos_codigos') {
 }
 
 // ========================= CONSULTAR PRODUCTOS =========================
-$query = "SELECT * FROM productos WHERE activo = 1 ORDER BY id DESC";
+$query = "
+    SELECT
+        p.*,
+        EXISTS (
+            SELECT 1
+            FROM codigos_barras cb
+            WHERE cb.producto_id = p.id
+              AND UPPER(TRIM(cb.codigo)) NOT LIKE 'P%'
+        ) AS tiene_codigo_legado
+    FROM productos p
+    WHERE p.activo = 1
+    ORDER BY p.id DESC
+";
 
 $productos = [];
 $res = $conn->query($query);
@@ -1716,7 +1742,7 @@ if (!empty($errors)) {
                                                     <button class="btn btn-warning" title="Ajustar stock" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
                                                         <i class="fas fa-sliders-h"></i>
                                                     </button>
-                                                    <button class="btn btn-info" title="Editar" onclick="editarProducto(<?= $p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>')">
+                                                    <button class="btn btn-info" title="Editar" onclick="editarProducto(<?= (int)$p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>', <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>)">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
                                                     <button class="btn btn-danger" title="Eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
@@ -1807,7 +1833,7 @@ if (!empty($errors)) {
                                         <button class="accion-btn ajustar" onclick="abrirModalAjustarStock(<?= $p['id'] ?>, '<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>', <?= $p['cantidad'] ?>, '<?= $p['tipo_inventario'] ?>')">
                                             <i class="fas fa-sliders-h"></i>
                                         </button>
-                                        <button class="accion-btn editar" onclick="editarProducto(<?= $p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>')">
+                                        <button class="accion-btn editar" onclick="editarProducto(<?= (int)$p['id'] ?>, '<?= htmlspecialchars($p['tipo_codigo'] ?? 'multiple', ENT_QUOTES) ?>', <?= (int)($p['tiene_codigo_legado'] ?? 0) ?>)">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button class="accion-btn eliminar" onclick="confirmarEliminar(<?= $p['id'] ?>)">
@@ -2072,6 +2098,10 @@ if (!empty($errors)) {
     <input type="hidden" id="edit_tipo_codigo_respaldo" name="tipo_codigo_respaldo" value="">
     <input type="hidden" id="edit_tipo_codigo_forzado" name="tipo_codigo_forzado" value="">
     <input type="hidden" id="edit_tipo_codigo_tocado" name="tipo_codigo_tocado" value="0">
+    <small id="edit_tipo_codigo_legado_aviso" class="text-muted" style="display:none;">
+        <i class="fas fa-lock mr-1"></i>
+        Este artículo usa un código histórico sin P. Su código y tipo quedan protegidos.
+    </small>
 </div>
 
                                     <div class="form-group" id="edit_adquisicion_group">
@@ -2577,7 +2607,7 @@ function obtenerTipoCodigoDesdeFila(id) {
     return fila?.getAttribute?.('data-tipo-codigo') || '';
 }
 
-function editarProducto(id, tipoCodigoActual = null) {
+function editarProducto(id, tipoCodigoActual = null, tieneCodigoLegado = 0) {
     guardarPaginaActualEnStorage();
 
     fetch(`get_producto.php?id=${id}&t=${Date.now()}`, { cache: 'no-store' })
@@ -2619,6 +2649,15 @@ function editarProducto(id, tipoCodigoActual = null) {
                     if (tipoCodigoForzado) tipoCodigoForzado.value = valorTipoCodigo;
                     const tipoCodigoTocado = document.getElementById('edit_tipo_codigo_tocado');
                     if (tipoCodigoTocado) tipoCodigoTocado.value = '0';
+                    
+                    const esCodigoLegado = String(tieneCodigoLegado) === '1';
+                    tipoCodigoSelect.disabled = esCodigoLegado;
+
+                    const avisoLegado = document.getElementById('edit_tipo_codigo_legado_aviso');
+                    if (avisoLegado) {
+                        avisoLegado.style.display = esCodigoLegado ? 'block' : 'none';
+                    }
+
                     tipoCodigoSelect.dispatchEvent(new Event('change', { bubbles: true }));
                     if (tipoCodigoTocado) tipoCodigoTocado.value = '0';
                 }
@@ -2722,7 +2761,8 @@ function confirmarRegenerarCodigos() {
                 Esto limpiará los códigos actuales de cada artículo activo y los volverá a crear según su configuración:<br><br>
                 <b>Código único:</b> dejará solo un código P000000XX.<br>
                 <b>Múltiple:</b> dejará un código por pieza actual en stock.<br><br>
-                Esta acción ayuda a eliminar duplicados acumulados.
+                <b>Códigos históricos sin P:</b> no se eliminan, renombran ni convierten.<br><br>
+                Esta acción ayuda a sincronizar los artículos con formato nuevo.
             </div>
         `,
         icon: 'warning',
