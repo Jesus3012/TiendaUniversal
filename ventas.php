@@ -4,6 +4,7 @@ date_default_timezone_set('America/Mexico_City');
 include('includes/db.php');
 include('includes/session.php');
 require_once('includes/csrf.php');
+require_once('includes/promociones_helper.php');
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -226,6 +227,140 @@ function pos_precio_por_metodo(float $precioBase, string $metodoPago, array $con
     return max(0, (float) $precioFinal);
 }
 
+/**
+ * Calcula el importe real de una línea de venta.
+ *
+ * Regla de convivencia entre descuentos:
+ * 1. Primero se aplica la promoción por cantidad.
+ * 2. Después se aplica el descuento de efectivo/transferencia sobre el importe ya promocionado.
+ * 3. Las unidades sobrantes reciben el mismo descuento por forma de pago.
+ * 4. El servidor vuelve a consultar la promoción activa para impedir manipulación desde JavaScript.
+ */
+function pos_calcular_linea_venta(
+    mysqli $conn,
+    array $producto,
+    int $cantidad,
+    string $metodoPago,
+    array $configPrecios
+): array {
+    $productoId = (int) ($producto['id'] ?? 0);
+    $precioBase = max(0, (float) ($producto['precio_venta'] ?? 0));
+    $cantidad = max(0, $cantidad);
+    $precioMetodo = pos_precio_por_metodo($precioBase, $metodoPago, $configPrecios);
+    $subtotalBase = round($precioBase * $cantidad, 2);
+
+    $resultado = [
+        'precio_base' => $precioBase,
+        'precio_unitario' => $precioMetodo,
+        'precio_unitario_efectivo' => $precioMetodo,
+        'subtotal_base' => $subtotalBase,
+        'subtotal_despues_promocion' => $subtotalBase,
+        'subtotal' => round($precioMetodo * $cantidad, 2),
+        'descuento_total' => round(max(0, ($precioBase - $precioMetodo) * $cantidad), 2),
+        'descuento_porcentaje' => 0.0,
+        'ahorro_promocion' => 0.0,
+        'ahorro_metodo_pago' => round(max(0, ($precioBase - $precioMetodo) * $cantidad), 2),
+        'aplico_promocion' => false,
+        'promocion_id' => null,
+        'promocion_cantidad' => 0,
+        'promocion_precio' => 0.0,
+        'promocion_precio_metodo' => 0.0,
+        'promocion_paquetes' => 0,
+        'unidades_promocion' => 0,
+        'unidades_sin_promocion' => $cantidad,
+        'promocion_descripcion' => '',
+    ];
+
+    if ($productoId <= 0 || $cantidad <= 0 || $precioBase <= 0) {
+        return $resultado;
+    }
+
+    $promocion = function_exists('promociones_obtener_activa_producto')
+        ? promociones_obtener_activa_producto($conn, $productoId)
+        : null;
+
+    if (is_array($promocion)) {
+        $cantidadPromo = (int) ($promocion['cantidad_promocion'] ?? 0);
+        $precioPromo = round((float) ($promocion['precio_promocion'] ?? 0), 2);
+        $precioNormalPaquete = round($precioBase * $cantidadPromo, 2);
+
+        if (
+            $cantidadPromo >= 2
+            && $precioPromo > 0
+            && $precioPromo < $precioNormalPaquete
+            && $cantidad >= $cantidadPromo
+        ) {
+            $paquetes = intdiv($cantidad, $cantidadPromo);
+            $restantes = $cantidad % $cantidadPromo;
+            $unidadesPromo = $paquetes * $cantidadPromo;
+
+            /*
+             * La promoción se calcula primero. Después, el precio promocional de
+             * cada paquete recibe el descuento de efectivo/transferencia.
+             */
+            $precioPromoMetodo = pos_precio_por_metodo(
+                $precioPromo,
+                $metodoPago,
+                $configPrecios
+            );
+
+            $subtotalPromocionesBase = round($paquetes * $precioPromo, 2);
+            $subtotalPromocionesFinal = round($paquetes * $precioPromoMetodo, 2);
+            $subtotalRestantesBase = round($restantes * $precioBase, 2);
+            $subtotalRestantesFinal = round($restantes * $precioMetodo, 2);
+
+            $subtotalDespuesPromocion = round(
+                $subtotalPromocionesBase + $subtotalRestantesBase,
+                2
+            );
+
+            $subtotalFinal = round(
+                $subtotalPromocionesFinal + $subtotalRestantesFinal,
+                2
+            );
+
+            $ahorroPromocion = round(
+                max(0, $subtotalBase - $subtotalDespuesPromocion),
+                2
+            );
+
+            $ahorroMetodo = round(
+                max(0, $subtotalDespuesPromocion - $subtotalFinal),
+                2
+            );
+
+            $resultado['subtotal_despues_promocion'] = $subtotalDespuesPromocion;
+            $resultado['subtotal'] = $subtotalFinal;
+            $resultado['descuento_total'] = round(max(0, $subtotalBase - $subtotalFinal), 2);
+            $resultado['ahorro_promocion'] = $ahorroPromocion;
+            $resultado['ahorro_metodo_pago'] = $ahorroMetodo;
+            $resultado['aplico_promocion'] = true;
+            $resultado['promocion_id'] = (int) ($promocion['id'] ?? 0);
+            $resultado['promocion_cantidad'] = $cantidadPromo;
+            $resultado['promocion_precio'] = $precioPromo;
+            $resultado['promocion_precio_metodo'] = $precioPromoMetodo;
+            $resultado['promocion_paquetes'] = $paquetes;
+            $resultado['unidades_promocion'] = $unidadesPromo;
+            $resultado['unidades_sin_promocion'] = $restantes;
+            $resultado['promocion_descripcion'] = sprintf(
+                '%d por $%s',
+                $cantidadPromo,
+                number_format($precioPromo, 2, '.', ',')
+            );
+        }
+    }
+
+    $resultado['precio_unitario_efectivo'] = $cantidad > 0
+        ? round($resultado['subtotal'] / $cantidad, 2)
+        : 0.0;
+    $resultado['precio_unitario'] = $resultado['precio_unitario_efectivo'];
+    $resultado['descuento_porcentaje'] = $subtotalBase > 0
+        ? round(($resultado['descuento_total'] / $subtotalBase) * 100, 2)
+        : 0.0;
+
+    return $resultado;
+}
+
 $posConfigPrecios = pos_configuracion_precios($conn);
 $posDescuentoEfectivo = (float) $posConfigPrecios['descuento_efectivo'];
 $posDescuentoTransferencia = (float) $posConfigPrecios['descuento_transferencia'];
@@ -339,6 +474,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
         $totalBase = 0.00;
         $total = 0.00;
         $descuentoTotal = 0.00;
+        $ahorroPromocionesTotal = 0.00;
+        $ahorroMetodoPagoTotal = 0.00;
         $descuentoPorcentajeVenta = pos_descuento_por_metodo((string) $metodo_pago, $posConfigPrecios);
         $erroresCarrito = [];
 
@@ -393,15 +530,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 continue;
             }
 
-            $precioBase = (float) $productoDb['precio_venta'];
-            $precioUnitario = pos_precio_por_metodo($precioBase, (string) $metodo_pago, $posConfigPrecios);
-            $descuentoUnitario = max(0, $precioBase - $precioUnitario);
-            $subtotalBase = $precioBase * $cantidadSolicitada;
-            $subtotalFinal = $precioUnitario * $cantidadSolicitada;
+            $calculoLinea = pos_calcular_linea_venta(
+                $conn,
+                $productoDb,
+                $cantidadSolicitada,
+                (string) $metodo_pago,
+                $posConfigPrecios
+            );
+
+            $precioBase = (float) $calculoLinea['precio_base'];
+            $precioUnitario = (float) $calculoLinea['precio_unitario'];
+            $subtotalBase = (float) $calculoLinea['subtotal_base'];
+            $subtotalFinal = (float) $calculoLinea['subtotal'];
 
             $totalBase += $subtotalBase;
             $total += $subtotalFinal;
-            $descuentoTotal += ($subtotalBase - $subtotalFinal);
+            $descuentoTotal += (float) $calculoLinea['descuento_total'];
+            $ahorroPromocionesTotal += (float) $calculoLinea['ahorro_promocion'];
+            $ahorroMetodoPagoTotal += (float) $calculoLinea['ahorro_metodo_pago'];
 
             $carritoValidado[] = [
                 'id' => (int) $productoDb['id'],
@@ -414,10 +560,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 'precio' => $precioBase,
                 'precio_base' => $precioBase,
                 'precio_unitario' => $precioUnitario,
-                'descuento_porcentaje' => $descuentoPorcentajeVenta,
-                'descuento_unitario' => $descuentoUnitario,
+                'descuento_porcentaje' => (float) $calculoLinea['descuento_porcentaje'],
+                'descuento_unitario' => $cantidadSolicitada > 0
+                    ? round(((float) $calculoLinea['descuento_total']) / $cantidadSolicitada, 2)
+                    : 0.00,
+                'descuento_monto' => (float) $calculoLinea['descuento_total'],
+                'ahorro_promocion' => (float) $calculoLinea['ahorro_promocion'],
+                'ahorro_metodo_pago' => (float) $calculoLinea['ahorro_metodo_pago'],
                 'subtotal_base' => $subtotalBase,
                 'subtotal' => $subtotalFinal,
+                'aplico_promocion' => (bool) $calculoLinea['aplico_promocion'],
+                'promocion_id' => $calculoLinea['promocion_id'],
+                'promocion_cantidad' => (int) $calculoLinea['promocion_cantidad'],
+                'promocion_precio' => (float) $calculoLinea['promocion_precio'],
+                'promocion_precio_metodo' => (float) ($calculoLinea['promocion_precio_metodo'] ?? 0),
+                'subtotal_despues_promocion' => (float) ($calculoLinea['subtotal_despues_promocion'] ?? $subtotalBase),
+                'promocion_paquetes' => (int) $calculoLinea['promocion_paquetes'],
+                'unidades_promocion' => (int) $calculoLinea['unidades_promocion'],
+                'unidades_sin_promocion' => (int) $calculoLinea['unidades_sin_promocion'],
+                'promocion_descripcion' => (string) $calculoLinea['promocion_descripcion'],
             ];
         }
 
@@ -437,6 +598,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
         $totalBase = round($totalBase, 2);
         $total = round($total, 2);
         $descuentoTotal = round($descuentoTotal, 2);
+        $ahorroPromocionesTotal = round($ahorroPromocionesTotal, 2);
+        $ahorroMetodoPagoTotal = round($ahorroMetodoPagoTotal, 2);
 
         if ($monto_pagado <= 0) {
             $monto_pagado = $total;
@@ -539,7 +702,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $precioBaseItem = (float) $item['precio_base'];
                         $precioUnitarioItem = (float) $item['precio_unitario'];
                         $descuentoPorcentajeItem = (float) $item['descuento_porcentaje'];
-                        $descuentoMontoItem = (float) ($item['subtotal_base'] - $item['subtotal']);
+                        $descuentoMontoItem = (float) ($item['descuento_monto'] ?? ($item['subtotal_base'] - $item['subtotal']));
                         $subtotalItem = (float) $item['subtotal'];
 
                         $stmt->bind_param(
@@ -620,7 +783,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                     $tienda_direccion = $tienda['direccion'] ?? '';
                     $tienda_logo = $tienda['logo'] ?? '';
 
-                    $pdf = new FPDF('P', 'mm', array(80, 140 + count($carrito) * 8));
+                    $lineasPromoTicket = 0;
+                    foreach ($carrito as $itemTicketPromo) {
+                        if (!empty($itemTicketPromo['aplico_promocion'])) {
+                            $lineasPromoTicket++;
+                        }
+                    }
+                    $pdf = new FPDF('P', 'mm', array(80, 140 + count($carrito) * 8 + ($lineasPromoTicket * 4)));
                     $pdf->AddPage();
                     $pdf->SetMargins(5, 5, 5);
                     $pdf->SetAutoPageBreak(true, 10);
@@ -686,6 +855,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $pdf->Cell(10, 4, $p['cantidad'], 0, 0, 'C');
                         $pdf->Cell(10, 4, '$' . number_format($precioTicket, 2), 0, 0, 'C');
                         $pdf->Cell(12, 4, '$' . number_format($importe, 2), 0, 1, 'R');
+
+                        if (!empty($p['aplico_promocion'])) {
+                            $descripcionPromoTicket = (string) ($p['promocion_descripcion'] ?? 'Promoción aplicada');
+                            $paquetesPromoTicket = (int) ($p['promocion_paquetes'] ?? 0);
+                            $pdf->SetFont('Arial', 'I', 6);
+                            $pdf->Cell(
+                                0,
+                                3,
+                                utf8_decode('  Promo: ' . $descripcionPromoTicket . ' x ' . $paquetesPromoTicket . ' paquete(s)'),
+                                0,
+                                1,
+                                'L'
+                            );
+                            $pdf->SetFont('Arial', '', 7);
+                        }
                     }
 
                     $pdf->Ln(2);
@@ -696,8 +880,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $pdf->SetFont('Arial', '', 7);
                         $pdf->Cell(48, 4, 'Precio base:', 0, 0, 'R');
                         $pdf->Cell(22, 4, '$' . number_format($totalBase, 2), 0, 1, 'R');
-                        $pdf->Cell(48, 4, 'Ahorro por forma de pago:', 0, 0, 'R');
-                        $pdf->Cell(22, 4, '-$' . number_format($descuentoTotal, 2), 0, 1, 'R');
+
+                        if ($ahorroPromocionesTotal > 0) {
+                            $pdf->Cell(48, 4, 'Ahorro por promociones:', 0, 0, 'R');
+                            $pdf->Cell(22, 4, '-$' . number_format($ahorroPromocionesTotal, 2), 0, 1, 'R');
+                        }
+
+                        if ($ahorroMetodoPagoTotal > 0) {
+                            $pdf->Cell(48, 4, 'Ahorro por forma de pago:', 0, 0, 'R');
+                            $pdf->Cell(22, 4, '-$' . number_format($ahorroMetodoPagoTotal, 2), 0, 1, 'R');
+                        }
                     }
 
                     $pdf->SetFont('Arial', 'B', 9);
@@ -762,15 +954,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                             'cantidad' => $cantidadAlerta,
                             'precio' => $precioAlerta,
                             'precio_base' => (float) ($itemAlerta['precio_base'] ?? $precioAlerta),
-                            'importe' => (float) ($itemAlerta['subtotal'] ?? ($precioAlerta * $cantidadAlerta))
+                            'importe' => (float) ($itemAlerta['subtotal'] ?? ($precioAlerta * $cantidadAlerta)),
+                            'aplico_promocion' => !empty($itemAlerta['aplico_promocion']),
+                            'promocion_descripcion' => (string) ($itemAlerta['promocion_descripcion'] ?? ''),
+                            'promocion_paquetes' => (int) ($itemAlerta['promocion_paquetes'] ?? 0),
+                            'ahorro_promocion' => (float) ($itemAlerta['ahorro_promocion'] ?? 0),
+                            'ahorro_metodo_pago' => (float) ($itemAlerta['ahorro_metodo_pago'] ?? 0)
                         ];
                     }
                     
                     $_SESSION['carrito'] = [];
                     
                     $mensaje = "Venta registrada correctamente.";
-                    if ($descuentoTotal > 0) {
-                        $mensaje .= "\nAhorro por forma de pago: $" . number_format($descuentoTotal, 2);
+                    if ($ahorroPromocionesTotal > 0) {
+                        $mensaje .= "\nAhorro por promociones: $" . number_format($ahorroPromocionesTotal, 2);
+                    }
+                    if ($ahorroMetodoPagoTotal > 0) {
+                        $mensaje .= "\nAhorro por forma de pago: $" . number_format($ahorroMetodoPagoTotal, 2);
                     }
                     $mensaje .= "\nCambio: $" . number_format($cambio, 2);
                     if ($ticketEnviado) $mensaje .= "
@@ -791,6 +991,8 @@ El sistema intentará abrir el cajón en la PC del cajero.";
                         'productos' => $productosAlerta,
                         'total_base' => (float) $totalBase,
                         'descuento_total' => (float) $descuentoTotal,
+                        'ahorro_promociones' => (float) $ahorroPromocionesTotal,
+                        'ahorro_metodo_pago' => (float) $ahorroMetodoPagoTotal,
                         'descuento_porcentaje' => (float) $descuentoPorcentajeVenta,
                         'total' => (float) $total,
                         'monto_pagado' => (float) $monto_pagado,
@@ -826,21 +1028,38 @@ $rol_usuario = $rol_actual;
 // Obtener productos para selección visual
 $productos_query = "
     SELECT
-        id,
-        nombre,
-        precio_venta,
-        cantidad AS stock,
-        imagen,
-        categoria,
-        stock_especial
-    FROM productos
-    WHERE activo = 1
-      AND tipo_inventario = 'producto'
-      AND (
-          stock_especial = 1
-          OR cantidad > 0
+        p.id,
+        p.nombre,
+        p.precio_venta,
+        p.cantidad AS stock,
+        p.imagen,
+        p.categoria,
+        p.stock_especial,
+        pr.id AS promocion_id,
+        pr.cantidad_promocion,
+        pr.precio_promocion,
+        pr.fecha_inicio AS promocion_fecha_inicio,
+        pr.fecha_fin AS promocion_fecha_fin
+    FROM productos p
+    LEFT JOIN promociones pr
+      ON pr.id = (
+          SELECT pr2.id
+          FROM promociones pr2
+          WHERE pr2.producto_id = p.id
+            AND pr2.activo = 1
+            AND pr2.eliminado = 0
+            AND (pr2.fecha_inicio IS NULL OR pr2.fecha_inicio <= CURDATE())
+            AND (pr2.fecha_fin IS NULL OR pr2.fecha_fin >= CURDATE())
+          ORDER BY pr2.updated_at DESC, pr2.id DESC
+          LIMIT 1
       )
-    ORDER BY nombre ASC
+    WHERE p.activo = 1
+      AND p.tipo_inventario = 'producto'
+      AND (
+          p.stock_especial = 1
+          OR p.cantidad > 0
+      )
+    ORDER BY p.nombre ASC
 ";
 $productos_result = $conn->query($productos_query);
 $productos = [];
@@ -849,9 +1068,32 @@ if ($productos_result) {
         $productos[] = $row;
     }
 }
+
+$promocionesPos = [];
+foreach ($productos as $productoPos) {
+    $promocionIdPos = (int) ($productoPos['promocion_id'] ?? 0);
+    $cantidadPromoPos = (int) ($productoPos['cantidad_promocion'] ?? 0);
+    $precioPromoPos = (float) ($productoPos['precio_promocion'] ?? 0);
+    $precioRegularPos = (float) ($productoPos['precio_venta'] ?? 0) * $cantidadPromoPos;
+
+    if (
+        $promocionIdPos > 0
+        && $cantidadPromoPos >= 2
+        && $precioPromoPos > 0
+        && $precioPromoPos < $precioRegularPos
+    ) {
+        $promocionesPos[(int) $productoPos['id']] = [
+            'id' => $promocionIdPos,
+            'cantidad' => $cantidadPromoPos,
+            'precio' => round($precioPromoPos, 2),
+            'descripcion' => $cantidadPromoPos . ' por $' . number_format($precioPromoPos, 2, '.', ','),
+        ];
+    }
+}
 ?>
 
 <link rel="stylesheet" href="css/venta-codigo.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/venta-promociones.css?v=<?= time() ?>">
 
 
 <div class="content-wrapper">
@@ -926,11 +1168,14 @@ if ($productos_result) {
             <!-- COLUMNA IZQUIERDA: PRODUCTOS (Desktop) -->
             <div class="col-lg-6 productos-desktop">
     <div class="card pos-card">
-        <div class="card-header pos-header">
-            <h3 class="card-title mb-0">
-                <i class="fas fa-box-open"></i>
-                Seleccionar Producto
-            </h3>
+        <div class="card-header pos-header pos-header-productos">
+            <div>
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-box-open"></i>
+                    Seleccionar Producto
+                </h3>
+                <small class="pos-promo-header-note"><i class="fas fa-tags"></i> Promociones y descuentos se aplican automáticamente.</small>
+            </div>
         </div>
         <div class="card-body">
             <div class="buscador-wrapper">
@@ -969,6 +1214,9 @@ if ($productos_result) {
                          data-stock-especial="<?= (int) ($p['stock_especial'] ?? 0) ?>"
                          data-imagen="<?= htmlspecialchars($p['imagen'] ?? '') ?>"
                          data-categoria="<?= htmlspecialchars($p['categoria'] ?? '') ?>"
+                         data-promocion-id="<?= (int) ($p['promocion_id'] ?? 0) ?>"
+                         data-promocion-cantidad="<?= (int) ($p['cantidad_promocion'] ?? 0) ?>"
+                         data-promocion-precio="<?= htmlspecialchars((string) ($p['precio_promocion'] ?? '0')) ?>"
                          onclick="agregarProductoCard(this)">
                         <div class="producto-imagen-card">
                             <?php if(!empty($p['imagen']) && $p['imagen'] != 'uploads/noimage.png' && file_exists($p['imagen'])): ?>
@@ -983,6 +1231,12 @@ if ($productos_result) {
                         <div class="producto-precio-card">
                             $<?= number_format((float) $p['precio_venta'], 2) ?>
                         </div>
+                        <?php if (isset($promocionesPos[(int) $p['id']])): ?>
+                            <div class="producto-promocion-card">
+                                <i class="fas fa-tags"></i>
+                                <?= (int) $p['cantidad_promocion'] ?> por $<?= number_format((float) $p['precio_promocion'], 2) ?>
+                            </div>
+                        <?php endif; ?>
                         <div class="producto-stock-card">
                             <?php if ((int) ($p['stock_especial'] ?? 0) === 1): ?>
                                 <i class="fas fa-infinity"></i> Disponible siempre
@@ -1186,6 +1440,7 @@ const CAJON_LOCAL_URL = 'http://127.0.0.1:8787/abrir-cajon';
 const POS_DESCUENTO_EFECTIVO = <?= json_encode($posDescuentoEfectivo) ?>;
 const POS_DESCUENTO_TRANSFERENCIA = <?= json_encode($posDescuentoTransferencia) ?>;
 const POS_REDONDEAR_ENTERO = <?= $posRedondearEntero ? 'true' : 'false' ?>;
+const POS_PROMOCIONES_PRODUCTOS = <?= json_encode($promocionesPos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 let ventaEnProceso = false;
 let buscandoProducto = false;
 let timerCodigo = null; // conservado por compatibilidad; el auto-agregado ahora usa codigoScannerTimer.
@@ -1598,19 +1853,126 @@ function calcularPrecioMetodo(precioBase, metodo = obtenerMetodoPagoActual()) {
     return Math.max(0, precio);
 }
 
+function obtenerPromocionProducto(productoId) {
+    const promocion = POS_PROMOCIONES_PRODUCTOS[String(productoId)]
+        || POS_PROMOCIONES_PRODUCTOS[Number(productoId)]
+        || null;
+
+    if (!promocion) return null;
+
+    const cantidad = Math.max(0, parseInt(promocion.cantidad, 10) || 0);
+    const precio = Math.max(0, Number(promocion.precio) || 0);
+
+    if (cantidad < 2 || precio <= 0) return null;
+
+    return {
+        id: Number(promocion.id) || 0,
+        cantidad,
+        precio,
+        descripcion: promocion.descripcion || `${cantidad} por $${precio.toFixed(2)}`
+    };
+}
+
+function enriquecerProductoConPromocion(producto) {
+    if (!producto) return producto;
+
+    const promocion = obtenerPromocionProducto(producto.id);
+
+    if (!promocion) {
+        producto.promocion_id = 0;
+        producto.promocion_cantidad = 0;
+        producto.promocion_precio = 0;
+        producto.promocion_descripcion = '';
+        return producto;
+    }
+
+    producto.promocion_id = promocion.id;
+    producto.promocion_cantidad = promocion.cantidad;
+    producto.promocion_precio = promocion.precio;
+    producto.promocion_descripcion = promocion.descripcion;
+    return producto;
+}
+
+function calcularLineaCarrito(item, metodo = obtenerMetodoPagoActual()) {
+    const cantidad = Math.max(0, parseInt(item?.cantidad, 10) || 0);
+    const precioBase = Math.max(0, Number(item?.precio_base ?? item?.precio) || 0);
+    const precioMetodo = calcularPrecioMetodo(precioBase, metodo);
+    const subtotalBase = precioBase * cantidad;
+    const promocion = obtenerPromocionProducto(item?.id);
+
+    let subtotalDespuesPromocion = subtotalBase;
+    let subtotalFinal = precioMetodo * cantidad;
+    let ahorroPromocion = 0;
+    let ahorroMetodo = Math.max(0, subtotalBase - subtotalFinal);
+    let paquetes = 0;
+    let restantes = cantidad;
+    let aplicoPromocion = false;
+    let precioPromocionMetodo = 0;
+
+    if (
+        promocion
+        && cantidad >= promocion.cantidad
+        && promocion.precio < (precioBase * promocion.cantidad)
+    ) {
+        paquetes = Math.floor(cantidad / promocion.cantidad);
+        restantes = cantidad % promocion.cantidad;
+        const unidadesPromo = paquetes * promocion.cantidad;
+
+        const subtotalPromosBase = paquetes * promocion.precio;
+        const subtotalRestantesBase = restantes * precioBase;
+
+        /*
+         * Primero se aplica la promoción y después el descuento por método
+         * sobre cada paquete promocional y sobre las unidades restantes.
+         */
+        precioPromocionMetodo = calcularPrecioMetodo(promocion.precio, metodo);
+        const subtotalPromosFinal = paquetes * precioPromocionMetodo;
+        const subtotalRestantesFinal = restantes * precioMetodo;
+
+        subtotalDespuesPromocion = subtotalPromosBase + subtotalRestantesBase;
+        subtotalFinal = subtotalPromosFinal + subtotalRestantesFinal;
+        ahorroPromocion = Math.max(0, subtotalBase - subtotalDespuesPromocion);
+        ahorroMetodo = Math.max(0, subtotalDespuesPromocion - subtotalFinal);
+        aplicoPromocion = true;
+    }
+
+    const descuentoTotal = Math.max(0, subtotalBase - subtotalFinal);
+
+    return {
+        cantidad,
+        precioBase,
+        precioMetodo,
+        precioPromocionMetodo,
+        precioUnitarioEfectivo: cantidad > 0 ? subtotalFinal / cantidad : 0,
+        subtotalBase,
+        subtotalDespuesPromocion,
+        subtotalFinal,
+        descuentoTotal,
+        ahorroPromocion,
+        ahorroMetodo,
+        aplicoPromocion,
+        promocion,
+        paquetes,
+        restantes
+    };
+}
+
 function calcularTotalesCarrito(items = carrito, metodo = obtenerMetodoPagoActual()) {
     return (items || []).reduce((totales, item) => {
-        const cantidad = Math.max(0, parseInt(item.cantidad) || 0);
-        const precioBase = Math.max(0, parseFloat(item.precio_base ?? item.precio) || 0);
-        const precioFinal = calcularPrecioMetodo(precioBase, metodo);
-        const subtotalBase = precioBase * cantidad;
-        const subtotalFinal = precioFinal * cantidad;
-
-        totales.base += subtotalBase;
-        totales.final += subtotalFinal;
-        totales.descuento += Math.max(0, subtotalBase - subtotalFinal);
+        const linea = calcularLineaCarrito(item, metodo);
+        totales.base += linea.subtotalBase;
+        totales.final += linea.subtotalFinal;
+        totales.descuento += linea.descuentoTotal;
+        totales.ahorroPromocion += linea.ahorroPromocion;
+        totales.ahorroMetodo += linea.ahorroMetodo;
         return totales;
-    }, { base: 0, final: 0, descuento: 0 });
+    }, {
+        base: 0,
+        final: 0,
+        descuento: 0,
+        ahorroPromocion: 0,
+        ahorroMetodo: 0
+    });
 }
 
 function calcularTotalCarrito(items, metodo = obtenerMetodoPagoActual()) {
@@ -2065,15 +2427,18 @@ function getIconoPorCategoria(categoria, nombre) {
 
 // ============ AGREGAR DESDE GRID ============
 function agregarProductoCard(element) {
-    const producto = {
+    const producto = enriquecerProductoConPromocion({
         id: parseInt(element.dataset.id),
         nombre: element.dataset.nombre,
         precio: parseFloat(element.dataset.precio),
         stock: parseInt(element.dataset.stock || '0', 10),
         stock_especial: Number(element.dataset.stockEspecial || '0') === 1 ? 1 : 0,
         imagen: element.dataset.imagen || '',
-        categoria: element.dataset.categoria || ''
-    };
+        categoria: element.dataset.categoria || '',
+        promocion_id: Number(element.dataset.promocionId || 0),
+        promocion_cantidad: Number(element.dataset.promocionCantidad || 0),
+        promocion_precio: Number(element.dataset.promocionPrecio || 0)
+    });
 
     const iconoData = getIconoPorCategoria(producto.categoria, producto.nombre);
 
@@ -2087,7 +2452,11 @@ function agregarProductoCard(element) {
         imagen: producto.imagen,
         categoria: producto.categoria,
         icono: iconoData.icono,
-        iconoColor: iconoData.color
+        iconoColor: iconoData.color,
+        promocion_id: producto.promocion_id || 0,
+        promocion_cantidad: producto.promocion_cantidad || 0,
+        promocion_precio: producto.promocion_precio || 0,
+        promocion_descripcion: producto.promocion_descripcion || ''
     };
 
     agregarAlCarrito(nuevoProducto);
@@ -2110,6 +2479,7 @@ function agregarAlCarrito(producto) {
         if (existenteEspecial || nuevaCantidad <= Number(producto.stock)) {
             existente.cantidad = nuevaCantidad;
             existente.stock_especial = existenteEspecial ? 1 : 0;
+            enriquecerProductoConPromocion(existente);
 
             Swal.fire({
                 icon: 'success',
@@ -2141,6 +2511,7 @@ function agregarAlCarrito(producto) {
 
     if (esEspecial || Number(producto.cantidad) <= Number(producto.stock)) {
         producto.stock_especial = esEspecial ? 1 : 0;
+        enriquecerProductoConPromocion(producto);
         carrito.push(producto);
 
         Swal.fire({
@@ -2274,7 +2645,7 @@ async function agregarProducto(origen = 'manual') {
 
         const iconoData = getIconoPorCategoria(data.categoria, data.nombre);
 
-        const producto = {
+        const producto = enriquecerProductoConPromocion({
             id: parseInt(data.id),
             nombre: data.nombre,
             precio: parseFloat(data.precio_venta),
@@ -2285,7 +2656,7 @@ async function agregarProducto(origen = 'manual') {
             categoria: data.categoria || '',
             icono: iconoData.icono,
             iconoColor: iconoData.color
-        };
+        });
 
         agregarAlCarrito(producto);
 
@@ -2353,10 +2724,12 @@ function renderCarrito() {
     let contador = 1;
 
     carrito.forEach((item, index) => {
-        const precioBase = Math.max(0, Number(item.precio_base ?? item.precio) || 0);
-        const precioFinal = calcularPrecioMetodo(precioBase, metodo);
-        const subtotal = precioFinal * (parseInt(item.cantidad) || 0);
-        const tieneDescuento = precioFinal < precioBase;
+        enriquecerProductoConPromocion(item);
+        const linea = calcularLineaCarrito(item, metodo);
+        const precioBase = linea.precioBase;
+        const precioFinal = linea.precioUnitarioEfectivo;
+        const subtotal = linea.subtotalFinal;
+        const tieneDescuento = linea.descuentoTotal > 0;
         const esEspecial = Number(item.stock_especial) === 1;
         const textoStock = esEspecial
             ? '<i class="fas fa-infinity"></i> Disponible siempre'
@@ -2380,11 +2753,20 @@ function renderCarrito() {
             `;
         }
 
+        const promoMetodoTexto = linea.aplicoPromocion && linea.ahorroMetodo > 0
+            ? `<small>${porcentaje.toFixed(2).replace(/\.00$/, '')}% por ${metodo === 'efectivo' ? 'efectivo' : 'transferencia'} aplicado después</small>`
+            : '';
+
+        const promoHtml = linea.aplicoPromocion
+            ? `<div class="pos-promo-linea"><span><i class="fas fa-tags"></i> ${escapeHtml(linea.promocion.descripcion)} × ${linea.paquetes}</span>${promoMetodoTexto}</div>`
+            : '';
+
         const precioHtml = tieneDescuento
             ? `
                 <div class="precio-pos-aplicado">
                     <small>$${precioBase.toFixed(2)}</small>
                     <strong>$${precioFinal.toFixed(2)}</strong>
+                    ${linea.aplicoPromocion ? '<em>promedio</em>' : ''}
                 </div>
               `
             : `<strong>$${precioFinal.toFixed(2)}</strong>`;
@@ -2397,7 +2779,7 @@ function renderCarrito() {
                         ${imagenHtml}
                         <div>
                             <strong style="font-size:12px;">${escapeHtml(item.nombre)}</strong>
-                            <br>
+                            ${promoHtml}
                             <small style="font-size:9px;color:${esEspecial ? '#7c3aed' : '#64748b'};">${textoStock}</small>
                         </div>
                     </div>
@@ -2426,13 +2808,35 @@ function renderCarrito() {
 
     if (resumenDescuento) {
         if (totales.descuento > 0) {
+            const bloquesAhorro = [];
+
+            if (totales.ahorroPromocion > 0) {
+                bloquesAhorro.push(`
+                    <span class="pos-ahorro-chip pos-ahorro-promo">
+                        <i class="fas fa-tags"></i>
+                        Promociones: <strong>$${totales.ahorroPromocion.toFixed(2)}</strong>
+                    </span>
+                `);
+            }
+
+            if (totales.ahorroMetodo > 0) {
+                bloquesAhorro.push(`
+                    <span class="pos-ahorro-chip pos-ahorro-pago">
+                        <i class="fas fa-wallet"></i>
+                        ${porcentaje.toFixed(2).replace(/\.00$/, '')}% por ${metodo === 'efectivo' ? 'efectivo' : 'transferencia'}:
+                        <strong>$${totales.ahorroMetodo.toFixed(2)}</strong>
+                    </span>
+                `);
+            }
+
             resumenDescuento.hidden = false;
             resumenDescuento.innerHTML = `
-                <i class="fas fa-tags"></i>
-                <span>
-                    <strong>${porcentaje.toFixed(2).replace(/\.00$/, '')}% aplicado por ${metodo === 'efectivo' ? 'pago en efectivo' : 'transferencia'}.</strong>
-                    Precio base: $${totales.base.toFixed(2)} · Ahorro: $${totales.descuento.toFixed(2)}
-                </span>
+                <div class="pos-resumen-ahorros-head">
+                    <i class="fas fa-tags"></i>
+                    <span><strong>Ahorros aplicados automáticamente</strong><small>Precio base: $${totales.base.toFixed(2)}</small></span>
+                </div>
+                <div class="pos-resumen-ahorros-chips">${bloquesAhorro.join('')}</div>
+                <div class="pos-ahorro-total">Ahorro total: <strong>$${totales.descuento.toFixed(2)}</strong></div>
             `;
         } else {
             resumenDescuento.hidden = true;
@@ -2828,6 +3232,9 @@ function construirHtmlVentaRegistrada(data) {
     const folio = data?.folio || 'Sin folio';
     const correoCliente = data?.correo_cliente || '';
     const ticketEnviado = data?.ticket_enviado === true;
+    const ahorroPromociones = Number(data?.ahorro_promociones || 0);
+    const ahorroMetodoPago = Number(data?.ahorro_metodo_pago || 0);
+    const totalBase = Number(data?.total_base || total);
 
     const ticketItems = productos.length > 0
         ? productos.map(item => {
@@ -2836,9 +3243,13 @@ function construirHtmlVentaRegistrada(data) {
             const importe = Number(item?.importe ?? (precio * cantidad));
             const nombre = item?.nombre || 'Producto';
 
+            const promoDetalle = item?.aplico_promocion
+                ? `<small style="display:block; margin-top:3px; color:#7c3aed; font-weight:700;"><i class="fas fa-tags"></i> ${escapeHtml(item.promocion_descripcion || 'Promoción aplicada')} × ${Number(item.promocion_paquetes || 0)}</small>`
+                : '';
+
             return `
-                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; gap:12px;">
-                    <span style="color:#334155; text-align:left;">${escapeHtml(nombre)} x${cantidad}</span>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:13px; margin-bottom:9px; gap:12px;">
+                    <span style="color:#334155; text-align:left; min-width:0;">${escapeHtml(nombre)} x${cantidad}${promoDetalle}</span>
                     <span style="font-weight:700; color:#f97316; white-space:nowrap;">$${formatearDinero(importe)}</span>
                 </div>
             `;
@@ -2870,6 +3281,29 @@ function construirHtmlVentaRegistrada(data) {
             </div>
 
             <div style="background:#f8fafc; border-radius:12px; padding:12px; margin-bottom:16px;">
+                ${
+                    (ahorroPromociones > 0 || ahorroMetodoPago > 0)
+                        ? `
+                            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:7px;">
+                                <span style="color:#64748b;">PRECIO BASE</span>
+                                <span style="font-weight:750; color:#475569;">$${formatearDinero(totalBase)}</span>
+                            </div>
+                            ${ahorroPromociones > 0 ? `
+                                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:7px;">
+                                    <span style="color:#7c3aed;"><i class="fas fa-tags"></i> PROMOCIONES</span>
+                                    <span style="font-weight:800; color:#7c3aed;">-$${formatearDinero(ahorroPromociones)}</span>
+                                </div>
+                            ` : ''}
+                            ${ahorroMetodoPago > 0 ? `
+                                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:8px;">
+                                    <span style="color:#0284c7;"><i class="fas fa-wallet"></i> FORMA DE PAGO</span>
+                                    <span style="font-weight:800; color:#0284c7;">-$${formatearDinero(ahorroMetodoPago)}</span>
+                                </div>
+                            ` : ''}
+                            <div style="height:1px; background:#e2e8f0; margin:8px 0;"></div>
+                        `
+                        : ''
+                }
                 <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
                     <span style="color:#475569;">TOTAL</span>
                     <span style="font-weight:800;">$${formatearDinero(total)}</span>
@@ -3239,26 +3673,33 @@ function imprimirTarjetaQR() {
 }
 // ============ AJUSTE DE PRODUCTOS ============
 function ajustarUnaFilaMas() {
-    const cardBody = document.querySelector('.productos-desktop .card-body');
-    const grid = document.querySelector('.productos-grid');
+    const cardBody = document.querySelector('.productos-desktop .pos-card .card-body');
+    const grid = document.querySelector('.productos-desktop .productos-grid');
 
-    if (cardBody && grid && window.innerWidth >= 992) {
-        const primerProducto = grid.querySelector('.producto-card');
+    if (!cardBody || !grid) return;
 
-        if (primerProducto) {
-            const altoProducto = primerProducto.offsetHeight || 120;
-            const gap = 10;
-            const productosVisibles = grid.querySelectorAll('.producto-card:not([style*="display: none"])');
-            const productosPorFila = Math.max(1, Math.floor(grid.offsetWidth / 130));
-            const filasActuales = Math.ceil(productosVisibles.length / productosPorFila);
-            const filasMostrar = filasActuales + 1;
-            const alturaMostrar = filasMostrar * (altoProducto + gap) + 30;
+    /*
+     * Antes se limitaba la altura del card-body según el número de resultados.
+     * Eso cortaba las tarjetas cuando una búsqueda devolvía pocos productos.
+     * Ahora el cuerpo se adapta al contenido y solo la cuadrícula maneja scroll.
+     */
+    cardBody.style.maxHeight = 'none';
+    cardBody.style.height = 'auto';
+    cardBody.style.overflow = 'visible';
 
-            cardBody.style.maxHeight = alturaMostrar + 'px';
-            cardBody.style.overflowY = 'auto';
-            grid.style.overflowY = 'visible';
-            cardBody.style.scrollBehavior = 'smooth';
-        }
+    grid.style.height = 'auto';
+    grid.style.minHeight = '0';
+    grid.style.alignContent = 'start';
+    grid.style.gridAutoRows = 'max-content';
+
+    if (window.innerWidth >= 992) {
+        const top = grid.getBoundingClientRect().top;
+        const alturaDisponible = Math.max(360, window.innerHeight - top - 24);
+        grid.style.maxHeight = alturaDisponible + 'px';
+        grid.style.overflowY = 'auto';
+    } else {
+        grid.style.maxHeight = 'none';
+        grid.style.overflowY = 'visible';
     }
 }
 

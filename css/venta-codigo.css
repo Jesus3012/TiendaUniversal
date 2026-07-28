@@ -4492,3 +4492,291 @@
         font-size: 1.04rem !important;
     }
 }
+
+.pos-header-productos {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pos-promo-header-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    color: #7c3aed;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.producto-card {
+    position: relative;
+}
+
+.producto-promocion-card {
+    width: fit-content;
+    max-width: calc(100% - 14px);
+    margin: 5px auto 3px;
+    padding: 4px 8px;
+    overflow: hidden;
+    border: 1px solid #ddd6fe;
+    border-radius: 999px;
+    color: #6d28d9;
+    background: #f5f3ff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.producto-promocion-card i {
+    margin-right: 4px;
+}
+
+.pos-promo-linea {
+    width: fit-content;
+    max-width: 100%;
+    margin: 3px 0 2px;
+    padding: 2px 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    color: #6d28d9;
+    background: #f3e8ff;
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pos-promo-linea i {
+    margin-right: 3px;
+}
+
+.precio-pos-aplicado em {
+    display: block;
+    margin-top: 1px;
+    color: #7c3aed;
+    font-size: 0.5rem;
+    font-style: normal;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.pos-descuento-pago {
+    padding: 12px !important;
+    border: 1px solid #ddd6fe !important;
+    border-radius: 14px !important;
+    color: #334155 !important;
+    background: linear-gradient(135deg, #faf5ff, #f8fafc) !important;
+}
+
+.pos-resumen-ahorros-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.pos-resumen-ahorros-head > i {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: #ffffff;
+    background: #7c3aed;
+}
+
+.pos-resumen-ahorros-head span,
+.pos-resumen-ahorros-head strong,
+.pos-resumen-ahorros-head small {
+    display: block;
+}
+
+.pos-resumen-ahorros-head strong {
+    color: #312e81;
+    font-size: 0.74rem;
+}
+
+.pos-resumen-ahorros-head small {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 0.62rem;
+}
+
+.pos-resumen-ahorros-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.pos-ahorro-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: 0.64rem;
+    font-weight: 700;
+}
+
+.pos-ahorro-chip strong {
+    font-weight: 900;
+}
+
+.pos-ahorro-promo {
+    color: #6d28d9;
+    background: #ede9fe;
+}
+
+.pos-ahorro-pago {
+    color: #0369a1;
+    background: #e0f2fe;
+}
+
+.pos-ahorro-total {
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px dashed #cbd5e1;
+    color: #475569;
+    font-size: 0.68rem;
+    text-align: right;
+}
+
+.pos-ahorro-total strong {
+    color: #15803d;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 767px) {
+    .pos-promo-header-note {
+        font-size: 0.62rem;
+    }
+
+    .producto-promocion-card {
+        font-size: 0.6rem;
+    }
+
+    .pos-resumen-ahorros-chips {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .pos-ahorro-chip {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .pos-ahorro-total {
+        text-align: left;
+    }
+}
+
+/* =====================================================
+   CORRECCIÓN FINAL POS + PROMOCIONES
+   - Las cards filtradas ya no se cortan
+   - El panel de productos deja de reservar espacio vacío
+   - La cuadrícula maneja su propio scroll
+===================================================== */
+
+.pos-header-productos > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.pos-header-productos .card-title {
+    float: none !important;
+    width: auto !important;
+}
+
+@media (min-width: 992px) {
+    .productos-desktop {
+        align-self: flex-start !important;
+        display: block !important;
+    }
+
+    .productos-desktop .pos-card {
+        height: auto !important;
+        min-height: 0 !important;
+    }
+
+    .productos-desktop .pos-card .card-body {
+        flex: none !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding-bottom: 14px !important;
+    }
+
+    .productos-desktop .productos-grid {
+        flex: none !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: calc(100vh - 245px) !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        align-content: start !important;
+        align-items: start !important;
+        grid-auto-rows: max-content !important;
+        padding: 4px 8px 18px 4px !important;
+        scroll-padding-bottom: 18px;
+    }
+
+    .productos-desktop .producto-card {
+        align-self: start !important;
+        height: auto !important;
+        min-height: 215px !important;
+        max-height: none !important;
+        overflow: visible !important;
+        justify-content: flex-start !important;
+    }
+
+    .productos-desktop .btn-agregar-card {
+        margin-top: 8px !important;
+        flex: 0 0 auto;
+    }
+}
+
+/* El resultado de una búsqueda debe mostrar la card completa. */
+.producto-card[style*="display: block"],
+.producto-card:not([style*="display: none"]) {
+    visibility: visible;
+}
+
+.productos-grid::-webkit-scrollbar {
+    width: 7px;
+}
+
+.productos-grid::-webkit-scrollbar-track {
+    margin: 5px 0 12px;
+    border-radius: 999px;
+    background: #f1f5f9;
+}
+
+.productos-grid::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #cbd5e1;
+}
+
+.productos-grid::-webkit-scrollbar-thumb:hover {
+    background: #f97316;
+}
+
+@media (max-width: 991px) {
+    .productos-grid {
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+}
+

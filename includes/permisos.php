@@ -137,6 +137,10 @@ function permisos_configuracion_legacy(): array
                 'get_producto.php',
             ],
         ],
+        'promociones' => [
+            'roles' => ['administrador', 'super_administrador'],
+            'rutas' => ['promociones.php'],
+        ],
         'ajustes_productos' => [
             'roles' => [
                 'administrador',
