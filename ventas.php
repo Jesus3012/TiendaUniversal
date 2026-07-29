@@ -366,6 +366,29 @@ $posDescuentoEfectivo = (float) $posConfigPrecios['descuento_efectivo'];
 $posDescuentoTransferencia = (float) $posConfigPrecios['descuento_transferencia'];
 $posRedondearEntero = (int) $posConfigPrecios['redondear_entero'] === 1;
 
+
+/**
+ * La consulta sigue funcionando aunque la migración todavía no se haya
+ * ejecutado; en ese caso todos los artículos se consideran no fijados.
+ */
+function posTieneColumnaFijadoVenta(mysqli $conn): bool
+{
+    try {
+        $resultado = $conn->query("SHOW COLUMNS FROM productos LIKE 'fijado_venta'");
+        return $resultado instanceof mysqli_result && $resultado->num_rows > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+$posSoportaFijadoVenta = posTieneColumnaFijadoVenta($conn);
+$posSelectFijadoVenta = $posSoportaFijadoVenta
+    ? 'COALESCE(p.fijado_venta, 0)'
+    : '0';
+$posOrdenFijadoVenta = $posSoportaFijadoVenta
+    ? 'COALESCE(p.fijado_venta, 0) DESC, '
+    : '';
+
 // Validar sesión y roles autorizados para el punto de venta.
 $usuario_id_sesion = (int) ($_SESSION['usuario_id'] ?? 0);
 $rol_actual = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
@@ -1035,6 +1058,7 @@ $productos_query = "
         p.imagen,
         p.categoria,
         p.stock_especial,
+        {$posSelectFijadoVenta} AS fijado_venta,
         pr.id AS promocion_id,
         pr.cantidad_promocion,
         pr.precio_promocion,
@@ -1059,7 +1083,7 @@ $productos_query = "
           p.stock_especial = 1
           OR p.cantidad > 0
       )
-    ORDER BY p.nombre ASC
+    ORDER BY {$posOrdenFijadoVenta}p.nombre ASC
 ";
 $productos_result = $conn->query($productos_query);
 $productos = [];
@@ -1094,6 +1118,7 @@ foreach ($productos as $productoPos) {
 
 <link rel="stylesheet" href="css/venta-codigo.css?v=<?= time() ?>">
 <link rel="stylesheet" href="css/venta-promociones.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/productos-fijados.css?v=<?= time() ?>">
 
 
 <div class="content-wrapper">
@@ -1206,8 +1231,9 @@ foreach ($productos as $productoPos) {
             <div class="productos-grid" id="productosGrid">
                 <?php if(count($productos) > 0): ?>
                     <?php foreach($productos as $p): ?>
-                    <div class="producto-card" 
+                    <div class="producto-card <?= (int) ($p['fijado_venta'] ?? 0) === 1 ? 'producto-card-fijado' : '' ?>" 
                          data-id="<?= $p['id'] ?>"
+                         data-fijado="<?= (int) ($p['fijado_venta'] ?? 0) ?>"
                          data-nombre="<?= htmlspecialchars($p['nombre']) ?>"
                          data-precio="<?= $p['precio_venta'] ?>"
                          data-stock="<?= (int) $p['stock'] ?>"
@@ -1218,6 +1244,11 @@ foreach ($productos as $productoPos) {
                          data-promocion-cantidad="<?= (int) ($p['cantidad_promocion'] ?? 0) ?>"
                          data-promocion-precio="<?= htmlspecialchars((string) ($p['precio_promocion'] ?? '0')) ?>"
                          onclick="agregarProductoCard(this)">
+                        <?php if ((int) ($p['fijado_venta'] ?? 0) === 1): ?>
+                            <span class="producto-fijado-badge" title="Artículo fijado al inicio">
+                                <i class="fas fa-thumbtack"></i> Fijado
+                            </span>
+                        <?php endif; ?>
                         <div class="producto-imagen-card">
                             <?php if(!empty($p['imagen']) && $p['imagen'] != 'uploads/noimage.png' && file_exists($p['imagen'])): ?>
                                 <img src="<?= $p['imagen'] ?>" alt="<?= htmlspecialchars($p['nombre']) ?>">

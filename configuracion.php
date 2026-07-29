@@ -67,6 +67,11 @@ $mensaje = '';
 $tipo_mensaje = '';
 $tab_activo = isset($_POST['tab_activo']) ? $_POST['tab_activo'] : (isset($_GET['tab']) ? $_GET['tab'] : 'general');
 
+// La configuración de sesión es exclusiva del superadministrador.
+if (!$es_super_administrador && $tab_activo === 'sesion') {
+    $tab_activo = 'general';
+}
+
 // ==================== RESPUESTA AJAX PARA NO SALIR DE LA PÁGINA ====================
 function esPeticionAjax() {
     return (
@@ -316,8 +321,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // Actualizar duración y seguridad de la sesión
     if ($action === 'update_session') {
-        if (!$es_administrador) {
-            $mensaje = 'No tienes permiso para modificar la duración de sesión.';
+        if (!$es_super_administrador) {
+            $mensaje = 'Solo el superadministrador puede modificar la duración de sesión.';
             $tipo_mensaje = 'danger';
         } else {
             $resultado_sesion = cfgSesionGuardar(
@@ -1159,7 +1164,7 @@ include 'includes/navbar.php';
 
             #configTabs.config-tabs-grid {
                 display: grid !important;
-                grid-template-columns: repeat(8, minmax(0, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
                 gap: 8px;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -1719,7 +1724,9 @@ include 'includes/navbar.php';
                         <div class="nav-tabs-wrapper">
                             <ul class="nav nav-tabs config-tabs-grid" id="configTabs" role="tablist">
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
+                                <?php if ($es_super_administrador): ?>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'sesion' ? 'active' : '' ?>" data-tab="sesion"><i class="fas fa-shield-halved"></i> Sesión</button></li>
+                                <?php endif; ?>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
@@ -1897,7 +1904,8 @@ include 'includes/navbar.php';
                         </div>
 
 
-                <!-- TAB SESIÓN -->
+                <?php if ($es_super_administrador): ?>
+                <!-- TAB SESIÓN: visible únicamente para super_administrador -->
                 <div class="tab-pane <?= $tab_activo == 'sesion' ? 'active' : '' ?>" id="tab-sesion" data-tab-content="sesion">
                     <section class="session-config-shell">
                         <div class="session-config-intro">
@@ -2036,6 +2044,7 @@ include 'includes/navbar.php';
                         </form>
                     </section>
                 </div>
+                <?php endif; ?>
 
                 <!-- TAB CORREO -->
                 <div class="tab-pane <?= $tab_activo == 'correo' ? 'active' : '' ?>" id="tab-correo" data-tab-content="correo">

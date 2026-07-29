@@ -1,0 +1,162 @@
+/* =========================================================
+   ARTÍCULOS FIJADOS EN EL PUNTO DE VENTA
+   Complemento para productos.php y venta_codigo.php
+========================================================= */
+
+/* Opción del formulario de alta */
+.pin-sale-toggle {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    margin: 14px 0 18px;
+    padding: 14px 16px;
+    border: 1px solid #fed7aa;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+    cursor: pointer;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.pin-sale-toggle:hover {
+    border-color: #f97316;
+    box-shadow: 0 8px 20px rgba(249, 115, 22, .12);
+    transform: translateY(-1px);
+}
+
+.pin-sale-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.pin-sale-switch {
+    position: relative;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 27px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    box-shadow: inset 0 1px 3px rgba(15, 23, 42, .16);
+    transition: background .2s ease;
+}
+
+.pin-sale-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, .22);
+    transition: transform .2s ease;
+}
+
+.pin-sale-toggle input:checked + .pin-sale-switch {
+    background: #f97316;
+}
+
+.pin-sale-toggle input:checked + .pin-sale-switch::after {
+    transform: translateX(21px);
+}
+
+.pin-sale-toggle input:focus-visible + .pin-sale-switch {
+    outline: 3px solid rgba(249, 115, 22, .25);
+    outline-offset: 3px;
+}
+
+.pin-sale-toggle input:disabled + .pin-sale-switch {
+    opacity: .55;
+}
+
+.pin-sale-toggle:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: .72;
+}
+
+.pin-sale-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.35;
+}
+
+.pin-sale-copy strong {
+    color: #9a3412;
+    font-size: .88rem;
+    font-weight: 800;
+}
+
+.pin-sale-copy strong i {
+    margin-right: 5px;
+    color: #f97316;
+}
+
+.pin-sale-copy small {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: .75rem;
+}
+
+.pin-sale-copy em {
+    margin-top: 5px;
+    color: #b45309;
+    font-size: .7rem;
+    font-style: normal;
+    font-weight: 700;
+}
+
+/* Tarjetas fijadas dentro de Seleccionar producto */
+.producto-card.producto-card-fijado {
+    position: relative;
+    border-color: #f97316 !important;
+    box-shadow: 0 9px 22px rgba(249, 115, 22, .18);
+}
+
+.producto-card.producto-card-fijado::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(249, 115, 22, .22);
+}
+
+.producto-fijado-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    box-shadow: 0 5px 12px rgba(234, 88, 12, .28);
+    font-size: .64rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.producto-fijado-badge i {
+    font-size: .62rem;
+    transform: rotate(-18deg);
+}
+
+@media (max-width: 768px) {
+    .pin-sale-toggle {
+        align-items: flex-start;
+        padding: 13px;
+    }
+
+    .producto-fijado-badge {
+        top: 6px;
+        right: 6px;
+        padding: 4px 7px;
+        font-size: .6rem;
+    }
+}

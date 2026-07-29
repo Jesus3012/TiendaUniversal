@@ -4780,3 +4780,63 @@
     }
 }
 
+
+/* =====================================================
+   CORRECCIÓN DEFINITIVA: PANELES DEL POS CON LA MISMA ALTURA
+   - El selector de productos y el carrito terminan a la misma altura.
+   - El panel de productos se estira con la fila.
+   - Solo la cuadrícula de productos conserva scroll interno.
+===================================================== */
+@media (min-width: 992px) {
+    /* La fila principal utiliza como altura la del panel más alto. */
+    .content-wrapper .container-fluid > .row {
+        align-items: stretch !important;
+    }
+
+    /* Las dos columnas se comportan igual. */
+    .content-wrapper .container-fluid > .row > .col-lg-6,
+    .content-wrapper .container-fluid > .row > .productos-desktop {
+        display: flex !important;
+        align-self: stretch !important;
+    }
+
+    /* Ambas tarjetas ocupan toda la altura disponible de la fila. */
+    .content-wrapper .container-fluid > .row > .col-lg-6 > .pos-card {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* El cuerpo del selector vuelve a crecer; se anula el flex:none anterior. */
+    .productos-desktop .pos-card .card-body {
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        padding-bottom: 1.25rem !important;
+    }
+
+    /* La búsqueda queda fija y la cuadrícula usa el espacio restante. */
+    .productos-desktop .buscador-wrapper {
+        flex: 0 0 auto !important;
+    }
+
+    .productos-desktop .productos-grid {
+        flex: 1 1 0 !important;
+        width: 100% !important;
+        height: 0 !important;
+        min-height: 360px !important;
+        max-height: none !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        align-content: start !important;
+        align-items: start !important;
+        grid-auto-rows: max-content !important;
+        padding: 4px 8px 14px 4px !important;
+    }
+}

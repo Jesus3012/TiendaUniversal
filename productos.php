@@ -1,19 +1,37 @@
 <?php
 ob_start();
-session_start();
-require_once 'includes/csrf.php';
-require_once 'includes/db.php';
 
-$rol_actual = strtolower(trim((string)($_SESSION['rol'] ?? '')));
+// La sesión siempre debe iniciarse desde el controlador central.
+// No uses session_start() directamente porque en local puede abrir una sesión
+// distinta cuando includes/session.php utiliza storage/sessions.
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/csrf.php';
+
+$rol_recibido = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
+
+$alias_roles = [
+    'admin' => 'administrador',
+    'administrador' => 'administrador',
+    'super_admin' => 'super_administrador',
+    'superadministrador' => 'super_administrador',
+    'super-administrador' => 'super_administrador',
+    'super_administrador' => 'super_administrador',
+];
+
+$rol_actual = $alias_roles[$rol_recibido] ?? $rol_recibido;
 $roles_administrativos = ['administrador', 'super_administrador'];
 
 if (
-    !isset($_SESSION['usuario_id']) ||
+    empty($_SESSION['usuario_id']) ||
     !in_array($rol_actual, $roles_administrativos, true)
 ) {
-    header("Location: login.php");
+    header('Location: login.php');
     exit;
 }
+
+// Mantener el rol canónico para navbar, permisos y siguientes peticiones.
+$_SESSION['rol'] = $rol_actual;
 
 
 include 'includes/header.php';
@@ -25,6 +43,22 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
 
 $success = '';
 $errors = [];
+
+/**
+ * Permite instalar primero los archivos PHP y después ejecutar la migración
+ * sin dejar inutilizable el alta normal de productos.
+ */
+function productosTieneColumnaFijadoVenta(mysqli $conn): bool
+{
+    try {
+        $resultado = $conn->query("SHOW COLUMNS FROM productos LIKE 'fijado_venta'");
+        return $resultado instanceof mysqli_result && $resultado->num_rows > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+$productosSoportaFijadoVenta = productosTieneColumnaFijadoVenta($conn);
 
 // Obtener parámetro de tipo desde la URL
 $tipo_seleccionado = isset($_GET['tipo']) ? $_GET['tipo'] : 'producto';
@@ -547,6 +581,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $tipo_inventario === 'producto' &&
         (string)($_POST['stock_especial'] ?? '0') === '1'
     ) ? 1 : 0;
+    $fijado_venta = (
+        $tipo_inventario === 'producto' &&
+        (string)($_POST['fijado_venta'] ?? '0') === '1'
+    ) ? 1 : 0;
     
     $proveedor_nombre = '';
     if ($proveedor_id > 0) {
@@ -588,6 +626,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $atributos_json = !empty($atributos) ? json_encode($atributos, JSON_UNESCAPED_UNICODE) : null;
     } else {
         $stock_especial = 0;
+        $fijado_venta = 0;
         $cantidad = floatval($_POST['cantidad_insumo'] ?? 0);
         $precio_compra = round((float)($_POST['precio_compra_insumo'] ?? 0), 2);
         $precio_venta_base = 0.00;
@@ -607,6 +646,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 
     if ($nombre === '') {
         $errors[] = "El nombre del producto es obligatorio.";
+    }
+
+    if (
+        $tipo_inventario === 'producto'
+        && $fijado_venta === 1
+        && !$productosSoportaFijadoVenta
+    ) {
+        $errors[] = "Antes de fijar productos ejecuta sql/agregar_fijado_venta.sql en la base de datos.";
     }
 
     if ($tipo_inventario === 'producto') {
@@ -682,8 +729,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $conn->begin_transaction();
             
             try {
-                $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssssdddsssi", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial);
+                if ($productosSoportaFijadoVenta) {
+                    $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial, fijado_venta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param("sssssdddsssii", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial, $fijado_venta);
+                } else {
+                    // Compatibilidad temporal mientras se ejecuta la migración SQL.
+                    $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param("sssssdddsssi", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial);
+                }
                 
                 if (!$stmt->execute()) {
                     throw new Exception("Error al insertar producto: " . $conn->error);
@@ -726,7 +779,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                     icon: 'success',
                     title: 'Producto agregado',
                     html: 'El producto se agregó correctamente.<br><small>Precio final guardado: <b>$" . number_format($precio_venta, 0) . "</b> (incluye 3% y está redondeado).</small>' +
-                          '" . ($stock_especial === 1 ? "<br><small><b>Artículo especial:</b> sin límite de stock y con código único.</small>" : "") . "',
+                          '" . ($stock_especial === 1 ? "<br><small><b>Artículo especial:</b> sin límite de stock y con código único.</small>" : "") . "' +
+                          '" . ($fijado_venta === 1 ? "<br><small><b>Fijado en ventas:</b> aparecerá primero en Seleccionar producto.</small>" : "") . "',
                     confirmButtonText: 'Aceptar',
                     confirmButtonColor: '#f97316'
                 }).then(() => {
@@ -860,6 +914,7 @@ if (!empty($errors)) {
 }
 ?>
 <link rel="stylesheet" href="css/productos.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/productos-fijados.css?v=<?= time() ?>">
 
 
 
@@ -1024,6 +1079,24 @@ if (!empty($errors)) {
                                                 <small>Sin cantidad fija</small>
                                             </span>
                                             <i class="fas fa-infinity special-stock-icon" aria-hidden="true"></i>
+                                        </label>
+
+                                        <label class="pin-sale-toggle" id="pin_sale_toggle" for="fijado_venta">
+                                            <input
+                                                type="checkbox"
+                                                name="fijado_venta"
+                                                id="fijado_venta"
+                                                value="1"
+                                                <?= !$productosSoportaFijadoVenta ? 'disabled' : '' ?>
+                                            >
+                                            <span class="pin-sale-switch" aria-hidden="true"></span>
+                                            <span class="pin-sale-copy">
+                                                <strong><i class="fas fa-thumbtack"></i> Fijar en venta de productos</strong>
+                                                <small>Aparecerá al inicio de “Seleccionar producto” en el punto de venta.</small>
+                                                <?php if (!$productosSoportaFijadoVenta): ?>
+                                                    <em>Ejecuta primero el SQL incluido para habilitar esta opción.</em>
+                                                <?php endif; ?>
+                                            </span>
                                         </label>
 
                                         <div class="row">
