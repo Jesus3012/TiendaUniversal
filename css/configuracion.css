@@ -1082,3 +1082,358 @@ select.select-corregido {
     -webkit-appearance: auto !important;
     -moz-appearance: auto !important;
 }
+
+/* =====================================================
+   CONFIGURACIÓN DE DURACIÓN DE SESIÓN
+===================================================== */
+.session-config-shell {
+    display: grid;
+    gap: 16px;
+}
+
+.session-config-intro {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 22px;
+    overflow: hidden;
+    border: 1px solid rgba(249, 115, 22, .18);
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at top right, rgba(249, 115, 22, .14), transparent 34%),
+        linear-gradient(135deg, #ffffff, #fffaf5);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+}
+
+.session-config-intro-icon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    box-shadow: 0 10px 22px rgba(249, 115, 22, .24);
+    font-size: 1.25rem;
+}
+
+.session-config-intro-copy > span {
+    color: #c2410c;
+    font-size: .64rem;
+    font-weight: 900;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+
+.session-config-intro-copy h2 {
+    margin: 3px 0 0;
+    color: #172033;
+    font-size: 1.35rem;
+    font-weight: 850;
+}
+
+.session-config-intro-copy p {
+    max-width: 720px;
+    margin: 6px 0 0;
+    color: #64748b;
+    font-size: .78rem;
+    line-height: 1.5;
+}
+
+.session-config-current {
+    min-width: 150px;
+    padding: 12px 15px;
+    border: 1px solid #fed7aa;
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .82);
+    text-align: center;
+}
+
+.session-config-current small,
+.session-config-current strong,
+.session-config-current span {
+    display: block;
+}
+
+.session-config-current small {
+    color: #94a3b8;
+    font-size: .59rem;
+    font-weight: 850;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.session-config-current strong {
+    margin-top: 4px;
+    color: #ea580c;
+    font-size: 1.45rem;
+    font-weight: 900;
+}
+
+.session-config-current span {
+    color: #64748b;
+    font-size: .64rem;
+}
+
+.session-config-card {
+    padding: 20px;
+    border: 1px solid #e6ebf2;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+}
+
+.session-config-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 13px;
+}
+
+.session-config-field {
+    min-width: 0;
+    padding: 15px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 11px 12px;
+    align-items: start;
+    border: 1px solid #e8edf3;
+    border-radius: 17px;
+    background: #fbfcfe;
+}
+
+.session-config-field-icon {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    font-size: .9rem;
+}
+
+.session-icon-orange { color: #ea580c; background: #fff7ed; }
+.session-icon-blue { color: #2563eb; background: #eff6ff; }
+.session-icon-purple { color: #7c3aed; background: #f5f3ff; }
+
+.session-config-field-copy label {
+    display: block;
+    margin: 1px 0 0;
+    color: #253047;
+    font-size: .75rem;
+    font-weight: 850;
+}
+
+.session-config-field-copy p {
+    margin: 5px 0 0;
+    color: #7b8798;
+    font-size: .64rem;
+    line-height: 1.42;
+}
+
+.session-number-wrap {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    overflow: hidden;
+    border: 1px solid #dce3ec;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+.session-number-wrap:focus-within {
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, .10);
+}
+
+.session-number-wrap input {
+    width: 100%;
+    min-height: 43px;
+    padding: 0 13px;
+    border: 0;
+    outline: none;
+    color: #172033;
+    background: transparent;
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.session-number-wrap span {
+    min-width: 45px;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    background: #f1f5f9;
+    font-size: .69rem;
+    font-weight: 850;
+}
+
+.session-warning-switch {
+    margin: 15px 0 0;
+    padding: 14px 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid #e6ebf2;
+    border-radius: 16px;
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+.session-warning-switch-copy strong,
+.session-warning-switch-copy span {
+    display: block;
+}
+
+.session-warning-switch-copy strong {
+    color: #334155;
+    font-size: .76rem;
+}
+
+.session-warning-switch-copy span {
+    margin-top: 4px;
+    color: #7b8798;
+    font-size: .64rem;
+    line-height: 1.4;
+}
+
+.session-switch-control {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    flex: 0 0 48px;
+}
+
+.session-switch-control input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.session-switch-control > span {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: .2s ease;
+}
+
+.session-switch-control > span::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, .22);
+    transition: .2s ease;
+}
+
+.session-switch-control input:checked + span {
+    background: #f97316;
+}
+
+.session-switch-control input:checked + span::before {
+    transform: translateX(22px);
+}
+
+.session-config-summary {
+    margin-top: 14px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    color: #1e3a8a;
+    background: #eff6ff;
+    font-size: .7rem;
+    line-height: 1.5;
+}
+
+.session-config-summary i {
+    margin-top: 2px;
+    color: #2563eb;
+}
+
+.session-config-footer {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eef2f6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.session-config-note {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #7b8798;
+    font-size: .64rem;
+    line-height: 1.42;
+}
+
+.session-config-note i {
+    color: #f97316;
+}
+
+.session-save-button {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 1050px) {
+    .session-config-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .session-config-intro {
+        grid-template-columns: auto minmax(0, 1fr);
+        padding: 16px;
+    }
+
+    .session-config-current {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .session-config-card {
+        padding: 14px;
+    }
+
+    .session-config-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .session-save-button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .session-config-intro-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+    }
+
+    .session-config-intro-copy h2 {
+        font-size: 1.12rem;
+    }
+
+    .session-config-field {
+        padding: 13px;
+    }
+
+    .session-warning-switch {
+        align-items: flex-start;
+    }
+}

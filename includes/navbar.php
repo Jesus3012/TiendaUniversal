@@ -578,5 +578,47 @@ $logo_version = $logo_exists ? filemtime($tienda_logo) : time();
       handleResponsive();
     });
   </script>
+
+  <?php
+  /*
+   * Control global de sesión.
+   * El JavaScript se inserta en línea para evitar errores 404, rutas relativas
+   * incorrectas o caché del navegador. No depende de storage/sessions.
+   */
+  $datos_sesion_cliente = function_exists('cfgSesionDatosCliente')
+      ? cfgSesionDatosCliente($session_config ?? [], $_SESSION)
+      : null;
+
+  $session_timeout_js = __DIR__ . '/../js/session-timeout.js';
+  $session_timeout_code = is_file($session_timeout_js)
+      ? (string) file_get_contents($session_timeout_js)
+      : '';
+
+  // Evita que una cadena accidental cierre anticipadamente la etiqueta script.
+  $session_timeout_code = str_ireplace(
+      '</script>',
+      '<\/script>',
+      $session_timeout_code
+  );
+  ?>
+
+  <?php if (
+      is_array($datos_sesion_cliente)
+      && !empty($datos_sesion_cliente['authenticated'])
+      && $session_timeout_code !== ''
+  ): ?>
+  <script>
+    window.APP_SESSION_CONFIG = <?= json_encode(
+        $datos_sesion_cliente,
+        JSON_UNESCAPED_UNICODE
+        | JSON_UNESCAPED_SLASHES
+        | JSON_HEX_TAG
+        | JSON_HEX_APOS
+        | JSON_HEX_AMP
+        | JSON_HEX_QUOT
+    ) ?>;
+  </script>
+  <script><?= $session_timeout_code ?></script>
+  <?php endif; ?>
 </body>
 </html>

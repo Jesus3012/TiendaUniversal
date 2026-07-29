@@ -7,6 +7,7 @@ date_default_timezone_set('America/Mexico_City');
 
 require_once 'includes/auth_guard.php';
 require_once __DIR__ . '/includes/configuracion_password.php';
+require_once __DIR__ . '/includes/configuracion_sesion.php';
 
 try {
     $password_temporal_actual = cfgPasswordObtener($conn);
@@ -313,8 +314,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $usuario_id = $_SESSION['usuario_id'];
     $ip = $_SERVER['REMOTE_ADDR'];
 
+    // Actualizar duración y seguridad de la sesión
+    if ($action === 'update_session') {
+        if (!$es_administrador) {
+            $mensaje = 'No tienes permiso para modificar la duración de sesión.';
+            $tipo_mensaje = 'danger';
+        } else {
+            $resultado_sesion = cfgSesionGuardar(
+                $conn,
+                [
+                    'inactividad_minutos' => $_POST['inactividad_minutos'] ?? 30,
+                    'aviso_minutos' => $_POST['aviso_minutos'] ?? 2,
+                    'duracion_maxima_horas' => $_POST['duracion_maxima_horas'] ?? 12,
+                    'aviso_activo' => isset($_POST['aviso_activo']) ? 1 : 0,
+                ],
+                (int) $usuario_id
+            );
+
+            $mensaje = $resultado_sesion['mensaje'];
+            $tipo_mensaje = $resultado_sesion['ok'] ? 'success' : 'danger';
+        }
+
+        $tab_activo = 'sesion';
+    }
+
     // Actualizar contraseña temporal del portal
-    if ($action === 'update_default_password') {
+    elseif ($action === 'update_default_password') {
         $nueva_password = trim(
             (string) ($_POST['password_default_nueva'] ?? '')
         );
@@ -902,6 +927,9 @@ if (!$config_correo) {
     $config_correo = $result->fetch_assoc();
 }
 
+// Configuración de sesión
+$config_sesion = cfgSesionObtener($conn);
+
 // Paginación para Usuarios
 $pagina_usuarios = isset($_GET['pagina_usuarios']) ? max(1, intval($_GET['pagina_usuarios'])) : 1;
 $por_pagina = 10;
@@ -1131,7 +1159,7 @@ include 'includes/navbar.php';
 
             #configTabs.config-tabs-grid {
                 display: grid !important;
-                grid-template-columns: repeat(7, minmax(0, 1fr));
+                grid-template-columns: repeat(8, minmax(0, 1fr));
                 gap: 8px;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -1691,6 +1719,7 @@ include 'includes/navbar.php';
                         <div class="nav-tabs-wrapper">
                             <ul class="nav nav-tabs config-tabs-grid" id="configTabs" role="tablist">
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'general' ? 'active' : '' ?>" data-tab="general"><i class="fas fa-store"></i> General</button></li>
+                                <li class="nav-item"><button class="nav-link <?= $tab_activo == 'sesion' ? 'active' : '' ?>" data-tab="sesion"><i class="fas fa-shield-halved"></i> Sesión</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'correo' ? 'active' : '' ?>" data-tab="correo"><i class="fas fa-envelope"></i> Correo</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'usuarios' ? 'active' : '' ?>" data-tab="usuarios"><i class="fas fa-users"></i> Usuarios</button></li>
                                 <li class="nav-item"><button class="nav-link <?= $tab_activo == 'proveedores' ? 'active' : '' ?>" data-tab="proveedores"><i class="fas fa-truck"></i> Proveedores</button></li>
@@ -1866,6 +1895,147 @@ include 'includes/navbar.php';
                                 </div>
                             </div>
                         </div>
+
+
+                <!-- TAB SESIÓN -->
+                <div class="tab-pane <?= $tab_activo == 'sesion' ? 'active' : '' ?>" id="tab-sesion" data-tab-content="sesion">
+                    <section class="session-config-shell">
+                        <div class="session-config-intro">
+                            <div class="session-config-intro-icon">
+                                <i class="fas fa-shield-halved"></i>
+                            </div>
+                            <div class="session-config-intro-copy">
+                                <span>Seguridad del portal</span>
+                                <h2>Duración de la sesión</h2>
+                                <p>
+                                    Define cuánto tiempo puede permanecer abierta una cuenta sin actividad.
+                                    Esta configuración se aplica a administradores, superadministradores y vendedores.
+                                </p>
+                            </div>
+                            <div class="session-config-current">
+                                <small>Configuración actual</small>
+                                <strong><?= (int) $config_sesion['inactividad_minutos'] ?> min</strong>
+                                <span>por inactividad</span>
+                            </div>
+                        </div>
+
+                        <form method="POST" id="formSessionConfig" class="session-config-card">
+                            <input type="hidden" name="tab_activo" value="sesion">
+
+                            <div class="session-config-grid">
+                                <div class="session-config-field">
+                                    <div class="session-config-field-icon session-icon-orange">
+                                        <i class="fas fa-stopwatch"></i>
+                                    </div>
+                                    <div class="session-config-field-copy">
+                                        <label for="inactividad_minutos">Tiempo de inactividad</label>
+                                        <p>Cierra la cuenta cuando no se detecta actividad real.</p>
+                                    </div>
+                                    <div class="session-number-wrap">
+                                        <input
+                                            type="number"
+                                            id="inactividad_minutos"
+                                            name="inactividad_minutos"
+                                            min="1"
+                                            max="1440"
+                                            step="1"
+                                            value="<?= (int) $config_sesion['inactividad_minutos'] ?>"
+                                            required
+                                        >
+                                        <span>min</span>
+                                    </div>
+                                </div>
+
+                                <div class="session-config-field">
+                                    <div class="session-config-field-icon session-icon-blue">
+                                        <i class="fas fa-bell"></i>
+                                    </div>
+                                    <div class="session-config-field-copy">
+                                        <label for="aviso_minutos">Avisar antes de cerrar</label>
+                                        <p>Muestra una alerta con la opción de continuar trabajando.</p>
+                                    </div>
+                                    <div class="session-number-wrap">
+                                        <input
+                                            type="number"
+                                            id="aviso_minutos"
+                                            name="aviso_minutos"
+                                            min="0"
+                                            max="60"
+                                            step="1"
+                                            value="<?= (int) $config_sesion['aviso_minutos'] ?>"
+                                            required
+                                        >
+                                        <span>min</span>
+                                    </div>
+                                </div>
+
+                                <div class="session-config-field">
+                                    <div class="session-config-field-icon session-icon-purple">
+                                        <i class="fas fa-hourglass-half"></i>
+                                    </div>
+                                    <div class="session-config-field-copy">
+                                        <label for="duracion_maxima_horas">Duración máxima absoluta</label>
+                                        <p>Obliga a iniciar sesión de nuevo aunque exista actividad. Usa 0 para desactivarla.</p>
+                                    </div>
+                                    <div class="session-number-wrap">
+                                        <input
+                                            type="number"
+                                            id="duracion_maxima_horas"
+                                            name="duracion_maxima_horas"
+                                            min="0"
+                                            max="168"
+                                            step="1"
+                                            value="<?= (int) $config_sesion['duracion_maxima_horas'] ?>"
+                                            required
+                                        >
+                                        <span>h</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label class="session-warning-switch">
+                                <div class="session-warning-switch-copy">
+                                    <strong>Mostrar advertencia de expiración</strong>
+                                    <span>Si se desactiva, la sesión se cerrará al vencer sin mostrar el aviso previo.</span>
+                                </div>
+                                <span class="session-switch-control">
+                                    <input
+                                        type="checkbox"
+                                        name="aviso_activo"
+                                        value="1"
+                                        <?= (int) $config_sesion['aviso_activo'] === 1 ? 'checked' : '' ?>
+                                    >
+                                    <span></span>
+                                </span>
+                            </label>
+
+                            <div class="session-config-summary" id="sessionConfigSummary">
+                                <i class="fas fa-circle-info"></i>
+                                <span>
+                                    La sesión se cerrará después de
+                                    <strong id="sessionSummaryIdle"><?= (int) $config_sesion['inactividad_minutos'] ?> minutos</strong>
+                                    sin actividad.
+                                </span>
+                            </div>
+
+                            <div class="session-config-footer">
+                                <div class="session-config-note">
+                                    <i class="fas fa-database"></i>
+                                    <span>
+                                        Guardado en la base de datos para esta instalación.
+                                        <?php if (!empty($config_sesion['updated_at'])): ?>
+                                            Último cambio: <?= date('d/m/Y H:i', strtotime($config_sesion['updated_at'])) ?>.
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                                <button type="submit" class="btn btn-primary session-save-button">
+                                    <i class="fas fa-save"></i>
+                                    Guardar duración
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+                </div>
 
                 <!-- TAB CORREO -->
                 <div class="tab-pane <?= $tab_activo == 'correo' ? 'active' : '' ?>" id="tab-correo" data-tab-content="correo">
@@ -2696,6 +2866,125 @@ if (formGeneral) {
                     confirmButtonColor: '#f97316'
                 });
             }
+        }
+    });
+}
+
+
+// ==================== CONFIGURACIÓN DE SESIÓN ====================
+const formSessionConfig = document.getElementById('formSessionConfig');
+const sessionIdleInput = document.getElementById('inactividad_minutos');
+const sessionWarningInput = document.getElementById('aviso_minutos');
+const sessionMaximumInput = document.getElementById('duracion_maxima_horas');
+const sessionWarningToggle = formSessionConfig?.querySelector('input[name="aviso_activo"]');
+const sessionSummaryIdle = document.getElementById('sessionSummaryIdle');
+
+function actualizarResumenSesion() {
+    if (!formSessionConfig) return;
+
+    const inactividad = Math.max(1, Number(sessionIdleInput?.value || 1));
+    const aviso = Math.max(0, Number(sessionWarningInput?.value || 0));
+    const maxima = Math.max(0, Number(sessionMaximumInput?.value || 0));
+    const avisoActivo = Boolean(sessionWarningToggle?.checked);
+
+    if (sessionSummaryIdle) {
+        sessionSummaryIdle.textContent = `${inactividad} minuto${inactividad === 1 ? '' : 's'}`;
+    }
+
+    const summary = document.getElementById('sessionConfigSummary');
+    if (summary) {
+        const avisoTexto = avisoActivo && aviso > 0
+            ? ` Se mostrará un aviso ${aviso} minuto${aviso === 1 ? '' : 's'} antes.`
+            : ' No se mostrará un aviso previo.';
+        const maximaTexto = maxima > 0
+            ? ` La duración máxima será de ${maxima} hora${maxima === 1 ? '' : 's'}.`
+            : ' No habrá una duración máxima absoluta.';
+
+        summary.querySelector('span').innerHTML =
+            `La sesión se cerrará después de <strong>${inactividad} minuto${inactividad === 1 ? '' : 's'}</strong> sin actividad.${avisoTexto}${maximaTexto}`;
+    }
+}
+
+[sessionIdleInput, sessionWarningInput, sessionMaximumInput, sessionWarningToggle]
+    .filter(Boolean)
+    .forEach(function (control) {
+        control.addEventListener('input', actualizarResumenSesion);
+        control.addEventListener('change', actualizarResumenSesion);
+    });
+
+actualizarResumenSesion();
+
+if (formSessionConfig) {
+    formSessionConfig.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const inactividad = Number(sessionIdleInput?.value || 0);
+        const aviso = Number(sessionWarningInput?.value || 0);
+        const maxima = Number(sessionMaximumInput?.value || 0);
+        const avisoActivo = Boolean(sessionWarningToggle?.checked);
+
+        if (inactividad < 1 || inactividad > 1440) {
+            Swal.fire({
+                title: 'Tiempo no válido',
+                text: 'La inactividad debe estar entre 1 y 1440 minutos.',
+                icon: 'warning',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        if (avisoActivo && aviso >= inactividad) {
+            Swal.fire({
+                title: 'Revisa el aviso',
+                text: 'El aviso debe aparecer antes de que termine el tiempo de inactividad.',
+                icon: 'warning',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        if (maxima < 0 || maxima > 168) {
+            Swal.fire({
+                title: 'Duración máxima no válida',
+                text: 'Captura un valor entre 0 y 168 horas.',
+                icon: 'warning',
+                confirmButtonColor: '#f97316'
+            });
+            return;
+        }
+
+        const confirmacion = await Swal.fire({
+            title: '¿Actualizar duración de sesión?',
+            html: `La sesión se cerrará después de <strong>${inactividad} minuto${inactividad === 1 ? '' : 's'}</strong> sin actividad.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#f97316',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Sí, guardar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
+        });
+
+        if (!confirmacion.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Guardando configuración...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function () { Swal.showLoading(); }
+        });
+
+        try {
+            const data = await enviarFormularioFetch(formSessionConfig, 'update_session');
+            mostrarAlertaServidor(data, 'Configuración de sesión actualizada.');
+        } catch (error) {
+            const data = error.data || {};
+            Swal.fire({
+                title: 'No fue posible guardar',
+                html: data.mensaje || error.message || 'Revisa los valores capturados.',
+                icon: 'error',
+                confirmButtonColor: '#f97316'
+            });
         }
     });
 }

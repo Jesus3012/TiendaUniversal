@@ -135,6 +135,58 @@ table.dataTable tbody td:first-child {
     color: #fff;
 }
 
+/* Método de pago */
+.badge-metodo-pago {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 112px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.badge-metodo-efectivo {
+    color: #166534;
+    background: #dcfce7;
+    border-color: #bbf7d0;
+}
+
+.badge-metodo-transferencia {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-color: #bfdbfe;
+}
+
+.badge-metodo-debito {
+    color: #4338ca;
+    background: #e0e7ff;
+    border-color: #c7d2fe;
+}
+
+.badge-metodo-credito {
+    color: #7e22ce;
+    background: #f3e8ff;
+    border-color: #e9d5ff;
+}
+
+.badge-metodo-otro {
+    color: #475569;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.badge-metodo-inferido::after {
+    content: '*';
+    margin-left: -2px;
+    font-weight: 900;
+}
+
 .venta-cancelada-row {
     background: #fff7f7 !important;
 }
@@ -540,6 +592,13 @@ table.dataTable tbody td:first-child {
         font-size: 0.5rem;
         margin-right: 2px;
     }
+
+    .badge-metodo-pago {
+        min-width: 0;
+        padding: 3px 7px;
+        gap: 4px;
+        font-size: 0.58rem;
+    }
     
     /* Contenedor de acciones en línea */
     .dataTable tbody td:last-child {
@@ -637,6 +696,7 @@ table.dataTable tbody td:first-child {
                                 <th>Folio</th>
                                 <th>Total</th>
                                 <th>Cliente</th>
+                                <th>Método de pago</th>
                                 <th>Fecha</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
@@ -912,6 +972,22 @@ function cargarVentas() {
                     return data;
                 }
             },
+            {
+                data: 'metodo_pago',
+                defaultContent: '',
+                render: function(data, type, row) {
+                    const metodo = normalizarMetodoPago(data);
+
+                    if (type === 'sort' || type === 'filter') {
+                        return etiquetaMetodoPago(metodo);
+                    }
+
+                    return renderMetodoPago(
+                        metodo,
+                        Number(row.metodo_pago_inferido || 0) === 1
+                    );
+                }
+            },
             { 
                 data: 'fecha_venta', 
                 defaultContent: '—',
@@ -962,6 +1038,8 @@ function cargarVentas() {
                     const motivoPlazoCancelacion = String(row.motivo_bloqueo_cancelacion_total || 'El plazo de cancelación ya no está disponible.');
                     const motivoPlazoDevolucion = String(row.motivo_bloqueo_devolucion_parcial || 'El plazo de devolución ya no está disponible.');
                     const correoCliente = row.correo_cliente ? String(row.correo_cliente).trim() : '';
+                    const metodoPago = normalizarMetodoPago(row.metodo_pago || '');
+                    const metodoPagoInferido = Number(row.metodo_pago_inferido || 0) === 1;
                     const puedeReenviar = tieneCorreoValido(correoCliente) && !ventaCancelada;
 
                     const ticketLink = row.ticket_pdf
@@ -1019,7 +1097,13 @@ function cargarVentas() {
 
                     return `
                         <span class="acciones-venta" data-folio="${folioEncoded}" data-estado="${estadoVenta}">
-                            <button class="btn-ver-ticket" data-folio="${folioEncoded}" title="Ver ticket">
+                            <button
+                                class="btn-ver-ticket"
+                                data-folio="${folioEncoded}"
+                                data-metodo="${escapeAttr(metodoPago)}"
+                                data-metodo-inferido="${metodoPagoInferido ? '1' : '0'}"
+                                title="Ver ticket"
+                            >
                                 <i class="fas fa-eye"></i> Ver
                             </button>
                             ${ticketLink}
@@ -1050,7 +1134,7 @@ function cargarVentas() {
                 last: '<i class="fas fa-angle-double-right"></i>'
             }
         },
-        order: [[3, 'desc']],
+        order: [[4, 'desc']],
         pageLength: 10,
         lengthChange: true,
         lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
@@ -1062,10 +1146,10 @@ function cargarVentas() {
         autoWidth: false,
         dom: 'rt<"bottom"lip><"clear">',
         columnDefs: [
-            { orderable: false, targets: [4, 5] },
-            { type: 'date', targets: [3] },
-            { className: "text-center", targets: [4] },
-            { className: "text-nowrap", targets: [5] }
+            { orderable: false, targets: [5, 6] },
+            { type: 'date', targets: [4] },
+            { className: "text-center", targets: [3, 5] },
+            { className: "text-nowrap", targets: [6] }
         ],
         createdRow: function(row, data) {
             if (String(data.estado_venta || '').toLowerCase() === 'cancelada') {
@@ -1082,7 +1166,7 @@ function cargarVentas() {
             if (api.rows().count() === 0) {
                 $('#tablaVentas tbody').html(`
                     <tr class="odd">
-                        <td valign="top" colspan="6" class="dataTables_empty">
+                        <td valign="top" colspan="7" class="dataTables_empty">
                             <div class="empty-message">
                                 <div class="empty-icon">
                                     <i class="fas fa-chart-line"></i>
@@ -1100,7 +1184,7 @@ function cargarVentas() {
 }
 
 function agregarDataLabels() {
-    var columnas = ['', '', '', '', ''];
+    var columnas = ['Total', 'Cliente', 'Pago', 'Fecha', 'Estado', 'Acciones'];
     
     $('#tablaVentas tbody tr').each(function() {
         $(this).find('td').each(function(index) {
@@ -1127,6 +1211,80 @@ function safeDecodeURIComponent(valor) {
     } catch (e) {
         return valor || '';
     }
+}
+
+function normalizarMetodoPago(metodo) {
+    const valor = String(metodo || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+
+    const equivalencias = {
+        cash: 'efectivo',
+        efectivo: 'efectivo',
+        transfer: 'transferencia',
+        transferencia: 'transferencia',
+        bank_transfer: 'transferencia',
+        debito: 'tarjeta_debito',
+        debit: 'tarjeta_debito',
+        debit_card: 'tarjeta_debito',
+        tarjeta_debito: 'tarjeta_debito',
+        credito: 'tarjeta_credito',
+        credit: 'tarjeta_credito',
+        credit_card: 'tarjeta_credito',
+        tarjeta_credito: 'tarjeta_credito',
+        tarjeta: 'tarjeta'
+    };
+
+    return equivalencias[valor] || valor;
+}
+
+function etiquetaMetodoPago(metodo) {
+    const valor = normalizarMetodoPago(metodo);
+
+    const etiquetas = {
+        efectivo: 'Efectivo',
+        transferencia: 'Transferencia',
+        tarjeta_debito: 'Tarjeta de débito',
+        tarjeta_credito: 'Tarjeta de crédito',
+        tarjeta: 'Tarjeta'
+    };
+
+    return etiquetas[valor] || (valor ? valor.replace(/_/g, ' ') : 'No registrado');
+}
+
+function renderMetodoPago(metodo, inferido = false) {
+    const valor = normalizarMetodoPago(metodo);
+    let clase = 'badge-metodo-otro';
+    let icono = 'fas fa-circle-question';
+
+    if (valor === 'efectivo') {
+        clase = 'badge-metodo-efectivo';
+        icono = 'fas fa-money-bill-wave';
+    } else if (valor === 'transferencia') {
+        clase = 'badge-metodo-transferencia';
+        icono = 'fas fa-building-columns';
+    } else if (valor === 'tarjeta_debito') {
+        clase = 'badge-metodo-debito';
+        icono = 'fas fa-credit-card';
+    } else if (valor === 'tarjeta_credito' || valor === 'tarjeta') {
+        clase = 'badge-metodo-credito';
+        icono = 'fas fa-credit-card';
+    }
+
+    const titulo = inferido
+        ? 'Método recuperado como efectivo para una venta histórica por conteo sin forma de pago registrada.'
+        : etiquetaMetodoPago(valor);
+
+    return `
+        <span
+            class="badge-metodo-pago ${clase}${inferido ? ' badge-metodo-inferido' : ''}"
+            title="${escapeAttr(titulo)}"
+        >
+            <i class="${icono}"></i>
+            ${escapeHtml(etiquetaMetodoPago(valor))}
+        </span>
+    `;
 }
 
 function tieneCorreoValido(correo) {
@@ -1337,7 +1495,9 @@ function bindAcciones() {
     $('.btn-ver-ticket').off('click').on('click', function(e) {
         e.preventDefault();
         const folio = safeDecodeURIComponent($(this).attr('data-folio') || $(this).data('folio'));
-        verTicket(folio);
+        const metodoPago = $(this).attr('data-metodo') || '';
+        const metodoInferido = Number($(this).attr('data-metodo-inferido') || 0) === 1;
+        verTicket(folio, metodoPago, metodoInferido);
     });
 
     // Reenvío de ticket
@@ -1671,7 +1831,7 @@ function confirmarDevolucion(folio, idProducto, cantidad, motivo) {
     });
 }
 
-function verTicket(folio) {
+function verTicket(folio, metodoPagoListado = '', metodoInferidoListado = false) {
     Swal.fire({ title: 'Cargando...', didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
     
     $.ajax({
@@ -1692,6 +1852,9 @@ const vendedorNombre = response.vendedor_nombre;
 const estadoVentaTicket = String(response.estado_venta || 'completada').toLowerCase();
 const motivoCancelacionTicket = response.motivo_cancelacion || '';
 const fechaCancelacionTicket = response.fecha_cancelacion || '';
+const metodoPagoTicket = normalizarMetodoPago(response.metodo_pago || metodoPagoListado || '');
+const metodoPagoTexto = etiquetaMetodoPago(metodoPagoTicket);
+const metodoPagoInferidoTicket = Number(response.metodo_pago_inferido || 0) === 1 || metodoInferidoListado;
                 
                 // Obtener datos de la tienda
                 $.ajax({
@@ -1792,6 +1955,12 @@ const cliente = (clienteCorreo && clienteCorreo !== '' && clienteCorreo !== 'nul
                     <span style="font-weight: bold;">VENDEDOR:</span>
                     <span>${escapeHtml(vendedorNombre || 'Sistema')}</span>
                 </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 11px; padding: 3px 0;">
+                    <span style="font-weight: bold;">PAGO:</span>
+                    <span style="text-align:right;">
+                        ${escapeHtml(metodoPagoTexto)}${metodoPagoInferidoTicket ? ' *' : ''}
+                    </span>
+                </div>
                 <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0;">
                     <span style="font-weight: bold;">FECHA:</span>
                     <span>${fechaStr}</span>
@@ -1831,6 +2000,7 @@ const cliente = (clienteCorreo && clienteCorreo !== '' && clienteCorreo !== 'nul
             </div>
             <div style="text-align: center; font-size: 9px; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #333; color: #666;">
                 ¡Gracias por tu compra!<br>Este ticket es válido como comprobante
+                ${metodoPagoInferidoTicket ? '<br><span style="font-size:8px;">* Método recuperado de una venta histórica por conteo.</span>' : ''}
             </div>
         </div>
     `;

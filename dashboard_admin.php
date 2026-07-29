@@ -902,25 +902,7 @@ document.getElementById('formCambiarPassword')?.addEventListener('submit', funct
 });
 <?php endif; ?>
 
-// Control de inactividad
-let tiempoInactivo = 0;
-const TIEMPO_EXPIRACION = 30 * 60 * 1000;
-let advertenciaMostrada = false;
-function reiniciarContador() { tiempoInactivo = 0; advertenciaMostrada = false; }
-setInterval(() => {
-    tiempoInactivo += 1000;
-    if (tiempoInactivo >= 29 * 60 * 1000 && !advertenciaMostrada) {
-        advertenciaMostrada = true;
-        Swal.fire({ icon: 'warning', title: 'Sesión por expirar', text: 'Tu sesión expirará en 1 minuto por inactividad', confirmButtonText: 'Seguir aquí', cancelButtonText: 'Salir', confirmButtonColor: '#f97316', background: '#fff', borderRadius: '16px' }).then((result) => {
-            if (result.isConfirmed) { fetch('mantener_sesion.php').catch(() => {}); reiniciarContador(); }
-            else { window.location.href = 'logout.php'; }
-        });
-    }
-    if (tiempoInactivo >= TIEMPO_EXPIRACION) {
-        Swal.fire({ icon: 'info', title: 'Sesión expirada', text: 'Redirigiendo al login...', timer: 2000, showConfirmButton: false, background: '#fff', borderRadius: '16px' }).then(() => { window.location.href = 'login.php?expired=1'; });
-    }
-}, 1000);
-['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(event => { document.addEventListener(event, reiniciarContador); });
+// El control de inactividad se administra globalmente desde includes/navbar.php.
 
 // Buscadores
 document.getElementById('searchHoy')?.addEventListener('keyup', function() { const term = this.value.toLowerCase().trim(); const rows = document.querySelectorAll('#tbodyVentasHoy .venta-row'); const noResults = document.getElementById('noResultsHoy'); let hasResults = false; rows.forEach(row => { const name = row.querySelector('td:first-child')?.textContent.toLowerCase() || ''; if(name.includes(term)) { row.style.display = ''; hasResults = true; } else { row.style.display = 'none'; } }); if(noResults) { if(term !== '' && !hasResults && rows.length > 0) noResults.style.display = 'block'; else noResults.style.display = 'none'; } });

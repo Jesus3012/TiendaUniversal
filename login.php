@@ -1,8 +1,6 @@
 <?php
-include('includes/db.php');
-include('includes/header.php');
-include('includes/session.php');
-require_once('includes/csrf.php');
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/csrf.php';
 
 $logo_login = '';
 $nombre_tienda = 'Pescadores de la Prehistoria';
@@ -29,14 +27,18 @@ $lock_time = 60; // 1 minuto
 
 // Verificar si viene de una sesión expirada
 $expired_message = '';
-if (isset($_GET['expired']) && $_GET['expired'] == 1) {
+if (isset($_GET['expired']) && in_array((string) $_GET['expired'], ['1', 'inactivity', 'maximum'], true)) {
+    $motivo_expiracion = ((string) $_GET['expired'] === 'maximum')
+        ? 'La duración máxima de tu sesión terminó. Inicia sesión nuevamente.'
+        : 'Tu sesión expiró por inactividad. Inicia sesión nuevamente.';
+
     $expired_message = "
     Swal.fire({
         icon: 'info',
         title: 'Sesión expirada',
-        text: 'Tu sesión ha expirado por inactividad. Por favor, inicia sesión nuevamente.',
+        text: " . json_encode($motivo_expiracion, JSON_UNESCAPED_UNICODE) . ",
         confirmButtonColor: '#f97316',
-        timer: 3000,
+        timer: 3500,
         timerProgressBar: true
     });
     ";
@@ -143,8 +145,10 @@ if (isset($_POST['login'])) {
                 $_SESSION['id'] = $id;
                 $_SESSION['nombre'] = $nombre;
                 $_SESSION['rol'] = $rol;
-                $_SESSION['last_activity'] = time();
-                
+                $inicio_sesion = time();
+                $_SESSION['last_activity'] = $inicio_sesion;
+                $_SESSION['session_started_at'] = $inicio_sesion;
+
                 $_SESSION['debe_cambiar_password'] = $debe_cambiar_password;
 
                 // Guardar cookie "Recordarme"
@@ -167,22 +171,34 @@ if (isset($_POST['login'])) {
                     $mensaje = '<br><small>Accediendo al sistema...</small>';
                 }
 
-                echo "<script>
-                    Swal.fire({
-                        title: '¡Bienvenido!',
-                        html: '<b>{$nombre}</b>{$mensaje}',
-                        icon: 'success',
-                        timer: 2000,
-                        timerProgressBar: true,
-                        allowOutsideClick: false,
-                        showConfirmButton: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    }).then(() => {
-                        window.location.href = '{$dashboard}';
-                    });
-                </script>";
+                /*
+                 * Redirección segura del lado del servidor.
+                 * No se usa Swal aquí porque el login todavía no ha renderizado
+                 * el <head> donde se carga SweetAlert2. Ejecutarlo antes dejaba
+                 * una pantalla blanca con "Swal is not defined".
+                 */
+                $_SESSION['login_bienvenida'] = [
+                    'nombre' => $nombre,
+                    'mostrar_cambio_password' => ($debe_cambiar_password === 1),
+                ];
+
+                if (!headers_sent()) {
+                    header('Location: ' . $dashboard);
+                    exit;
+                }
+
+                $dashboard_json = json_encode(
+                    $dashboard,
+                    JSON_HEX_TAG
+                    | JSON_HEX_APOS
+                    | JSON_HEX_AMP
+                    | JSON_HEX_QUOT
+                    | JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES
+                );
+
+                echo '<script>window.location.replace(' . $dashboard_json . ');</script>';
+                echo '<noscript><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($dashboard, ENT_QUOTES, 'UTF-8') . '"></noscript>';
                 exit;
 
             } else {

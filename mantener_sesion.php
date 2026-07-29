@@ -1,21 +1,33 @@
 <?php
-// mantener_sesion.php
-require_once 'includes/session.php';
+/**
+ * Endpoint para renovar la actividad de una sesión existente.
+ */
 
-header('Content-Type: application/json');
+declare(strict_types=1);
 
-if (isset($_SESSION['usuario_id'])) {
-    $_SESSION['last_activity'] = time();
+require_once __DIR__ . '/includes/session.php';
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+if (empty($_SESSION['usuario_id'])) {
+    http_response_code(401);
     echo json_encode([
-        'success' => true, 
-        'time' => time(),
-        'message' => 'Sesión mantenida activa'
-    ]);
-} else {
-    echo json_encode([
-        'success' => false, 
-        'message' => 'Sesión no existe',
-        'redirect' => 'login.php?expired=inactivity'
-    ]);
+        'success' => false,
+        'expired' => true,
+        'reason' => 'inactivity',
+        'message' => 'La sesión ya no existe.',
+        'redirect' => sesionUrl('login.php?expired=inactivity'),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
-?>
+
+$datos = sesionRenovarActividad();
+
+echo json_encode([
+    'success' => true,
+    'message' => 'Sesión renovada correctamente.',
+    'server_now' => $datos['server_now'],
+    'expires_at' => $datos['expires_at'],
+    'max_expires_at' => $datos['max_expires_at'],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
