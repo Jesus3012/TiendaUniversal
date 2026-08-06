@@ -1,0 +1,31 @@
+{
+  "httpPort": 8787,
+  "token": "pescadores-hardware-local",
+  "bascula": {
+    "enabled": true,
+    "simulation": true,
+    "simulationWeightKg": 1.25,
+    "port": "COM4",
+    "baudRate": 9600,
+    "dataBits": 8,
+    "parity": "None",
+    "stopBits": "One",
+    "delimiter": "\\r\\n",
+    "encoding": "ASCII",
+    "assumeStable": true,
+    "stableTokens": [
+      "ST",
+      "STABLE"
+    ],
+    "weightRegex": "[-+]?\\d+(?:[.,]\\d+)?",
+    "defaultUnit": "kg",
+    "tareCommand": "T\\r\\n"
+  },
+  "cajon": {
+    "enabled": true,
+    "port": "COM3",
+    "baudRate": 9600,
+    "command": "1",
+    "openMilliseconds": 300
+  }
+}

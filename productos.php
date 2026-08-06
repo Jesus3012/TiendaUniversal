@@ -7,6 +7,7 @@ ob_start();
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/csrf.php';
+require_once __DIR__ . '/includes/upc_database.php';
 
 $rol_recibido = strtolower(trim((string) ($_SESSION['rol'] ?? '')));
 
@@ -143,13 +144,23 @@ function aplicarTresPorcientoPrecioVenta($precio_base) {
     return (float) round($precio_base * 1.03, 0, PHP_ROUND_HALF_UP);
 }
 
-function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1) {
+function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1, $origen = 'interno', $es_principal = 1) {
     $producto_id = (int)$producto_id;
-    $codigo = normalizarCodigoBarra($codigo);
+    $codigo = barcode_normalizar_codigo($codigo);
     $disponible = (int)$disponible;
+    $es_principal = (int)$es_principal;
+    $origen = strtolower(trim((string)$origen));
+    $origenesPermitidos = ['fabricante', 'interno', 'bascula', 'manual'];
+    if (!in_array($origen, $origenesPermitidos, true)) {
+        $origen = 'manual';
+    }
 
     if ($codigo === '') {
         throw new Exception('Se intentó guardar un código vacío.');
+    }
+
+    if (strlen($codigo) > 50) {
+        throw new Exception('El código no puede superar 50 caracteres.');
     }
 
     $stmt = $conn->prepare("SELECT id, producto_id FROM codigos_barras WHERE codigo = ? LIMIT 1");
@@ -162,31 +173,56 @@ function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1
     $existente = $res ? $res->fetch_assoc() : null;
     $stmt->close();
 
+    if ($existente && (int)$existente['producto_id'] !== $producto_id) {
+        throw new Exception("El código {$codigo} ya está asignado a otro producto.");
+    }
+
+    $tieneOrigen = barcode_tiene_columna($conn, 'codigos_barras', 'origen');
+    $tienePrincipal = barcode_tiene_columna($conn, 'codigos_barras', 'es_principal');
+
     if ($existente) {
-        if ((int)$existente['producto_id'] !== $producto_id) {
-            throw new Exception("El código {$codigo} ya está asignado a otro producto.");
+        $idExistente = (int)$existente['id'];
+
+        if ($tieneOrigen && $tienePrincipal) {
+            $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ?, origen = ?, es_principal = ? WHERE id = ?");
+            $stmt->bind_param('isii', $disponible, $origen, $es_principal, $idExistente);
+        } elseif ($tieneOrigen) {
+            $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ?, origen = ? WHERE id = ?");
+            $stmt->bind_param('isi', $disponible, $origen, $idExistente);
+        } elseif ($tienePrincipal) {
+            $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ?, es_principal = ? WHERE id = ?");
+            $stmt->bind_param('iii', $disponible, $es_principal, $idExistente);
+        } else {
+            $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ? WHERE id = ?");
+            $stmt->bind_param('ii', $disponible, $idExistente);
         }
 
-        $stmt = $conn->prepare("UPDATE codigos_barras SET disponible = ? WHERE id = ?");
-        if (!$stmt) {
-            throw new Exception('Error preparando actualización de código existente: ' . $conn->error);
-        }
-        $idExistente = (int)$existente['id'];
-        $stmt->bind_param('ii', $disponible, $idExistente);
-        if (!$stmt->execute()) {
-            $error = $stmt->error;
-            $stmt->close();
+        if (!$stmt || !$stmt->execute()) {
+            $error = $stmt ? $stmt->error : $conn->error;
+            if ($stmt) $stmt->close();
             throw new Exception('Error actualizando código existente: ' . $error);
         }
         $stmt->close();
         return;
     }
 
-    $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, ?)");
+    if ($tieneOrigen && $tienePrincipal) {
+        $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, origen, es_principal, disponible) VALUES (?, ?, ?, ?, ?)");
+        if ($stmt) $stmt->bind_param('issii', $producto_id, $codigo, $origen, $es_principal, $disponible);
+    } elseif ($tieneOrigen) {
+        $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, origen, disponible) VALUES (?, ?, ?, ?)");
+        if ($stmt) $stmt->bind_param('issi', $producto_id, $codigo, $origen, $disponible);
+    } elseif ($tienePrincipal) {
+        $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, es_principal, disponible) VALUES (?, ?, ?, ?)");
+        if ($stmt) $stmt->bind_param('isii', $producto_id, $codigo, $es_principal, $disponible);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO codigos_barras (producto_id, codigo, disponible) VALUES (?, ?, ?)");
+        if ($stmt) $stmt->bind_param('isi', $producto_id, $codigo, $disponible);
+    }
+
     if (!$stmt) {
         throw new Exception('Error preparando inserción de código: ' . $conn->error);
     }
-    $stmt->bind_param('isi', $producto_id, $codigo, $disponible);
     if (!$stmt->execute()) {
         $error = $stmt->error;
         $stmt->close();
@@ -194,7 +230,6 @@ function insertarCodigoBarraSeguro($conn, $producto_id, $codigo, $disponible = 1
     }
     $stmt->close();
 }
-
 
 function limpiarArchivosCodigosProducto($producto_id) {
     $codigos_dir = __DIR__ . '/uploads/codigos/';
@@ -573,6 +608,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     csrf_check();
 
     $tipo_inventario = $_POST['tipo_inventario'] ?? 'producto';
+    $modo_codigo = strtolower(trim((string)($_POST['modo_codigo'] ?? 'comercial')));
+    $modo_codigo = in_array($modo_codigo, ['comercial', 'interno'], true) ? $modo_codigo : 'comercial';
+    $codigo_barra = barcode_normalizar_codigo($_POST['codigo_barra'] ?? '');
+    $barcode_fuente = strtolower(trim((string)($_POST['barcode_fuente'] ?? 'manual')));
+    $barcode_fuente = $barcode_fuente === 'upc_database' ? 'upc_database' : 'manual';
+    $barcode_descripcion = trim((string)($_POST['barcode_descripcion'] ?? ''));
+    $barcode_imagen_url = trim((string)($_POST['barcode_imagen_url'] ?? ''));
+
     $nombre = trim($_POST['nombre'] ?? '');
     $categoria = trim($_POST['categoria'] ?? 'General');
     $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
@@ -585,58 +628,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $tipo_inventario === 'producto' &&
         (string)($_POST['fijado_venta'] ?? '0') === '1'
     ) ? 1 : 0;
-    
+    $tipo_venta = strtolower(trim((string)($_POST['tipo_venta'] ?? 'unidad')));
+    $tipo_venta = in_array($tipo_venta, ['unidad', 'peso'], true) ? $tipo_venta : 'unidad';
+    $unidad_medida = $tipo_venta === 'peso' ? 'kg' : 'pz';
+    $decimales_cantidad = $tipo_venta === 'peso' ? 3 : 0;
+
     $proveedor_nombre = '';
     if ($proveedor_id > 0) {
         $stmt = $conn->prepare("SELECT nombre FROM proveedores WHERE id = ? AND activo = 1");
-        $stmt->bind_param("i", $proveedor_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($row = $result->fetch_assoc()) {
-            $proveedor_nombre = $row['nombre'];
+        if ($stmt) {
+            $stmt->bind_param('i', $proveedor_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($row = $result->fetch_assoc()) {
+                $proveedor_nombre = $row['nombre'];
+            }
+            $stmt->close();
         }
     }
-    
-    if ($tipo_inventario === 'producto') {
-        $cantidad = intval($_POST['cantidad'] ?? 0);
-        $precio_compra = round((float)($_POST['precio_compra'] ?? 0), 2);
 
-        // El campo recibido es el precio base. La BD guarda el precio final
-        // con 3% incluido. Ejemplo: 300.00 se guarda como 309.00.
+    if ($tipo_inventario === 'producto') {
+        $cantidad = $tipo_venta === 'peso'
+            ? round((float)($_POST['cantidad'] ?? 0), 3)
+            : (float)intval($_POST['cantidad'] ?? 0);
+        $precio_compra = round((float)($_POST['precio_compra'] ?? 0), 2);
         $precio_venta_base = round((float)($_POST['precio_venta'] ?? 0), 2);
         $precio_venta = aplicarTresPorcientoPrecioVenta($precio_venta_base);
-
         $tipo_codigo = normalizarTipoCodigoProducto($tipo_inventario, $_POST['tipo_codigo'] ?? 'unico');
 
-        // Un artículo especial no maneja cantidad fija. En la BD se guarda 0 y
-        // stock_especial = 1. Como no existe un número de piezas conocido,
-        // siempre utiliza un único código P + ID del producto.
-        if ($stock_especial === 1) {
+        // Un código comercial pertenece a la presentación completa del fabricante.
+        // Todas las piezas iguales comparten ese mismo código.
+        if ($modo_codigo === 'comercial') {
+            $tipo_codigo = 'unico';
+        }
+
+        if ($tipo_venta === 'peso') {
+            $stock_especial = 0;
+            $tipo_codigo = 'unico';
+        } elseif ($stock_especial === 1) {
             $cantidad = 0;
             $tipo_codigo = 'unico';
         }
-        
+
         $atributos = [];
-        $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material'];
+        $campos_atributos = ['marca', 'modelo', 'color', 'talla', 'peso', 'material', 'presentacion'];
         foreach ($campos_atributos as $campo) {
-            if (!empty($_POST[$campo])) {
-                $atributos[$campo] = $_POST[$campo];
+            $valor = trim((string)($_POST[$campo] ?? ''));
+            if ($valor !== '') {
+                $atributos[$campo] = $valor;
             }
         }
-        $atributos_json = !empty($atributos) ? json_encode($atributos, JSON_UNESCAPED_UNICODE) : null;
+
+        if ($modo_codigo === 'comercial') {
+            $atributos['codigo_comercial'] = $codigo_barra;
+            $atributos['fuente_datos'] = $barcode_fuente;
+            if ($barcode_descripcion !== '') {
+                $atributos['descripcion_referencia'] = function_exists('mb_substr')
+                    ? mb_substr($barcode_descripcion, 0, 800, 'UTF-8')
+                    : substr($barcode_descripcion, 0, 800);
+            }
+            if ($barcode_imagen_url !== '' && filter_var($barcode_imagen_url, FILTER_VALIDATE_URL)) {
+                $atributos['imagen_referencia'] = $barcode_imagen_url;
+            }
+        }
+
+        $atributos_json = !empty($atributos)
+            ? json_encode($atributos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : null;
     } else {
+        $modo_codigo = 'interno';
+        $codigo_barra = '';
         $stock_especial = 0;
         $fijado_venta = 0;
+        $tipo_venta = 'unidad';
+        $unidad_medida = 'pz';
+        $decimales_cantidad = 0;
         $cantidad = floatval($_POST['cantidad_insumo'] ?? 0);
         $precio_compra = round((float)($_POST['precio_compra_insumo'] ?? 0), 2);
         $precio_venta_base = 0.00;
         $precio_venta = 0.00;
         $tipo_codigo = 'multiple';
-        $atributos_json = null;
-        
+
         $tipo_unidad_insumo = $_POST['tipo_unidad_insumo'] ?? 'unidad';
         $ancho_insumo = isset($_POST['ancho_insumo']) ? floatval($_POST['ancho_insumo']) : null;
-        
         $atributos = ['tipo_unidad' => $tipo_unidad_insumo];
         if ($ancho_insumo && $ancho_insumo > 0) {
             $atributos['ancho'] = $ancho_insumo;
@@ -645,104 +719,147 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 
     if ($nombre === '') {
-        $errors[] = "El nombre del producto es obligatorio.";
+        $errors[] = 'El nombre del producto es obligatorio.';
+    } elseif ((function_exists('mb_strlen') ? mb_strlen($nombre, 'UTF-8') : strlen($nombre)) > 100) {
+        $errors[] = 'El nombre del producto no puede superar 100 caracteres.';
     }
 
-    if (
-        $tipo_inventario === 'producto'
-        && $fijado_venta === 1
-        && !$productosSoportaFijadoVenta
-    ) {
-        $errors[] = "Antes de fijar productos ejecuta sql/agregar_fijado_venta.sql en la base de datos.";
+    if ((function_exists('mb_strlen') ? mb_strlen($categoria, 'UTF-8') : strlen($categoria)) > 50) {
+        $errors[] = 'La categoría no puede superar 50 caracteres.';
+    }
+
+    if ($tipo_inventario === 'producto' && $fijado_venta === 1 && !$productosSoportaFijadoVenta) {
+        $errors[] = 'Antes de fijar productos ejecuta sql/agregar_fijado_venta.sql en la base de datos.';
     }
 
     if ($tipo_inventario === 'producto') {
         if ($stock_especial !== 1) {
             if (!isset($_POST['cantidad']) || $_POST['cantidad'] === '') {
-                $errors[] = "La cantidad del producto es obligatoria.";
+                $errors[] = 'La cantidad del producto es obligatoria.';
             } elseif ($cantidad <= 0) {
-                $errors[] = "La cantidad debe ser mayor a 0.";
+                $errors[] = 'La cantidad debe ser mayor a 0.';
             }
         }
-        
+
         if (!isset($_POST['precio_compra']) || $_POST['precio_compra'] === '') {
-            $errors[] = "El precio de compra es obligatorio.";
+            $errors[] = 'El precio de compra es obligatorio.';
         } elseif ($precio_compra <= 0) {
-            $errors[] = "El precio de compra debe ser mayor a 0.";
+            $errors[] = 'El precio de compra debe ser mayor a 0.';
         }
-        
+
         if (!isset($_POST['precio_venta']) || $_POST['precio_venta'] === '') {
-            $errors[] = "El precio de venta base es obligatorio.";
+            $errors[] = 'El precio de venta base es obligatorio.';
         } elseif ($precio_venta_base <= 0) {
-            $errors[] = "El precio de venta base debe ser mayor a 0.";
+            $errors[] = 'El precio de venta base debe ser mayor a 0.';
+        }
+
+        if ($modo_codigo === 'comercial') {
+            if ($codigo_barra === '') {
+                $errors[] = 'Escanea o escribe el código del producto, o selecciona “Producto sin código”.';
+            } elseif (strlen($codigo_barra) > 50) {
+                $errors[] = 'El código comercial no puede superar 50 caracteres.';
+            } else {
+                try {
+                    $productoExistenteCodigo = barcode_buscar_producto_local($conn, $codigo_barra);
+                    if ($productoExistenteCodigo) {
+                        $errors[] = 'El código ' . $codigo_barra . ' ya pertenece a “'
+                            . (string)$productoExistenteCodigo['nombre']
+                            . '”. No crees el producto nuevamente; agrega existencias al producto existente.';
+                    }
+                } catch (Throwable $e) {
+                    $errors[] = $e->getMessage();
+                }
+            }
+        } else {
+            $codigo_barra = '';
         }
     } else {
         if (!isset($_POST['cantidad_insumo']) || $_POST['cantidad_insumo'] === '') {
-            $errors[] = "La cantidad del insumo es obligatoria.";
+            $errors[] = 'La cantidad del insumo es obligatoria.';
         } elseif ($cantidad <= 0) {
-            $errors[] = "La cantidad debe ser mayor a 0.";
+            $errors[] = 'La cantidad debe ser mayor a 0.';
         }
-        
+
         if (!isset($_POST['precio_compra_insumo']) || $_POST['precio_compra_insumo'] === '') {
-            $errors[] = "El precio de compra es obligatorio.";
+            $errors[] = 'El precio de compra es obligatorio.';
         } elseif ($precio_compra <= 0) {
-            $errors[] = "El precio de compra debe ser mayor a 0.";
+            $errors[] = 'El precio de compra debe ser mayor a 0.';
         }
-        
-        $precio_venta = 0;
     }
 
     if (empty($errors)) {
         $imagen_path = '';
         if (!empty($_FILES['imagen']['name'])) {
-            $upload_dir = __DIR__.'/uploads/productos/';
-            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+            $upload_dir = __DIR__ . '/uploads/productos/';
+            if (!is_dir($upload_dir) && !mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
+                $errors[] = 'No fue posible crear la carpeta de imágenes.';
+            }
 
-            $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-            
-            $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
-            $nombre_limpio = preg_replace('/[\s]+/', '_', $nombre_limpio);
-            $nombre_limpio = trim($nombre_limpio, '_');
-            
-            if (empty($nombre_limpio)) {
-                $nombre_limpio = 'producto';
-            }
-            
-            $nombre_base = $nombre_limpio;
-            $imagen_name = $nombre_base . '.' . $extension;
-            $contador = 1;
-            
-            while (file_exists($upload_dir . $imagen_name)) {
-                $imagen_name = $nombre_base . '_' . $contador . '.' . $extension;
-                $contador++;
-            }
-            
-            $imagen_path = 'uploads/productos/' . $imagen_name;
-            
-            if (!move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
-                $errors[] = "Error al subir la imagen.";
-                $imagen_path = '';
+            if (empty($errors)) {
+                $extension = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
+                $extensionesPermitidas = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+                if (!in_array($extension, $extensionesPermitidas, true)) {
+                    $errors[] = 'La imagen debe ser JPG, JPEG, PNG, WEBP o GIF.';
+                } elseif ((int)($_FILES['imagen']['size'] ?? 0) > 8 * 1024 * 1024) {
+                    $errors[] = 'La imagen no puede superar 8 MB.';
+                } else {
+                    $nombre_limpio = preg_replace('/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ\s-]/u', '', $nombre);
+                    $nombre_limpio = preg_replace('/[\s]+/', '_', (string)$nombre_limpio);
+                    $nombre_limpio = trim((string)$nombre_limpio, '_') ?: 'producto';
+                    $imagen_name = $nombre_limpio . '.' . $extension;
+                    $contador = 1;
+                    while (file_exists($upload_dir . $imagen_name)) {
+                        $imagen_name = $nombre_limpio . '_' . $contador . '.' . $extension;
+                        $contador++;
+                    }
+                    $imagen_path = 'uploads/productos/' . $imagen_name;
+                    if (!move_uploaded_file($_FILES['imagen']['tmp_name'], $upload_dir . $imagen_name)) {
+                        $errors[] = 'Error al subir la imagen.';
+                        $imagen_path = '';
+                    }
+                }
             }
         }
 
         if (empty($errors)) {
             $conn->begin_transaction();
-            
+
             try {
-                if ($productosSoportaFijadoVenta) {
-                    $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial, fijado_venta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param("sssssdddsssii", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial, $fijado_venta);
-                } else {
-                    // Compatibilidad temporal mientras se ejecuta la migración SQL.
-                    $stmt = $conn->prepare("INSERT INTO productos (nombre, categoria, atributos, proveedor, imagen, cantidad, precio_compra, precio_venta, tipo_codigo, tipo_inventario, tipo_adquisicion, stock_especial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param("sssssdddsssi", $nombre, $categoria, $atributos_json, $proveedor_nombre, $imagen_path, $cantidad, $precio_compra, $precio_venta, $tipo_codigo, $tipo_inventario, $tipo_adquisicion, $stock_especial);
+                $stmt = $conn->prepare("INSERT INTO productos (
+                    nombre, categoria, atributos, proveedor, imagen, cantidad,
+                    precio_compra, precio_venta, tipo_codigo, tipo_inventario,
+                    tipo_adquisicion, stock_especial, fijado_venta,
+                    tipo_venta, unidad_medida, decimales_cantidad
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                if (!$stmt) {
+                    throw new Exception('Ejecuta primero sql/integracion_bascula.sql. Detalle: ' . $conn->error);
                 }
-                
+
+                $stmt->bind_param(
+                    'sssssdddsssiissi',
+                    $nombre,
+                    $categoria,
+                    $atributos_json,
+                    $proveedor_nombre,
+                    $imagen_path,
+                    $cantidad,
+                    $precio_compra,
+                    $precio_venta,
+                    $tipo_codigo,
+                    $tipo_inventario,
+                    $tipo_adquisicion,
+                    $stock_especial,
+                    $fijado_venta,
+                    $tipo_venta,
+                    $unidad_medida,
+                    $decimales_cantidad
+                );
+
                 if (!$stmt->execute()) {
-                    throw new Exception("Error al insertar producto: " . $conn->error);
+                    throw new Exception('Error al insertar producto: ' . $stmt->error);
                 }
-                
-                $producto_id = $stmt->insert_id;
+
+                $producto_id = (int)$stmt->insert_id;
                 $stmt->close();
 
                 $cero = 0;
@@ -750,37 +867,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                     ? 'Registro inicial de artículo especial sin límite de stock'
                     : 'Registro inicial de producto';
 
-                $stmt_historial = $conn->prepare("INSERT INTO historial_stock (producto_id, cantidad_anterior, cantidad_nueva, cantidad_agregada, tipo_movimiento, nota, usuario_id) VALUES (?, ?, ?, ?, 'entrada', ?, ?)");
-                $stmt_historial->bind_param("idddsi", $producto_id, $cero, $cantidad, $cantidad, $nota_historial, $_SESSION['usuario_id']);
-                
+                $stmt_historial = $conn->prepare("INSERT INTO historial_stock (
+                    producto_id, cantidad_anterior, cantidad_nueva, cantidad_agregada,
+                    tipo_movimiento, nota, usuario_id
+                ) VALUES (?, ?, ?, ?, 'entrada', ?, ?)");
+                if (!$stmt_historial) {
+                    throw new Exception('No se pudo preparar el historial de stock: ' . $conn->error);
+                }
+                $usuarioId = (int)$_SESSION['usuario_id'];
+                $stmt_historial->bind_param('idddsi', $producto_id, $cero, $cantidad, $cantidad, $nota_historial, $usuarioId);
                 if (!$stmt_historial->execute()) {
-                    throw new Exception("Error al registrar historial: " . $conn->error);
+                    throw new Exception('Error al registrar historial: ' . $stmt_historial->error);
                 }
                 $stmt_historial->close();
 
-                $codigos_dir = __DIR__.'/uploads/codigos/';
-                if (!is_dir($codigos_dir)) mkdir($codigos_dir, 0777, true);
+                $codigos_dir = __DIR__ . '/uploads/codigos/';
+                if (!is_dir($codigos_dir)) {
+                    @mkdir($codigos_dir, 0777, true);
+                }
 
                 if ($tipo_inventario === 'producto') {
-                    generarCodigosBarras(
-                        $conn,
-                        $nombre,
-                        $producto_id,
-                        $stock_especial === 1 ? 1 : $cantidad,
-                        $stock_especial === 1 ? 'unico' : $tipo_codigo,
-                        $tipo_inventario
-                    );
+                    if ($modo_codigo === 'comercial') {
+                        insertarCodigoBarraSeguro($conn, $producto_id, $codigo_barra, 1, 'fabricante', 1);
+                    } else {
+                        generarCodigosBarras(
+                            $conn,
+                            $nombre,
+                            $producto_id,
+                            $stock_especial === 1 ? 1 : $cantidad,
+                            $stock_especial === 1 ? 'unico' : $tipo_codigo,
+                            $tipo_inventario
+                        );
+                    }
                 }
-                
+
                 $conn->commit();
-                
+
+                $detalleCodigo = $modo_codigo === 'comercial'
+                    ? '<br><small><b>Código del producto:</b> ' . htmlspecialchars($codigo_barra, ENT_QUOTES, 'UTF-8') . '. No se generó otro código.</small>'
+                    : '<br><small><b>Código interno:</b> generado automáticamente por el sistema.</small>';
+
                 echo "<script>
                 Swal.fire({
                     icon: 'success',
                     title: 'Producto agregado',
-                    html: 'El producto se agregó correctamente.<br><small>Precio final guardado: <b>$" . number_format($precio_venta, 0) . "</b> (incluye 3% y está redondeado).</small>' +
-                          '" . ($stock_especial === 1 ? "<br><small><b>Artículo especial:</b> sin límite de stock y con código único.</small>" : "") . "' +
-                          '" . ($fijado_venta === 1 ? "<br><small><b>Fijado en ventas:</b> aparecerá primero en Seleccionar producto.</small>" : "") . "',
+                    html: 'El producto se agregó correctamente.<br><small>Precio final guardado: <b>$" . number_format($precio_venta, 0) . "</b> (incluye 3% y está redondeado).</small>" .
+                          "'" . ($stock_especial === 1 ? "<br><small><b>Artículo especial:</b> sin límite de stock y con código único.</small>" : "") . "' +" .
+                          "'" . ($fijado_venta === 1 ? "<br><small><b>Fijado en ventas:</b> aparecerá primero en Seleccionar producto.</small>" : "") . "' +" .
+                          "'" . $detalleCodigo . "',
                     confirmButtonText: 'Aceptar',
                     confirmButtonColor: '#f97316'
                 }).then(() => {
@@ -788,8 +922,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 });
                 </script>";
                 exit;
-                
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
                 $errors[] = $e->getMessage();
             }
@@ -808,10 +941,10 @@ function generarCodigosBarras($conn, $nombre, $producto_id, $cantidad, $tipo_cod
     $cantidad = max(0, (int)floor((float)$cantidad));
 
     if ($tipo_codigo === 'unico') {
-        insertarCodigoBarraSeguro($conn, $producto_id, codigoUnicoProducto($producto_id), 1);
+        insertarCodigoBarraSeguro($conn, $producto_id, codigoUnicoProducto($producto_id), 1, 'interno', 1);
     } else {
         for ($i = 1; $i <= $cantidad; $i++) {
-            insertarCodigoBarraSeguro($conn, $producto_id, codigoMultipleProducto($producto_id, $i), 1);
+            insertarCodigoBarraSeguro($conn, $producto_id, codigoMultipleProducto($producto_id, $i), 1, 'interno', $i === 1 ? 1 : 0);
         }
     }
 
@@ -972,9 +1105,74 @@ if (!empty($errors)) {
 
                             <div class="row">
                                 <div class="col-md-6">
+                                    <?php if ($tipo_seleccionado == 'producto'): ?>
+                                    <section class="barcode-register-card" id="barcodeRegisterCard">
+                                        <div class="barcode-register-heading">
+                                            <span class="barcode-register-icon"><i class="fas fa-barcode"></i></span>
+                                            <div>
+                                                <strong>Identificación del producto</strong>
+                                                <small>Usa el código original cuando exista o genera uno interno para artículos sin etiqueta.</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="codigo-mode-selector" role="radiogroup" aria-label="Origen del código">
+                                            <label class="codigo-mode-option active" id="codigoModeComercialLabel">
+                                                <input type="radio" name="modo_codigo" value="comercial" checked>
+                                                <span><i class="fas fa-barcode"></i> Producto con código</span>
+                                            </label>
+                                            <label class="codigo-mode-option" id="codigoModeInternoLabel">
+                                                <input type="radio" name="modo_codigo" value="interno">
+                                                <span><i class="fas fa-tag"></i> Producto sin código</span>
+                                            </label>
+                                        </div>
+
+                                        <div id="codigoComercialFields">
+                                            <label for="codigo_barra_input">Código de barras del producto <span class="text-danger">*</span></label>
+                                            <div class="barcode-search-row">
+                                                <div class="barcode-input-wrap">
+                                                    <i class="fas fa-barcode"></i>
+                                                    <input
+                                                        type="text"
+                                                        name="codigo_barra"
+                                                        id="codigo_barra_input"
+                                                        class="form-control"
+                                                        maxlength="50"
+                                                        autocomplete="off"
+                                                        inputmode="numeric"
+                                                        placeholder="Escanea o escribe el código"
+                                                    >
+                                                </div>
+                                                <button type="button" class="btn btn-primary" id="buscarCodigoBtn">
+                                                    <i class="fas fa-search"></i>
+                                                    <span>Buscar</span>
+                                                </button>
+                                            </div>
+                                            <small class="barcode-key-hint">
+                                                <i class="fas fa-keyboard"></i>
+                                                El lector funciona como teclado y normalmente envía Enter. También puedes escribir el código y pulsar Buscar.
+                                            </small>
+                                        </div>
+
+                                        <input type="hidden" name="barcode_fuente" id="barcode_fuente" value="manual">
+                                        <input type="hidden" name="barcode_descripcion" id="barcode_descripcion" value="">
+                                        <input type="hidden" name="barcode_imagen_url" id="barcode_imagen_url" value="">
+
+                                        <div class="upc-database-status is-idle" id="upcDatabaseStatus" aria-live="polite">
+                                            <i class="fas fa-info-circle"></i>
+                                            <div>
+                                                <strong>Listo para escanear</strong>
+                                                <span>Primero se revisará tu inventario y después UPC Database.</span>
+                                            </div>
+                                        </div>
+                                        <p class="barcode-source-note">
+                                            El token se mantiene en el servidor. Si UPC Database no encuentra el artículo, no responde o alcanza su límite, podrás completar los datos manualmente y guardar exactamente el código leído.
+                                        </p>
+                                    </section>
+                                    <?php endif; ?>
+
                                     <div class="form-group">
                                         <label>Nombre del producto <span class="text-danger">*</span></label>
-                                        <input type="text" name="nombre" id="nombre_input" class="form-control" placeholder="Ej. Llaveros, playeras, tazas, etc." required>
+                                        <input type="text" name="nombre" id="nombre_input" class="form-control" maxlength="100" placeholder="Ej. Llaveros, playeras, tazas, etc." required>
                                     </div>
 
                                     <div class="form-group">
@@ -1040,10 +1238,51 @@ if (!empty($errors)) {
                                     <div id="producto-section" class="form-section producto-section">
                                         <h5 class="text-success"><i class="fas fa-box mr-2"></i> Datos del Producto</h5>
 
+                                        <div class="form-group tipo-venta-group">
+                                            <label class="tipo-venta-label">
+                                                <i class="fas fa-scale-balanced"></i>
+                                                Forma de venta <span class="text-danger">*</span>
+                                            </label>
+
+                                            <div
+                                                class="tipo-venta-selector"
+                                                id="tipoVentaSelector"
+                                                role="radiogroup"
+                                                aria-label="Forma de venta"
+                                            >
+                                                <label class="tipo-venta-option active" id="tipoVentaUnidadCard">
+                                                    <input type="radio" name="tipo_venta" value="unidad" checked>
+                                                    <span class="tipo-venta-icon" aria-hidden="true">
+                                                        <i class="fas fa-cubes"></i>
+                                                    </span>
+                                                    <span class="tipo-venta-copy">
+                                                        <strong>Por pieza</strong>
+                                                        <small>Unidades enteras</small>
+                                                    </span>
+                                                </label>
+
+                                                <label class="tipo-venta-option" id="tipoVentaPesoCard">
+                                                    <input type="radio" name="tipo_venta" value="peso">
+                                                    <span class="tipo-venta-icon" aria-hidden="true">
+                                                        <i class="fas fa-weight-scale"></i>
+                                                    </span>
+                                                    <span class="tipo-venta-copy">
+                                                        <strong>Por peso</strong>
+                                                        <small>Precio por kilogramo</small>
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            <div class="tipo-venta-help" id="tipoVentaHelp" aria-live="polite">
+                                                <i class="fas fa-circle-info"></i>
+                                                <span>Venta por unidades con código único o múltiple.</span>
+                                            </div>
+                                        </div>
+
                                         <div class="row product-stock-row">
                                             <div class="col-md-6">
                                                 <div class="form-group" id="cantidad_producto_group">
-                                                    <label>Cantidad <span class="text-danger">*</span></label>
+                                                    <label id="cantidad_producto_label">Cantidad inicial (piezas) <span class="text-danger">*</span></label>
                                                     <div class="field-with-icon">
                                                         <i class="fas fa-cubes"></i>
                                                         <input
@@ -1064,22 +1303,27 @@ if (!empty($errors)) {
                                                 <div class="form-group" id="tipo_codigo_group">
                                                     <label>Tipo de código</label>
                                                     <select name="tipo_codigo" id="tipo_codigo_select" class="form-control">
-                                                        <option value="unico" selected>Codigo único</option>
-                                                        <option value="multiple">Codigo múltiple</option>
+                                                        <option value="unico" selected>Código único</option>
+                                                        <option value="multiple">Código múltiple</option>
                                                     </select>
+                                                    <small class="tipo-codigo-help" id="tipo_codigo_help">
+                                                        Usa un código para todo el producto o uno por cada pieza.
+                                                    </small>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <label class="special-stock-toggle" id="special_stock_toggle" for="stock_especial">
-                                            <input type="checkbox" name="stock_especial" id="stock_especial" value="1">
-                                            <span class="special-stock-switch" aria-hidden="true"></span>
-                                            <span class="special-stock-text">
-                                                <strong>Producto especial</strong>
-                                                <small>Sin cantidad fija</small>
-                                            </span>
-                                            <i class="fas fa-infinity special-stock-icon" aria-hidden="true"></i>
-                                        </label>
+                                        <div id="special_stock_wrapper" class="special-stock-wrapper">
+                                            <label class="special-stock-toggle" id="special_stock_toggle" for="stock_especial">
+                                                <input type="checkbox" name="stock_especial" id="stock_especial" value="1">
+                                                <span class="special-stock-switch" aria-hidden="true"></span>
+                                                <span class="special-stock-text">
+                                                    <strong>Producto especial</strong>
+                                                    <small>Sin cantidad fija ni descuento automático de existencias.</small>
+                                                </span>
+                                                <i class="fas fa-infinity special-stock-icon" aria-hidden="true"></i>
+                                            </label>
+                                        </div>
 
                                         <label class="pin-sale-toggle" id="pin_sale_toggle" for="fijado_venta">
                                             <input
@@ -1102,13 +1346,13 @@ if (!empty($errors)) {
                                         <div class="row">
                                             <div class="col-md-6">
                                                 <div class="form-group">
-                                                    <label>Precio compra <span class="text-danger">*</span></label>
-                                                    <input type="number" step="0.01" name="precio_compra" class="form-control" placeholder="0.00" required>
+                                                    <label id="precio_compra_label">Precio compra por pieza <span class="text-danger">*</span></label>
+                                                    <input type="number" step="0.01" name="precio_compra" id="precio_compra" class="form-control" placeholder="0.00" required>
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <div class="form-group">
-                                                    <label>Precio venta base <span class="text-danger">*</span></label>
+                                                    <label id="precio_venta_label">Precio venta base por pieza <span class="text-danger">*</span></label>
                                                     <input
                                                         type="number"
                                                         step="0.01"
@@ -1131,25 +1375,37 @@ if (!empty($errors)) {
 
                                         <div class="card card-secondary mt-3">
                                             <div class="card-header">
-                                                <h6 class="mb-0">Atributos adicionales <small class="text-muted">(opcional)</small></h6>
+                                                <h6 class="mb-0">Atributos adicionales <small class="text-muted">(la API completa los disponibles)</small></h6>
                                             </div>
                                             <div class="card-body">
                                                 <div class="row">
                                                     <div class="col-md-6 mb-2">
                                                         <label>Marca</label>
-                                                        <input type="text" name="marca" class="form-control form-control-sm" placeholder="Ej. Pescadores">
+                                                        <input type="text" name="marca" id="marca_input" class="form-control form-control-sm" maxlength="120" placeholder="Ej. Marinela">
+                                                    </div>
+                                                    <div class="col-md-6 mb-2">
+                                                        <label>Modelo</label>
+                                                        <input type="text" name="modelo" id="modelo_input" class="form-control form-control-sm" maxlength="120" placeholder="Ej. ABC-123">
+                                                    </div>
+                                                    <div class="col-md-6 mb-2">
+                                                        <label>Presentación</label>
+                                                        <input type="text" name="presentacion" id="presentacion_input" class="form-control form-control-sm" maxlength="120" placeholder="Ej. 50 g, 600 ml, paquete con 6">
+                                                    </div>
+                                                    <div class="col-md-6 mb-2">
+                                                        <label>Peso o contenido</label>
+                                                        <input type="text" name="peso" id="peso_input" class="form-control form-control-sm" maxlength="80" placeholder="Ej. 50 g">
                                                     </div>
                                                     <div class="col-md-6 mb-2">
                                                         <label>Color</label>
-                                                        <input type="text" name="color" class="form-control form-control-sm" placeholder="Ej. Negro">
+                                                        <input type="text" name="color" id="color_input" class="form-control form-control-sm" maxlength="80" placeholder="Ej. Negro">
                                                     </div>
                                                     <div class="col-md-6 mb-2">
                                                         <label>Talla</label>
-                                                        <input type="text" name="talla" class="form-control form-control-sm" placeholder="Ej. M, L, XL">
+                                                        <input type="text" name="talla" id="talla_input" class="form-control form-control-sm" maxlength="80" placeholder="Ej. M, L, XL">
                                                     </div>
                                                     <div class="col-md-6 mb-2">
                                                         <label>Material</label>
-                                                        <input type="text" name="material" class="form-control form-control-sm" placeholder="Ej. Algodón">
+                                                        <input type="text" name="material" id="material_input" class="form-control form-control-sm" maxlength="100" placeholder="Ej. Algodón">
                                                     </div>
                                                 </div>
                                             </div>
@@ -1488,17 +1744,453 @@ document.getElementById('formProveedor').addEventListener('submit', function(e) 
     });
 });
 
+// ===== CÓDIGO COMERCIAL + UPC DATABASE =====
+function normalizarCodigoComercial(valor) {
+    return String(valor || '')
+        .trim()
+        .replace(/[\r\n\t\s]+/g, '')
+        .toUpperCase();
+}
+
+function modoCodigoActual() {
+    return document.querySelector('input[name="modo_codigo"]:checked')?.value === 'interno'
+        ? 'interno'
+        : 'comercial';
+}
+
+function escaparHtml(valor) {
+    const div = document.createElement('div');
+    div.textContent = String(valor ?? '');
+    return div.innerHTML;
+}
+
+function establecerEstadoCodigo(tipo, titulo, mensaje) {
+    const estado = document.getElementById('upcDatabaseStatus');
+    if (!estado) return;
+
+    const iconos = {
+        idle: 'fa-info-circle',
+        loading: 'fa-spinner fa-spin',
+        success: 'fa-check-circle',
+        warning: 'fa-exclamation-triangle',
+        error: 'fa-times-circle'
+    };
+
+    estado.className = `upc-database-status is-${tipo}`;
+    estado.innerHTML = `
+        <i class="fas ${iconos[tipo] || iconos.idle}"></i>
+        <div>
+            <strong>${escaparHtml(titulo)}</strong>
+            <span>${escaparHtml(mensaje)}</span>
+        </div>
+    `;
+}
+
+function limpiarDatosUPCDatabase({ conservarCodigo = true, conservarCamposManuales = true } = {}) {
+    const codigo = document.getElementById('codigo_barra_input');
+    if (!conservarCodigo && codigo) codigo.value = '';
+
+    const idsCampos = [
+        'nombre_input', 'marca_input', 'modelo_input', 'presentacion_input',
+        'peso_input', 'color_input', 'talla_input', 'material_input'
+    ];
+
+    idsCampos.forEach(id => {
+        const campo = document.getElementById(id);
+        if (!campo) return;
+        if (campo.dataset.barcodeAutofill === '1') {
+            campo.value = '';
+            delete campo.dataset.barcodeAutofill;
+        }
+    });
+
+    const categoria = document.getElementById('categoriaSelect');
+    if (categoria?.dataset.barcodeAutofill === '1') {
+        categoria.value = 'General';
+        delete categoria.dataset.barcodeAutofill;
+    }
+
+    const preview = document.getElementById('previewImg');
+    if (preview?.dataset.externa === '1') {
+        preview.removeAttribute('src');
+        preview.classList.add('d-none');
+        delete preview.dataset.externa;
+    }
+
+    const fuente = document.getElementById('barcode_fuente');
+    const descripcion = document.getElementById('barcode_descripcion');
+    const imagen = document.getElementById('barcode_imagen_url');
+    if (fuente) fuente.value = 'manual';
+    if (descripcion) descripcion.value = '';
+    if (imagen) imagen.value = '';
+}
+
+function agregarOSeleccionarCategoria(categoria) {
+    const select = document.getElementById('categoriaSelect');
+    const valor = String(categoria || '').trim();
+    if (!select || !valor) return;
+
+    const opcionExistente = Array.from(select.options).find(
+        option => option.value.toLowerCase() === valor.toLowerCase()
+    );
+
+    if (opcionExistente) {
+        select.value = opcionExistente.value;
+        select.dataset.barcodeAutofill = '1';
+        return;
+    }
+
+    const option = document.createElement('option');
+    option.value = valor;
+    option.textContent = valor;
+    option.selected = true;
+    option.dataset.barcode = '1';
+    select.appendChild(option);
+    select.dataset.barcodeAutofill = '1';
+}
+
+function colocarSugerencia(id, valor) {
+    const campo = document.getElementById(id);
+    const sugerencia = String(valor || '').trim();
+    if (!campo || !sugerencia) return;
+
+    const puedeReemplazar = campo.value.trim() === '' || campo.dataset.barcodeAutofill === '1';
+    if (puedeReemplazar) {
+        campo.value = sugerencia;
+        campo.dataset.barcodeAutofill = '1';
+    }
+}
+
+function completarFormularioDesdeUPCDatabase(producto) {
+    colocarSugerencia('nombre_input', producto.nombre);
+    colocarSugerencia('marca_input', producto.marca);
+    colocarSugerencia('modelo_input', producto.modelo);
+    colocarSugerencia('presentacion_input', producto.presentacion);
+    colocarSugerencia('peso_input', producto.peso);
+    colocarSugerencia('color_input', producto.color);
+    colocarSugerencia('talla_input', producto.talla);
+    colocarSugerencia('material_input', producto.material);
+
+    if (producto.categoria) agregarOSeleccionarCategoria(producto.categoria);
+
+    const fuente = document.getElementById('barcode_fuente');
+    const descripcion = document.getElementById('barcode_descripcion');
+    const imagen = document.getElementById('barcode_imagen_url');
+    if (fuente) fuente.value = producto.fuente === 'upc_database' ? 'upc_database' : 'manual';
+    if (descripcion) descripcion.value = producto.descripcion || '';
+    if (imagen) imagen.value = producto.imagen_url || '';
+
+    const preview = document.getElementById('previewImg');
+    if (preview && producto.imagen_url) {
+        preview.src = producto.imagen_url;
+        preview.classList.remove('d-none');
+        preview.dataset.externa = '1';
+        preview.title = 'Imagen de referencia devuelta por UPC Database. Para conservar una imagen propia, selecciónala en el campo Imagen.';
+    }
+}
+
+function mensajeConCuota(mensaje, data) {
+    const restantes = data?.quota?.restantes;
+    const desdeCache = data?.desde_cache === true;
+    const detalles = [];
+    if (Number.isInteger(restantes)) detalles.push(`Consultas gratuitas restantes hoy: ${restantes}`);
+    if (desdeCache) detalles.push('resultado reutilizado desde caché de sesión');
+    return detalles.length ? `${mensaje} · ${detalles.join(' · ')}` : mensaje;
+}
+
+async function buscarCodigoComercial() {
+    const input = document.getElementById('codigo_barra_input');
+    const boton = document.getElementById('buscarCodigoBtn');
+    if (!input || modoCodigoActual() !== 'comercial') return;
+
+    const codigo = normalizarCodigoComercial(input.value);
+    input.value = codigo;
+
+    if (!codigo) {
+        establecerEstadoCodigo('warning', 'Falta el código', 'Escanea el producto o escribe su código y pulsa Buscar.');
+        input.focus();
+        return;
+    }
+
+    if (codigo.length > 50) {
+        establecerEstadoCodigo('error', 'Código demasiado largo', 'El código no puede superar 50 caracteres.');
+        return;
+    }
+
+    boton?.setAttribute('disabled', 'disabled');
+    input.dataset.duplicado = '0';
+    establecerEstadoCodigo('loading', 'Buscando producto', 'Revisando inventario y consultando UPC Database…');
+
+    try {
+        const respuesta = await fetch(`api/buscar_codigo_producto.php?codigo=${encodeURIComponent(codigo)}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            cache: 'no-store'
+        });
+
+        let data;
+        try {
+            data = await respuesta.json();
+        } catch (errorJson) {
+            throw new Error('El servidor no devolvió una respuesta JSON válida.');
+        }
+
+        if (!respuesta.ok || !data.success) {
+            throw new Error(data.message || 'No fue posible consultar el código.');
+        }
+
+        if (data.status === 'inventario') {
+            limpiarDatosUPCDatabase({ conservarCodigo: true, conservarCamposManuales: true });
+            const producto = data.producto || {};
+            input.dataset.duplicado = '1';
+            establecerEstadoCodigo(
+                'error',
+                'Producto ya registrado',
+                `El código pertenece a “${producto.nombre || 'producto existente'}”. Existencia actual: ${producto.cantidad ?? 0} ${producto.unidad_medida || 'pz'}. Agrega existencias al registro actual.`
+            );
+            return;
+        }
+
+        input.dataset.duplicado = '0';
+
+        if (data.status === 'externo') {
+            completarFormularioDesdeUPCDatabase(data.producto || {});
+            establecerEstadoCodigo(
+                data.api_status === 'datos_incompletos' ? 'warning' : 'success',
+                data.api_status === 'datos_incompletos' ? 'Resultado incompleto' : 'Producto encontrado',
+                mensajeConCuota(data.message || 'Verifica la información sugerida y completa precios, proveedor y existencias.', data)
+            );
+            document.getElementById('precio_compra')?.focus();
+            return;
+        }
+
+        limpiarDatosUPCDatabase({ conservarCodigo: true, conservarCamposManuales: true });
+        establecerEstadoCodigo(
+            'warning',
+            'Completa los datos manualmente',
+            mensajeConCuota(data.message || 'No se encontró información, pero puedes guardar este mismo código sin generar otro.', data)
+        );
+        document.getElementById('nombre_input')?.focus();
+    } catch (error) {
+        limpiarDatosUPCDatabase({ conservarCodigo: true, conservarCamposManuales: true });
+        establecerEstadoCodigo(
+            'warning',
+            'Consulta no disponible',
+            `${error.message || 'No fue posible consultar la API.'} Puedes completar los datos manualmente y conservar el código.`
+        );
+        document.getElementById('nombre_input')?.focus();
+    } finally {
+        boton?.removeAttribute('disabled');
+    }
+}
+
+function actualizarModoCodigoProducto() {
+    const modo = modoCodigoActual();
+    const esComercial = modo === 'comercial';
+    const fields = document.getElementById('codigoComercialFields');
+    const codigo = document.getElementById('codigo_barra_input');
+    const tipoCodigo = document.getElementById('tipo_codigo_select');
+    const tipoCodigoGroup = document.getElementById('tipo_codigo_group');
+    const esPeso = document.querySelector('input[name="tipo_venta"]:checked')?.value === 'peso';
+    const esEspecial = Boolean(document.getElementById('stock_especial')?.checked) && !esPeso;
+
+    document.querySelectorAll('.codigo-mode-option').forEach(label => {
+        const radio = label.querySelector('input[name="modo_codigo"]');
+        label.classList.toggle('active', Boolean(radio?.checked));
+    });
+
+    if (fields) fields.hidden = !esComercial;
+    if (codigo) {
+        codigo.disabled = !esComercial;
+        codigo.required = esComercial;
+        if (!esComercial) {
+            codigo.dataset.duplicado = '0';
+            limpiarDatosUPCDatabase({ conservarCodigo: false, conservarCamposManuales: true });
+        }
+    }
+
+    if (tipoCodigo) {
+        if (esComercial || esPeso || esEspecial) {
+            tipoCodigo.value = 'unico';
+            tipoCodigo.disabled = true;
+            tipoCodigo.classList.add('is-locked');
+        } else {
+            tipoCodigo.disabled = false;
+            tipoCodigo.classList.remove('is-locked');
+        }
+    }
+
+    if (tipoCodigoGroup) {
+        tipoCodigoGroup.classList.toggle('commercial-code-active', esComercial);
+    }
+
+    if (esComercial) {
+        establecerEstadoCodigo('idle', 'Listo para escanear', 'Se revisará tu inventario y después UPC Database.');
+        window.setTimeout(() => codigo?.focus(), 80);
+    } else {
+        establecerEstadoCodigo('success', 'Producto sin código comercial', 'El sistema conservará la generación P{id} o un código por pieza, según el tipo seleccionado.');
+    }
+}
+
+// Captura lectores que funcionan como teclado incluso cuando el campo no tiene foco.
+let scannerBuffer = '';
+let scannerUltimaTecla = 0;
+document.addEventListener('keydown', function (event) {
+    if (modoCodigoActual() !== 'comercial') return;
+
+    const objetivo = event.target;
+    const etiqueta = objetivo?.tagName?.toLowerCase() || '';
+    const esCampoEditable = ['input', 'textarea', 'select'].includes(etiqueta) || objetivo?.isContentEditable;
+    if (esCampoEditable) return;
+
+    const ahora = performance.now();
+    if (ahora - scannerUltimaTecla > 120) scannerBuffer = '';
+    scannerUltimaTecla = ahora;
+
+    if (event.key === 'Enter') {
+        if (scannerBuffer.length >= 4) {
+            event.preventDefault();
+            const input = document.getElementById('codigo_barra_input');
+            if (input) {
+                input.value = normalizarCodigoComercial(scannerBuffer);
+                scannerBuffer = '';
+                buscarCodigoComercial();
+            }
+        }
+        return;
+    }
+
+    if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        scannerBuffer += event.key;
+    }
+});
+
 // ===== FORMULARIO =====
+function actualizarTipoVentaProducto() {
+    const seleccionado = document.querySelector('input[name="tipo_venta"]:checked');
+    const tipo = seleccionado?.value === 'peso' ? 'peso' : 'unidad';
+    const esPeso = tipo === 'peso';
+
+    const cantidad = document.getElementById('cantidad_producto');
+    const cantidadLabel = document.getElementById('cantidad_producto_label');
+    const precioCompraLabel = document.getElementById('precio_compra_label');
+    const precioVentaLabel = document.getElementById('precio_venta_label');
+    const stockEspecial = document.getElementById('stock_especial');
+    const specialWrapper = document.getElementById('special_stock_wrapper');
+    const tipoCodigo = document.getElementById('tipo_codigo_select');
+    const tipoCodigoHelp = document.getElementById('tipo_codigo_help');
+    const tipoVentaHelp = document.getElementById('tipoVentaHelp');
+    const cantidadIcono = document.querySelector('#cantidad_producto_group .field-with-icon > i');
+
+    document.querySelectorAll('.tipo-venta-option').forEach(label => {
+        const radio = label.querySelector('input[name="tipo_venta"]');
+        const estaActivo = radio?.checked === true;
+        label.classList.toggle('active', estaActivo);
+        label.setAttribute('aria-checked', estaActivo ? 'true' : 'false');
+    });
+
+    if (cantidad) {
+        cantidad.step = esPeso ? '0.001' : '1';
+        cantidad.min = esPeso ? '0.001' : '1';
+        cantidad.placeholder = esPeso ? 'Ej. 25.500' : 'Ej. 10';
+        cantidad.inputMode = 'decimal';
+    }
+
+    if (cantidadIcono) {
+        cantidadIcono.className = esPeso
+            ? 'fas fa-weight-scale'
+            : 'fas fa-cubes';
+    }
+
+    if (cantidadLabel) {
+        cantidadLabel.innerHTML = esPeso
+            ? 'Existencia inicial (kg) <span class="text-danger">*</span>'
+            : 'Cantidad inicial (piezas) <span class="text-danger">*</span>';
+    }
+
+    if (precioCompraLabel) {
+        precioCompraLabel.innerHTML = esPeso
+            ? 'Precio compra por kg <span class="text-danger">*</span>'
+            : 'Precio compra por pieza <span class="text-danger">*</span>';
+    }
+
+    if (precioVentaLabel) {
+        precioVentaLabel.innerHTML = esPeso
+            ? 'Precio venta base por kg <span class="text-danger">*</span>'
+            : 'Precio venta base por pieza <span class="text-danger">*</span>';
+    }
+
+    /*
+     * Los artículos por peso siempre deben controlar existencias reales.
+     * Por eso se desmarca y oculta completamente Producto especial.
+     */
+    if (stockEspecial) {
+        if (esPeso) {
+            stockEspecial.checked = false;
+        }
+        stockEspecial.disabled = esPeso;
+    }
+
+    if (specialWrapper) {
+        specialWrapper.hidden = esPeso;
+        specialWrapper.classList.toggle('is-hidden', esPeso);
+        specialWrapper.setAttribute('aria-hidden', esPeso ? 'true' : 'false');
+    }
+
+    if (tipoCodigo) {
+        if (esPeso) {
+            if (!tipoCodigo.dataset.valorUnidad) {
+                tipoCodigo.dataset.valorUnidad = tipoCodigo.value || 'unico';
+            }
+            tipoCodigo.value = 'unico';
+            tipoCodigo.disabled = true;
+            tipoCodigo.classList.add('is-locked');
+        } else {
+            tipoCodigo.disabled = false;
+            tipoCodigo.classList.remove('is-locked');
+            tipoCodigo.value = tipoCodigo.dataset.valorUnidad || tipoCodigo.value || 'unico';
+            delete tipoCodigo.dataset.valorUnidad;
+        }
+    }
+
+    if (tipoCodigoHelp) {
+        tipoCodigoHelp.innerHTML = esPeso
+            ? ''
+            : 'Usa un código para todo el producto o uno por cada pieza.';
+        tipoCodigoHelp.classList.toggle('is-locked', esPeso);
+    }
+
+    if (tipoVentaHelp) {
+        tipoVentaHelp.innerHTML = esPeso
+            ? '<i class="fas fa-weight-scale"></i><span>La báscula captura kg · código único · sin producto especial.</span>'
+            : '<i class="fas fa-circle-info"></i><span>Venta por unidades con código único o múltiple.</span>';
+        tipoVentaHelp.classList.toggle('is-weight', esPeso);
+    }
+
+    actualizarModoStock();
+    actualizarModoCodigoProducto();
+}
+
 function actualizarModoStock() {
     const checkboxEspecial = document.getElementById('stock_especial');
-    const esEspecial = Boolean(checkboxEspecial?.checked);
+    const esPeso = document.querySelector('input[name="tipo_venta"]:checked')?.value === 'peso';
+    const esEspecial = !esPeso && Boolean(checkboxEspecial?.checked);
     const toggleEspecial = document.getElementById('special_stock_toggle');
+    const specialWrapper = document.getElementById('special_stock_wrapper');
     const cantidadGroup = document.getElementById('cantidad_producto_group');
     const cantidadInput = document.getElementById('cantidad_producto');
     const tipoCodigoSelect = document.getElementById('tipo_codigo_select');
 
     if (toggleEspecial) {
         toggleEspecial.classList.toggle('active', esEspecial);
+    }
+
+    if (specialWrapper) {
+        specialWrapper.hidden = esPeso;
+        specialWrapper.classList.toggle('is-hidden', esPeso);
     }
 
     if (cantidadGroup && cantidadInput) {
@@ -1509,10 +2201,17 @@ function actualizarModoStock() {
     }
 
     if (tipoCodigoSelect) {
-        if (esEspecial) {
+        const esCodigoComercial = modoCodigoActual() === 'comercial';
+        if (esCodigoComercial) {
+            tipoCodigoSelect.value = 'unico';
+            tipoCodigoSelect.disabled = true;
+        } else if (esEspecial) {
             if (!tipoCodigoSelect.dataset.valorAnterior) {
                 tipoCodigoSelect.dataset.valorAnterior = tipoCodigoSelect.value || 'unico';
             }
+            tipoCodigoSelect.value = 'unico';
+            tipoCodigoSelect.disabled = true;
+        } else if (esPeso) {
             tipoCodigoSelect.value = 'unico';
             tipoCodigoSelect.disabled = true;
         } else {
@@ -1528,7 +2227,8 @@ function limpiarFormulario() {
     form.reset();
     document.getElementById('previewImg').classList.add('d-none');
     seleccionarAdquisicion('pagado');
-    actualizarModoStock();
+    actualizarTipoVentaProducto();
+    actualizarModoCodigoProducto();
     actualizarPrecioVentaConTresPorciento();
 }
 
@@ -1536,6 +2236,7 @@ function previewImagen(event) {
     const img = document.getElementById('previewImg');
     img.src = URL.createObjectURL(event.target.files[0]);
     img.classList.remove('d-none');
+    delete img.dataset.externa;
 }
 
 function agregarNuevaCategoria() {
@@ -1623,6 +2324,47 @@ document.addEventListener('DOMContentLoaded', function() {
     // Seleccionar pagado por defecto
     seleccionarAdquisicion('pagado');
 
+    document.querySelectorAll('input[name="modo_codigo"]').forEach(radio => {
+        radio.addEventListener('change', actualizarModoCodigoProducto);
+    });
+
+    const codigoInput = document.getElementById('codigo_barra_input');
+    const buscarCodigoBtn = document.getElementById('buscarCodigoBtn');
+    if (codigoInput) {
+        codigoInput.addEventListener('input', function () {
+            this.value = normalizarCodigoComercial(this.value);
+            this.dataset.duplicado = '0';
+            limpiarDatosUPCDatabase({ conservarCodigo: true, conservarCamposManuales: true });
+        });
+        codigoInput.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                buscarCodigoComercial();
+            }
+        });
+    }
+    buscarCodigoBtn?.addEventListener('click', buscarCodigoComercial);
+
+    [
+        'nombre_input', 'marca_input', 'modelo_input', 'presentacion_input',
+        'peso_input', 'color_input', 'talla_input', 'material_input'
+    ].forEach(id => {
+        const campo = document.getElementById(id);
+        campo?.addEventListener('input', function () {
+            delete this.dataset.barcodeAutofill;
+        });
+    });
+    document.getElementById('categoriaSelect')?.addEventListener('change', function () {
+        delete this.dataset.barcodeAutofill;
+    });
+
+    actualizarModoCodigoProducto();
+
+    document.querySelectorAll('input[name="tipo_venta"]').forEach(radio => {
+        radio.addEventListener('change', actualizarTipoVentaProducto);
+    });
+    actualizarTipoVentaProducto();
+
     const stockEspecial = document.getElementById('stock_especial');
     if (stockEspecial) {
         stockEspecial.addEventListener('change', actualizarModoStock);
@@ -1634,6 +2376,38 @@ document.addEventListener('DOMContentLoaded', function() {
         precioVentaBase.addEventListener('input', actualizarPrecioVentaConTresPorciento);
         precioVentaBase.addEventListener('change', actualizarPrecioVentaConTresPorciento);
         actualizarPrecioVentaConTresPorciento();
+    }
+
+    const formProducto = document.getElementById('formProducto');
+    if (formProducto) {
+        formProducto.addEventListener('submit', function (event) {
+            const codigoInput = document.getElementById('codigo_barra_input');
+            if (
+                modoCodigoActual() === 'comercial'
+                && codigoInput
+                && codigoInput.dataset.duplicado === '1'
+            ) {
+                event.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Producto ya registrado',
+                    text: 'No puedes crear nuevamente un producto con el mismo código. Agrega existencias desde el inventario.',
+                    confirmButtonColor: '#f97316'
+                });
+                return;
+            }
+
+            const tipoCodigo = document.getElementById('tipo_codigo_select');
+            if (tipoCodigo?.disabled) {
+                tipoCodigo.disabled = false;
+                tipoCodigo.value = 'unico';
+            }
+
+            if (codigoInput?.disabled) {
+                codigoInput.disabled = false;
+                codigoInput.value = '';
+            }
+        });
     }
     
     <?php if ($tipo_seleccionado == 'insumo'): ?>

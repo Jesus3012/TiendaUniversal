@@ -1,10 +1,11 @@
 <?php
 date_default_timezone_set('America/Mexico_City');
 
-include('includes/db.php');
-include('includes/session.php');
-require_once('includes/csrf.php');
-require_once('includes/promociones_helper.php');
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/csrf.php';
+require_once __DIR__ . '/includes/promociones_helper.php';
+require_once __DIR__ . '/includes/bascula_helper.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -239,13 +240,17 @@ function pos_precio_por_metodo(float $precioBase, string $metodoPago, array $con
 function pos_calcular_linea_venta(
     mysqli $conn,
     array $producto,
-    int $cantidad,
+    float $cantidad,
     string $metodoPago,
     array $configPrecios
 ): array {
     $productoId = (int) ($producto['id'] ?? 0);
     $precioBase = max(0, (float) ($producto['precio_venta'] ?? 0));
-    $cantidad = max(0, $cantidad);
+    $tipoVenta = (string) ($producto['tipo_venta'] ?? 'unidad');
+    $esVentaPeso = $tipoVenta === 'peso';
+    $cantidad = $esVentaPeso
+        ? round(max(0, $cantidad), 3)
+        : (float) max(0, (int) round($cantidad));
     $precioMetodo = pos_precio_por_metodo($precioBase, $metodoPago, $configPrecios);
     $subtotalBase = round($precioBase * $cantidad, 2);
 
@@ -279,7 +284,8 @@ function pos_calcular_linea_venta(
         ? promociones_obtener_activa_producto($conn, $productoId)
         : null;
 
-    if (is_array($promocion)) {
+    // Las promociones por cantidad aplican únicamente a productos por pieza.
+    if (!$esVentaPeso && is_array($promocion)) {
         $cantidadPromo = (int) ($promocion['cantidad_promocion'] ?? 0);
         $precioPromo = round((float) ($promocion['precio_promocion'] ?? 0), 2);
         $precioNormalPaquete = round($precioBase * $cantidadPromo, 2);
@@ -365,6 +371,8 @@ $posConfigPrecios = pos_configuracion_precios($conn);
 $posDescuentoEfectivo = (float) $posConfigPrecios['descuento_efectivo'];
 $posDescuentoTransferencia = (float) $posConfigPrecios['descuento_transferencia'];
 $posRedondearEntero = (int) $posConfigPrecios['redondear_entero'] === 1;
+$posConfigBascula = bascula_configuracion($conn);
+$posDatosBasculaCliente = bascula_datos_cliente($posConfigBascula);
 
 
 /**
@@ -510,7 +518,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 precio_venta,
                 imagen,
                 categoria,
-                stock_especial
+                stock_especial,
+                tipo_venta,
+                unidad_medida,
+                decimales_cantidad
             FROM productos
             WHERE id = ?
               AND activo = 1
@@ -520,9 +531,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
 
         foreach ($carrito as $itemRecibido) {
             $productoId = (int) ($itemRecibido['id'] ?? 0);
-            $cantidadSolicitada = (int) ($itemRecibido['cantidad'] ?? 0);
+            $cantidadRecibida = (float) ($itemRecibido['cantidad'] ?? 0);
 
-            if ($productoId <= 0 || $cantidadSolicitada <= 0) {
+            if ($productoId <= 0 || $cantidadRecibida <= 0) {
                 $erroresCarrito[] = 'Se recibió un artículo o cantidad no válida.';
                 continue;
             }
@@ -536,6 +547,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 continue;
             }
 
+            $tipoVentaProducto = (string) ($productoDb['tipo_venta'] ?? 'unidad');
+            $esProductoPeso = $tipoVentaProducto === 'peso';
+            if (!$esProductoPeso && abs($cantidadRecibida - round($cantidadRecibida)) > 0.0001) {
+                $erroresCarrito[] = $productoDb['nombre'] . ' requiere una cantidad entera.';
+                continue;
+            }
+            $cantidadSolicitada = $esProductoPeso
+                ? round($cantidadRecibida, 3)
+                : (float) ((int) round($cantidadRecibida));
+
             /*
              * La única fuente de verdad es la bandera stock_especial:
              * - stock_especial = 1: existencia ilimitada.
@@ -545,10 +566,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 (int) ($productoDb['stock_especial'] ?? 0) === 1
             );
 
-            if (!$esStockEspecial && (int) $productoDb['cantidad'] < $cantidadSolicitada) {
+            if (!$esStockEspecial && ((float) $productoDb['cantidad'] + 0.000001) < $cantidadSolicitada) {
                 $erroresCarrito[] = $productoDb['nombre']
                     . ' (stock disponible: '
-                    . (int) $productoDb['cantidad']
+                    . number_format((float) $productoDb['cantidad'], $esProductoPeso ? 3 : 0, '.', '')
                     . ')';
                 continue;
             }
@@ -576,7 +597,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                 'id' => (int) $productoDb['id'],
                 'nombre' => (string) $productoDb['nombre'],
                 'cantidad' => $cantidadSolicitada,
-                'stock' => (int) $productoDb['cantidad'],
+                'stock' => (float) $productoDb['cantidad'],
+                'tipo_venta' => $tipoVentaProducto,
+                'unidad_medida' => (string) ($productoDb['unidad_medida'] ?? ($esProductoPeso ? 'kg' : 'pz')),
+                'decimales_cantidad' => (int) ($productoDb['decimales_cantidad'] ?? ($esProductoPeso ? 3 : 0)),
                 'stock_especial' => $esStockEspecial ? 1 : 0,
                 'imagen' => (string) ($productoDb['imagen'] ?? ''),
                 'categoria' => (string) ($productoDb['categoria'] ?? ''),
@@ -669,7 +693,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
 
                 if (
                     !$esEspecialRevision
-                    && (int) $productoRevision['cantidad'] < (int) $item['cantidad']
+                    && ((float) $productoRevision['cantidad'] + 0.000001) < (float) $item['cantidad']
                 ) {
                     $errores[] = (string) $item['nombre'];
                 }
@@ -729,7 +753,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $subtotalItem = (float) $item['subtotal'];
 
                         $stmt->bind_param(
-                            "iississsddddd",
+                            "idssisssddddd",
                             $item['id'],
                             $item['cantidad'],
                             $correo_cliente,
@@ -773,7 +797,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                             }
 
                             $stmtStock->bind_param(
-                                'iii',
+                                'did',
                                 $item['cantidad'],
                                 $item['id'],
                                 $item['cantidad']
@@ -875,7 +899,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
                         $precioTicket = (float) $p['precio_unitario'];
 
                         $pdf->Cell(38, 4, $nombreProducto, 0, 0, 'L');
-                        $pdf->Cell(10, 4, $p['cantidad'], 0, 0, 'C');
+                        $cantidadTicket = (($p['tipo_venta'] ?? 'unidad') === 'peso')
+                            ? number_format((float) $p['cantidad'], 3, '.', '') . 'kg'
+                            : number_format((float) $p['cantidad'], 0, '.', '');
+                        $pdf->Cell(10, 4, $cantidadTicket, 0, 0, 'C');
                         $pdf->Cell(10, 4, '$' . number_format($precioTicket, 2), 0, 0, 'C');
                         $pdf->Cell(12, 4, '$' . number_format($importe, 2), 0, 1, 'R');
 
@@ -969,12 +996,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_venta'])) {
 
                     $productosAlerta = [];
                     foreach ($carrito as $itemAlerta) {
-                        $cantidadAlerta = (int) ($itemAlerta['cantidad'] ?? 0);
+                        $cantidadAlerta = (float) ($itemAlerta['cantidad'] ?? 0);
                         $precioAlerta = (float) ($itemAlerta['precio_unitario'] ?? $itemAlerta['precio'] ?? 0);
                         $productosAlerta[] = [
                             'id' => (int) ($itemAlerta['id'] ?? 0),
                             'nombre' => (string) ($itemAlerta['nombre'] ?? ''),
                             'cantidad' => $cantidadAlerta,
+                            'tipo_venta' => (string) ($itemAlerta['tipo_venta'] ?? 'unidad'),
+                            'unidad_medida' => (string) ($itemAlerta['unidad_medida'] ?? 'pz'),
                             'precio' => $precioAlerta,
                             'precio_base' => (float) ($itemAlerta['precio_base'] ?? $precioAlerta),
                             'importe' => (float) ($itemAlerta['subtotal'] ?? ($precioAlerta * $cantidadAlerta)),
@@ -1058,6 +1087,9 @@ $productos_query = "
         p.imagen,
         p.categoria,
         p.stock_especial,
+        p.tipo_venta,
+        p.unidad_medida,
+        p.decimales_cantidad,
         {$posSelectFijadoVenta} AS fijado_venta,
         pr.id AS promocion_id,
         pr.cantidad_promocion,
@@ -1119,6 +1151,7 @@ foreach ($productos as $productoPos) {
 <link rel="stylesheet" href="css/venta-codigo.css?v=<?= time() ?>">
 <link rel="stylesheet" href="css/venta-promociones.css?v=<?= time() ?>">
 <link rel="stylesheet" href="css/productos-fijados.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/bascula-pos.css?v=<?= time() ?>">
 
 
 <div class="content-wrapper">
@@ -1231,12 +1264,15 @@ foreach ($productos as $productoPos) {
             <div class="productos-grid" id="productosGrid">
                 <?php if(count($productos) > 0): ?>
                     <?php foreach($productos as $p): ?>
-                    <div class="producto-card <?= (int) ($p['fijado_venta'] ?? 0) === 1 ? 'producto-card-fijado' : '' ?>" 
+                    <div class="producto-card <?= (int) ($p['fijado_venta'] ?? 0) === 1 ? 'producto-card-fijado' : '' ?> <?= ($p['tipo_venta'] ?? 'unidad') === 'peso' ? 'producto-card-peso' : '' ?>" 
                          data-id="<?= $p['id'] ?>"
                          data-fijado="<?= (int) ($p['fijado_venta'] ?? 0) ?>"
                          data-nombre="<?= htmlspecialchars($p['nombre']) ?>"
                          data-precio="<?= $p['precio_venta'] ?>"
-                         data-stock="<?= (int) $p['stock'] ?>"
+                         data-stock="<?= htmlspecialchars((string) $p['stock']) ?>"
+                         data-tipo-venta="<?= htmlspecialchars((string) ($p['tipo_venta'] ?? 'unidad')) ?>"
+                         data-unidad-medida="<?= htmlspecialchars((string) ($p['unidad_medida'] ?? 'pz')) ?>"
+                         data-decimales-cantidad="<?= (int) ($p['decimales_cantidad'] ?? 0) ?>"
                          data-stock-especial="<?= (int) ($p['stock_especial'] ?? 0) ?>"
                          data-imagen="<?= htmlspecialchars($p['imagen'] ?? '') ?>"
                          data-categoria="<?= htmlspecialchars($p['categoria'] ?? '') ?>"
@@ -1269,7 +1305,10 @@ foreach ($productos as $productoPos) {
                             </div>
                         <?php endif; ?>
                         <div class="producto-stock-card">
-                            <?php if ((int) ($p['stock_especial'] ?? 0) === 1): ?>
+                            <?php if (($p['tipo_venta'] ?? 'unidad') === 'peso'): ?>
+                                <i class="fas fa-weight-scale"></i>
+                                <?= number_format((float) $p['stock'], 3, '.', '') ?> kg
+                            <?php elseif ((int) ($p['stock_especial'] ?? 0) === 1): ?>
                                 <i class="fas fa-infinity"></i> Disponible siempre
                             <?php else: ?>
                                 Stock: <?= (int) $p['stock'] ?>
@@ -1311,6 +1350,30 @@ foreach ($productos as $productoPos) {
                 <input type="hidden" name="mp_payment_status" id="mp_payment_status">
                 <input type="hidden" name="mp_payment_status_detail" id="mp_payment_status_detail">
                 <input type="hidden" name="mp_payment_method_id" id="mp_payment_method_id">
+
+                <section class="bascula-pos-panel" id="basculaPosPanel">
+                    <div class="bascula-pos-head">
+                        <div class="bascula-pos-title">
+                            <div class="bascula-pos-title-icon"><i class="fas fa-weight-scale"></i></div>
+                            <div><strong>Báscula del punto de venta</strong><small>Lectura automática para productos vendidos por kilogramo.</small></div>
+                        </div>
+                        <span class="bascula-status" id="basculaStatus"><i class="fas fa-circle"></i> Comprobando...</span>
+                    </div>
+                    <div class="bascula-pos-body">
+                        <div class="bascula-producto">
+                            <span>Producto seleccionado</span>
+                            <small id="basculaProductoPrecio">El precio se calculará por kilogramo.</small>
+                        </div>
+                        <div class="bascula-peso-display">
+                            <div><strong id="basculaPesoValor">0.000</strong> <span>kg</span></div>
+                            <small id="basculaPesoDetalle">Esperando servicio local...</small>
+                        </div>
+                        <div class="bascula-actions">
+                            <button type="button" onclick="capturarPesoBascula()" title="Usar peso"><i class="fas fa-check"></i></button>
+                            <button type="button" onclick="tararBascula()" title="Tarar báscula"><i class="fas fa-rotate-left"></i></button>
+                        </div>
+                    </div>
+                </section>
 
                 <div class="pos-buscador mb-3">
                     <div class="input-group">
@@ -1472,6 +1535,7 @@ const POS_DESCUENTO_EFECTIVO = <?= json_encode($posDescuentoEfectivo) ?>;
 const POS_DESCUENTO_TRANSFERENCIA = <?= json_encode($posDescuentoTransferencia) ?>;
 const POS_REDONDEAR_ENTERO = <?= $posRedondearEntero ? 'true' : 'false' ?>;
 const POS_PROMOCIONES_PRODUCTOS = <?= json_encode($promocionesPos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+window.POS_BASCULA_CONFIG = <?= json_encode($posDatosBasculaCliente, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
 let ventaEnProceso = false;
 let buscandoProducto = false;
 let timerCodigo = null; // conservado por compatibilidad; el auto-agregado ahora usa codigoScannerTimer.
@@ -1925,7 +1989,10 @@ function enriquecerProductoConPromocion(producto) {
 }
 
 function calcularLineaCarrito(item, metodo = obtenerMetodoPagoActual()) {
-    const cantidad = Math.max(0, parseInt(item?.cantidad, 10) || 0);
+    const esPeso = String(item?.tipo_venta || 'unidad') === 'peso';
+    const cantidad = esPeso
+        ? Math.max(0, Number(item?.cantidad) || 0)
+        : Math.max(0, parseInt(item?.cantidad, 10) || 0);
     const precioBase = Math.max(0, Number(item?.precio_base ?? item?.precio) || 0);
     const precioMetodo = calcularPrecioMetodo(precioBase, metodo);
     const subtotalBase = precioBase * cantidad;
@@ -1941,7 +2008,8 @@ function calcularLineaCarrito(item, metodo = obtenerMetodoPagoActual()) {
     let precioPromocionMetodo = 0;
 
     if (
-        promocion
+        !esPeso
+        && promocion
         && cantidad >= promocion.cantidad
         && promocion.precio < (precioBase * promocion.cantidad)
     ) {
@@ -2462,14 +2530,24 @@ function agregarProductoCard(element) {
         id: parseInt(element.dataset.id),
         nombre: element.dataset.nombre,
         precio: parseFloat(element.dataset.precio),
-        stock: parseInt(element.dataset.stock || '0', 10),
+        stock: Number(element.dataset.stock || '0'),
         stock_especial: Number(element.dataset.stockEspecial || '0') === 1 ? 1 : 0,
+        tipo_venta: element.dataset.tipoVenta || 'unidad',
+        unidad_medida: element.dataset.unidadMedida || 'pz',
+        decimales_cantidad: Number(element.dataset.decimalesCantidad || 0),
         imagen: element.dataset.imagen || '',
         categoria: element.dataset.categoria || '',
         promocion_id: Number(element.dataset.promocionId || 0),
         promocion_cantidad: Number(element.dataset.promocionCantidad || 0),
         promocion_precio: Number(element.dataset.promocionPrecio || 0)
     });
+
+    if (producto.tipo_venta === 'peso') {
+        if (typeof window.seleccionarProductoBascula === 'function') {
+            window.seleccionarProductoBascula(producto);
+        }
+        return;
+    }
 
     const iconoData = getIconoPorCategoria(producto.categoria, producto.nombre);
 
@@ -2683,13 +2761,22 @@ async function agregarProducto(origen = 'manual') {
             cantidad: 1,
             stock: parseInt(data.stock || '0', 10),
             stock_especial: Number(data.stock_especial || '0') === 1 ? 1 : 0,
+            tipo_venta: data.tipo_venta || 'unidad',
+            unidad_medida: data.unidad_medida || 'pz',
+            decimales_cantidad: Number(data.decimales_cantidad || 0),
             imagen: data.imagen || '',
             categoria: data.categoria || '',
             icono: iconoData.icono,
             iconoColor: iconoData.color
         });
 
-        agregarAlCarrito(producto);
+        if (producto.tipo_venta === 'peso') {
+            if (typeof window.seleccionarProductoBascula === 'function') {
+                window.seleccionarProductoBascula(producto);
+            }
+        } else {
+            agregarAlCarrito(producto);
+        }
 
     } catch (error) {
         console.error('Error al buscar producto:', error);
@@ -2761,13 +2848,20 @@ function renderCarrito() {
         const precioFinal = linea.precioUnitarioEfectivo;
         const subtotal = linea.subtotalFinal;
         const tieneDescuento = linea.descuentoTotal > 0;
-        const esEspecial = Number(item.stock_especial) === 1;
+        const esPeso = String(item.tipo_venta || 'unidad') === 'peso';
+        const esEspecial = !esPeso && Number(item.stock_especial) === 1;
         const textoStock = esEspecial
             ? '<i class="fas fa-infinity"></i> Disponible siempre'
-            : `Stock: ${Number(item.stock) || 0}`;
+            : (esPeso
+                ? `Stock: ${(Number(item.stock) || 0).toFixed(3)} kg`
+                : `Stock: ${Number(item.stock) || 0}`);
         const atributoMax = esEspecial
             ? ''
             : `max="${Number(item.stock) || 0}"`;
+        const pasoCantidad = esPeso ? '0.001' : '1';
+        const minimoCantidad = esPeso ? '0.001' : '1';
+        const cantidadVisible = esPeso ? Number(item.cantidad || 0).toFixed(3) : Number(item.cantidad || 0).toFixed(0);
+        const unidadCantidad = esPeso ? 'kg' : 'pz';
 
         item.stock_especial = esEspecial ? 1 : 0;
 
@@ -2816,9 +2910,13 @@ function renderCarrito() {
                     </div>
                 </td>
                 <td style="text-align:center;">
-                    <input type="number" class="cantidad-input" value="${item.cantidad}"
-                           min="1" ${atributoMax}
-                           onchange="actualizarCantidad(${index}, this.value)">
+                    <div class="cantidad-peso-wrap">
+                        <input type="number" class="cantidad-input" value="${cantidadVisible}"
+                               min="${minimoCantidad}" step="${pasoCantidad}" ${atributoMax}
+                               onchange="actualizarCantidad(${index}, this.value)">
+                        <span class="cantidad-unidad-label">${unidadCantidad}</span>
+                        ${esPeso ? `<button type="button" class="btn-eliminar" style="color:#2563eb;background:#dbeafe;" onclick="seleccionarProductoBascula(carrito[${index}])" title="Leer nuevamente"><i class="fas fa-weight-scale"></i></button>` : ''}
+                    </div>
                 </td>
                 <td style="text-align:center;">${precioHtml}</td>
                 <td style="text-align:center;"><strong style="color:#16a34a;">$${subtotal.toFixed(2)}</strong></td>
@@ -2904,12 +3002,20 @@ function guardarCarrito() {
 }
 
 function actualizarCantidad(index, valor) {
-    const cantidad = parseInt(valor, 10);
+    if (!carrito[index]) {
+        renderCarrito();
+        return;
+    }
+
+    const esPeso = String(carrito[index].tipo_venta || 'unidad') === 'peso';
+    const cantidad = esPeso
+        ? Math.round((Number(valor) || 0) * 1000) / 1000
+        : parseInt(valor, 10);
 
     if (
-        !Number.isInteger(cantidad)
-        || cantidad < 1
-        || !carrito[index]
+        !Number.isFinite(cantidad)
+        || cantidad < (esPeso ? 0.001 : 1)
+        || (!esPeso && !Number.isInteger(cantidad))
     ) {
         renderCarrito();
         return;
@@ -2921,7 +3027,9 @@ function actualizarCantidad(index, valor) {
         Swal.fire({
             icon: 'warning',
             title: 'Stock insuficiente',
-            text: `Solo hay ${carrito[index].stock} unidades`,
+            text: esPeso
+                ? `Solo hay ${Number(carrito[index].stock).toFixed(3)} kg disponibles`
+                : `Solo hay ${carrito[index].stock} unidades`,
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
@@ -3273,6 +3381,8 @@ function construirHtmlVentaRegistrada(data) {
             const precio = Number(item?.precio || 0);
             const importe = Number(item?.importe ?? (precio * cantidad));
             const nombre = item?.nombre || 'Producto';
+            const esPeso = String(item?.tipo_venta || 'unidad') === 'peso';
+            const cantidadTexto = esPeso ? `${cantidad.toFixed(3)} kg` : cantidad.toFixed(0);
 
             const promoDetalle = item?.aplico_promocion
                 ? `<small style="display:block; margin-top:3px; color:#7c3aed; font-weight:700;"><i class="fas fa-tags"></i> ${escapeHtml(item.promocion_descripcion || 'Promoción aplicada')} × ${Number(item.promocion_paquetes || 0)}</small>`
@@ -3280,7 +3390,7 @@ function construirHtmlVentaRegistrada(data) {
 
             return `
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:13px; margin-bottom:9px; gap:12px;">
-                    <span style="color:#334155; text-align:left; min-width:0;">${escapeHtml(nombre)} x${cantidad}${promoDetalle}</span>
+                    <span style="color:#334155; text-align:left; min-width:0;">${escapeHtml(nombre)} x${cantidadTexto}${promoDetalle}</span>
                     <span style="font-weight:700; color:#f97316; white-space:nowrap;">$${formatearDinero(importe)}</span>
                 </div>
             `;
@@ -4075,3 +4185,4 @@ window.addEventListener('resize', function() {
     setTimeout(ajustarUnaFilaMas, 100);
 });
 </script>
+<script src="js/bascula-pos.js?v=<?= time() ?>"></script>

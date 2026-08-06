@@ -3,7 +3,7 @@
 $host = 'localhost';
 $user = 'root';
 $pass = '';
-$dbname = 'tienda_pescadores';
+$dbname = 'tienda_universal';
 
 // Definir constante solo si no está definida previamente
 if (!defined('DB_NAME')) {

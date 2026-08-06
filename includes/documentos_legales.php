@@ -31,14 +31,21 @@ try {
     legal_asegurar_tabla($conn);
 
     if ($legalUsuarioId > 0) {
+        /*
+         * La aceptación se valida únicamente por usuario, versiones vigentes
+         * y estado de aceptación.
+         *
+         * Los hashes se guardan como evidencia del contenido mostrado al
+         * aceptar, pero no se comparan aquí porque los documentos incluyen
+         * datos dinámicos de la tienda (nombre, teléfono, correo, dirección y
+         * horario). Cambiar esos datos no representa una nueva versión legal.
+         */
         $stmt = $conn->prepare(
             "SELECT id
              FROM aceptaciones_legales
              WHERE usuario_id = ?
                AND version_terminos = ?
                AND version_privacidad = ?
-               AND hash_terminos = ?
-               AND hash_privacidad = ?
                AND acepto_terminos = 1
                AND acepto_privacidad = 1
                AND fecha_revocacion IS NULL
@@ -52,12 +59,10 @@ try {
         }
 
         $stmt->bind_param(
-            'issss',
+            'iss',
             $legalUsuarioId,
             $legalDocumentos['version_terminos'],
-            $legalDocumentos['version_privacidad'],
-            $legalDocumentos['hash_terminos'],
-            $legalDocumentos['hash_privacidad']
+            $legalDocumentos['version_privacidad']
         );
 
         $stmt->execute();
